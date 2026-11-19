@@ -1,7 +1,7 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.utils;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,20 +25,42 @@ class JsonSchemaUtilsTest {
     }
 
     @Test
+    void testIsJsonSchemaValid_WithEmptyObjectLiteral() {
+        // 前端历史兜底 "{}" / "null" 视为无 schema，与 blank 同语义
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("{}", 10, 5, false));
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("  {}  ", 10, 5, true));
+        assertTrue(JsonSchemaUtils.isJsonSchemaValid("null", 10, 5, false));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_WithEmptyArrayLiteralRejected() {
+        // "[]" 不能当无 schema 放行：落库后 IrAdapter parseObject(SchemaConfig) 会因顶层数组失败
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid("[]", 10, 5, false));
+        assertTrue(ex.getDetails().get(0).contains("missing required field [type]"));
+    }
+
+    @Test
     void testIsJsonSchemaValid_WithInvalidJson() {
-        assertFalse(JsonSchemaUtils.isJsonSchemaValid("not-json", 10, 5, true));
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid("not-json", 10, 5, true));
+        assertEquals("The schema is not valid JSON.", ex.getDetails().get(0));
     }
 
     @Test
     void testIsJsonSchemaValid_WithMissingType() {
         String schema = "{\"description\":\"test\"}";
-        assertFalse(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("missing required field [type]"));
     }
 
     @Test
     void testIsJsonSchemaValid_WithInvalidType() {
         String schema = "{\"type\":\"invalidType\"}";
-        assertFalse(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("unsupported type [invalidType]"));
     }
 
     @Test
@@ -86,14 +108,25 @@ class JsonSchemaUtilsTest {
     @Test
     void testIsJsonSchemaValid_WithObjectMissingProperties() {
         String schema = "{\"type\":\"object\"}";
-        assertFalse(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("missing required field [properties]"));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_PropertyMissingType() {
+        String schema = "{\"type\":\"object\",\"properties\":{\"age\":{\"description\":\"age\",\"location\":\"Body\"}}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertEquals("The parameter [age] is missing required field [type].", ex.getDetails().get(0));
     }
 
     @Test
     void testIsJsonSchemaValid_WithAdditionalProperties() {
         String schema = "{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}";
-        assertThrows(AgentStudioException.class,
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("additionalProperties"));
     }
 
     @Test
@@ -106,8 +139,9 @@ class JsonSchemaUtilsTest {
     @Test
     void testIsJsonSchemaValid_PropCountExceeded() {
         String schema = "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\",\"description\":\"a\",\"location\":\"Body\"},\"b\":{\"type\":\"string\",\"description\":\"b\",\"location\":\"Body\"},\"c\":{\"type\":\"string\",\"description\":\"c\",\"location\":\"Body\"}}}";
-        assertThrows(AgentStudioException.class,
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> JsonSchemaUtils.isJsonSchemaValid(schema, 2, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("exceeds the limit"));
     }
 
     @Test
@@ -119,15 +153,17 @@ class JsonSchemaUtilsTest {
     @Test
     void testIsJsonSchemaValid_InputNodeMissingDescription() {
         String schema = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"location\":\"Body\"}}}";
-        assertThrows(AgentStudioException.class,
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertEquals("The parameter [name] is missing required field [description].", ex.getDetails().get(0));
     }
 
     @Test
     void testIsJsonSchemaValid_InputNodeInvalidLocation() {
         String schema = "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"name\",\"location\":\"Invalid\"}}}";
-        assertThrows(AgentStudioException.class,
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertTrue(ex.getDetails().get(0).contains("The parameter [name] is missing required field [location]"));
     }
 
     @Test
@@ -164,9 +200,26 @@ class JsonSchemaUtilsTest {
     }
 
     @Test
-    void testIsJsonSchemaValid_NestedArrayInArrayThrows() {
+    void testIsJsonSchemaValid_RootNestedArrayCurrentlyAllowed() {
+        // 根为 array 时 items 深度仍为 0，历史行为：不触发嵌套数组校验（与属性下嵌套数组不同）
         String schema = "{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}";
         assertTrue(JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_NestedArrayUnderPropertyThrowsWithName() {
+        String schema = "{\"type\":\"object\",\"properties\":{\"matrix\":{\"type\":\"array\",\"description\":\"m\",\"location\":\"Body\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, true));
+        assertEquals("The parameter [matrix] cannot be nested array.", ex.getDetails().get(0));
+    }
+
+    @Test
+    void testIsJsonSchemaValid_EmptyPropertiesThrows() {
+        String schema = "{\"type\":\"object\",\"properties\":{}}";
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> JsonSchemaUtils.isJsonSchemaValid(schema, 10, 5, false));
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
     }
 
     @Test

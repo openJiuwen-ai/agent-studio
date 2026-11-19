@@ -56,6 +56,10 @@ class ToolUseMode(BaseMode):
                 "contexts": request.contexts,
                 "runtime_context": request.runtime_context,
                 "multimodal_image": request.multimodal_image,
+                # OTel：透传 trace_handlers——ToolUsePlanner 经 message.runtime_data
+                # 构造插件/MCP 任务，包装器内部 TraceManager 据此发射
+                # on_plugin_start/end/error（react_mode 同款供给）
+                "trace_handlers": request.trace_handlers,
             }
             self.task_planner.update_plugins(request.plugins)
             self.task_planner.update_mcps(request.mcps)

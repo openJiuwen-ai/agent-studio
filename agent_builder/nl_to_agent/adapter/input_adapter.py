@@ -30,6 +30,7 @@ class InputAdapter:
             "plugin": [],
             "knowledge": [],
             "workflow": [],
+            "skill": [],
         }  # 用于保留全量字段
         self.detail_config = detail_config
         self.retriever = ResourceRetriever(resource, agent_type=agent_type)
@@ -221,17 +222,17 @@ class InputAdapter:
     ) -> OperatorInput:
         """检索适配器方法。
 
-        根据输入的查询内容，分别从插件、知识和子工作流三类资源中
+        根据输入的查询内容，分别从插件、知识、子工作流、技能四类资源中
         检索相关信息，并将结果填充到标准化的输入对象中。
 
         Args:
             query (str): 查询字符串。
-            res_num (int, optional): 每类资源返回的最大结果数，默认为 5。
-            min_score (float, optional): 检索结果的最低相关性分数阈值，默认为 0.7。
-            filtered (bool): 是否需要过滤部分字段。
+            res_num (int, optional): 每类资源返回的最大结果数，默认为 100。
+            min_score (float, optional): 检索结果的最低相关性分数阈值，默认为 0。
+            filtered (bool, optional): 是否需要过滤部分字段。
 
         Returns:
-            OperatorInput: 包含检索结果的输入对象，包括插件、知识和子工作流信息。
+            OperatorInput: 包含检索结果的输入对象，包括插件、知识、子工作流与技能信息。
         """
 
         def process_plugin_for_llm_agent(plugin_info: list) -> list:
@@ -261,6 +262,21 @@ class InputAdapter:
                 processed_workflow_list.append(simple_workflow)
             return processed_workflow_list
 
+        def process_skill_for_llm_agent(skill_info: list) -> list:
+            if not skill_info:
+                return []
+            processed_skill_list = []
+            for skill in skill_info:
+                simple_skill = {
+                    "resource_id": skill["resource_id"],
+                    "description": skill["description"],
+                    "name": skill["name"],
+                    "icon": skill.get("icon", ""),
+                    "version": skill.get("version"),
+                }
+                processed_skill_list.append(simple_skill)
+            return processed_skill_list
+
         inputs = OperatorInput(query=query)
         plugin_info_raw = self.retriever.retrieve("plugin", query, res_num, min_score)
         knowledge_info_raw = self.retriever.retrieve(
@@ -269,6 +285,7 @@ class InputAdapter:
         sub_workflow_info_raw = self.retriever.retrieve(
             "workflow", query, res_num, min_score
         )
+        skill_info_raw = self.retriever.retrieve("skill", query, res_num, min_score)
         inputs.plugin_info = (
             process_plugin_for_llm_agent(plugin_info_raw)
             if filtered
@@ -280,12 +297,19 @@ class InputAdapter:
             if filtered
             else sub_workflow_info_raw
         )
+        inputs.skill_info = (
+            process_skill_for_llm_agent(skill_info_raw)
+            if filtered
+            else skill_info_raw
+        )
         if plugin_info_raw:
             self.resource_config["plugin"].extend(plugin_info_raw)
         if knowledge_info_raw:
             self.resource_config["knowledge"].extend(knowledge_info_raw)
         if sub_workflow_info_raw:
             self.resource_config["workflow"].extend(sub_workflow_info_raw)
+        if skill_info_raw:
+            self.resource_config["skill"].extend(skill_info_raw)
         return inputs
 
     def workflow_retrieve_adapter(

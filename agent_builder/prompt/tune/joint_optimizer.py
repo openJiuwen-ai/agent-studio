@@ -342,7 +342,9 @@ class JointOptimizer:
         num_to_add = min_len - len(sampled_incorrect_data)
         remaining_data = self._remaining_dataset_rows(dataset, sampled_incorrect_data)
 
-        sampled_data = random.sample(remaining_data, num_to_add)
+        sampled_data = random.sample(
+            remaining_data, min(num_to_add, len(remaining_data))
+        )
 
         return sampled_incorrect_data + sampled_data
 
@@ -604,14 +606,16 @@ class JointOptimizer:
             num_error_examples = min(num_examples, len(error_cases))
             sampled_examples.extend(random.sample(error_cases, num_error_examples))
 
-            # 如果需要更多示例，从数据集中随机采样
             if len(sampled_examples) < num_examples:
                 remaining_examples = num_examples - len(sampled_examples)
                 remaining_dataset = self._remaining_dataset_rows(
                     dataset, sampled_examples
                 )
                 sampled_examples.extend(
-                    random.sample(remaining_dataset, remaining_examples)
+                    random.sample(
+                        remaining_dataset,
+                        min(remaining_examples, len(remaining_dataset)),
+                    )
                 )
         else:
             # 如果没有错误用例，直接从数据集中采样

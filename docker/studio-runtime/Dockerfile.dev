@@ -9,6 +9,8 @@ RUN groupadd -g 1000 service && useradd -u 1000 -g service -s /bin/bash -m servi
 ENV SERVICE_HOME=/opt/cloud/agent-runtime
 ENV PACKAGES_HOME=/usr/local/lib/python3.11/site-packages
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
+# jemalloc 行为参数(空=库内默认;部署时按场景覆盖,如 background_thread:true)
+ENV MALLOC_CONF=""
 
 WORKDIR $SERVICE_HOME
 
@@ -26,17 +28,19 @@ RUN mirror=mirrors.aliyun.com; \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo 'alias ll="ls -alF"' >> /etc/bash.bashrc
 
-# 安装 Python 依赖 + openjiuwen 源码（临时安装编译工具链，编译完成后卸载）
+# 安装 Python 依赖 + openjiuwen 源码（临时安装编译工具链 + git，编译完成后卸载）
+# git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
+# （agent-core 修复分支，见 requirements.txt 注释），装完即卸载不留在镜像里。
 COPY requirements.txt $SERVICE_HOME/app/
 COPY agent-core/ /tmp/agent-core/
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev git \
     && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test \
     && cd /tmp/agent-core && pip3 install . && rm -rf /tmp/agent-core \
-    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get remove -y gcc python3-dev git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 变更频率极低，放在应用代码之前以充分利用 Docker 缓存

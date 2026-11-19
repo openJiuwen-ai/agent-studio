@@ -1,0 +1,22 @@
+<div>
+  <form nz-form nzLayout="vertical">
+    <div class="mb-[8px] text-[13px] text-[#595959]">{{ 'plaza_publish_latest_version' | i18nextEager }}</div>
+    <nz-form-item *ngIf="categoryOptions.length">
+      <nz-form-label>{{ 'plaza_category' | i18nextEager }}</nz-form-label>
+      <nz-form-control>
+        <nz-select
+          [(ngModel)]="categoryId"
+          [ngModelOptions]="{ standalone: true }"
+          nzAllowClear
+          nzPlaceHolder="{{ 'plaza_category_placeholder' | i18nextEager }}"
+        >
+          <nz-option *ngFor="let opt of categoryOptions" [nzLabel]="opt.name" [nzValue]="opt.id"></nz-option>
+        </nz-select>
+      </nz-form-control>
+    </nz-form-item>
+  </form>
+  <div class="mt-[16px] flex justify-end gap-[8px]">
+    <button nz-button (click)="onCancel()">{{ 'cancel' | i18nextEager }}</button>
+    <button nz-button nzType="primary" (click)="onOk()">{{ 'ok' | i18nextEager }}</button>
+  </div>
+</div>

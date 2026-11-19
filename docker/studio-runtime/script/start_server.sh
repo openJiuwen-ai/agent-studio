@@ -19,6 +19,12 @@ function env_init(){
 
   export JIUWEN_EXTENSION_PATH=${SERVICE_HOME}/app/agent_runtime/extension
 
+  # jemalloc: 仅对 Python 服务进程生效（所有启动路径均经此函数：
+  # start.sh 直接模式、start_nginx_lb.sh 负载均衡模式、watchdog.sh 重启）
+  if [[ -z "${LD_PRELOAD}" && -f /usr/local/lib/libjemalloc.so.2 ]]; then
+    export LD_PRELOAD=/usr/local/lib/libjemalloc.so.2
+  fi
+
   # 创建容器中服务的日志目录，用于容器启动时将服务日志挂载到宿主机
   chmod -R 700 ${LOGGING_LOG_PATH}
   server_path=${SERVICE_HOME}/app/agent_runtime/EIStart.py

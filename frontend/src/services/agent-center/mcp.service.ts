@@ -131,6 +131,29 @@ export class MCPService {
     });
   }
 
+  /**
+   * 将已部署的 MCP 服务实例上架到资产广场（FRS-091）
+   */
+  public publishServer(serviceId: string, category?: string, readme?: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/server/on-shelf`,
+      params: {
+        service_id: serviceId,
+        ...(category ? { category } : {}),
+        ...(readme ? { readme } : {}),
+      },
+    });
+  }
+
+  /**
+   * 将 MCP 服务目录条目从资产广场下架（支持传目录条目标识或上架来源实例ID）
+   */
+  public unpublishServer(serverId: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/server/off-shelf/${serverId}`,
+    });
+  }
+
   public getReferenceList(serverId: string, query: any): Promise<IMappings> {
     return this.http.getAsync({
       url: `${this.ctxServ.baseUrl}/agent-manager/relation/resources/${serverId}`,

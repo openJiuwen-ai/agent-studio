@@ -296,6 +296,8 @@ services:
       TLS_CERT_KEY_PASSWD: ${TLS_CERT_KEY_PASSWD:-}
       TLS_CERT_KEY_PATH: /opt/cloud/agent-runtime/tls/key.pem
       TLS_CERT_PATH: /opt/cloud/agent-runtime/tls/cert.pem
+      CLOSE_URL_JUDGE_SWITCH: ${CLOSE_URL_JUDGE_SWITCH:-false}
+      PLUGIN_WHITE_URLS: ${PLUGIN_WHITE_URLS:-}
       # 沙箱服务地址（生产环境必填，配置后启用沙箱隔离执行）
       # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
       SECURITY_SANDBOX_SERVER: ${SECURITY_SANDBOX_SERVER:-}
@@ -339,6 +341,9 @@ services:
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
       GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-1}
+      # jemalloc 行为参数（空=库内默认；如 background_thread:true 开启后台页清理
+      # 降低驻留；LD_PRELOAD 由镜像内 start_server.sh 自动设置）
+      MALLOC_CONF: ${MALLOC_CONF:-}
       SECURITY_SANDBOX_TYPE: ${SECURITY_SANDBOX_TYPE:-jiuwenbox}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       # Nginx 负载均衡模式（与 k8s studio-runtime.yaml 对齐）。
@@ -372,6 +377,8 @@ services:
       MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
       # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
       PERFORMANCE_LOG_ENABLED: ${PERFORMANCE_LOG_ENABLED:-true}
+      # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
+      PERFORMANCE_LOG_LEVEL: ${PERFORMANCE_LOG_LEVEL:-WARNING}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}
@@ -411,6 +418,8 @@ services:
     environment:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 31015
+      # jemalloc 行为参数（空=库内默认；LD_PRELOAD 由镜像内启动脚本自动设置）
+      MALLOC_CONF: ${MALLOC_CONF:-}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_PORT: ${REDIS_PORT:-6379}

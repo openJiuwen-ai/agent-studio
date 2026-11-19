@@ -22,6 +22,7 @@ import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginBindFunctionReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 
@@ -235,4 +236,25 @@ public interface IPluginService {
      */
     BaseResp updatePluginVersionByVersionId(String projectId, String pluginId, String versionId,
         String workspaceId);
+
+    /**
+     * publishPlugin：将指定插件（锚定一个发布版本）上架到资产广场（平台精选，跨租户可见）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param pluginId pluginId
+     * @param body 上架请求（version_id 可选，缺省取当前最新发布版本）
+     * @return 上架锚定的发布版本ID
+     */
+    String publishPlugin(String projectId, String workspaceId, String pluginId, PluginShelfReq body);
+
+    /**
+     * unpublishPlugin：将指定插件从资产广场下架（不影响已按版本引用的存量消费）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param pluginId pluginId
+     * @return 插件ID
+     */
+    String unpublishPlugin(String projectId, String workspaceId, String pluginId);
 }

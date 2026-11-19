@@ -456,7 +456,7 @@ export class UseCasesComponent {
       return;
     }
     if (['image/png', 'image/jpeg'].indexOf(fileItem.file.type) < 0) {
-      this.message.error('请上传png、jpg图片');
+      this.message.error(this.i18n.transform('upload_image_type_invalid'));
       return;
     }
     useCase.images[variable] = fileItem.file.originFileObj;

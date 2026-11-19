@@ -31,6 +31,7 @@ from jiuwen.common.configs.env_constants import (
 )
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
+from jiuwen.extension.wrapper.outbound_header_guard import is_valid_outbound_header_value
 from jiuwen.common.net import Connector
 from jiuwen.common.utils.utils import (
     format_exception_reason,
@@ -38,7 +39,10 @@ from jiuwen.common.utils.utils import (
     url_to_ip_with_protocol_and_port,
 )
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.orchestration.flow.stream.base import SseStreamData
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import constant, exception
@@ -321,6 +325,14 @@ class RestfulApiToolNew(Tool):
         对于 ``{{_env.plugin_url_params.VAR}}`` 类型的引用，强制用环境变量
         实际值覆盖 inputs 中的值（LLM 可能生成推测值，必须被覆盖）。
         """
+        # FEAT-093 插件动态鉴权：{{inputs.*}}/{{memory.*}} 绑定解析——
+        # 值源=请求上下文（react 执行器写入，工作流链路不写互不重叠）；
+        # 模板优先请求级（插件工具实例进程级共享，card 配置可能来自首个
+        # 注册者，同 MCP 通道防跨 agent 污染）。解析出的值并入 inputs，
+        # Headers 位置参数经 RequestParamsCreator 既有路由注入出站请求头。
+        # 先于环境变量通道的早退——card input_parameters 为空时请求级
+        # 模板仍需解析
+        self._merge_dynamic_credential_parameters(inputs)
         if not self._input_parameters or not isinstance(inputs, dict):
             return inputs
         for param_name, template in self._input_parameters.items():
@@ -336,6 +348,73 @@ class RestfulApiToolNew(Tool):
                         inputs[param_name] = value
         return inputs
 
+    def _merge_dynamic_credential_parameters(self, inputs: dict) -> None:
+        """{{inputs.*}}/{{memory.*}} 绑定模板解析并入参（值经 Latin-1 校验）。"""
+        if not isinstance(inputs, dict):
+            return
+        from agent_runtime.context.request_context import (
+            get_request_global_variables,
+            get_request_mcp_input_parameters,
+            get_request_memory_variables,
+        )
+        sources = {}
+        global_variables = get_request_global_variables()
+        if global_variables:
+            sources["inputs"] = global_variables
+        memory_variables = get_request_memory_variables()
+        if memory_variables:
+            sources["memory"] = memory_variables
+        if not sources:
+            return
+        # sources 非空 ⟹ react 链路（工作流链路不写请求级变量，上方已早退）：
+        # 只认请求级映射（react 执行器按本次运行 agent 的 IR 写入，按插件
+        # id/name 双形态键控）——本插件无条目即无模板，不回退 card 自身
+        # input_parameters（插件工具实例进程级共享，card 配置可能来自首个
+        # 注册者即别的 agent，回退=跨 agent 动态凭证污染）
+        request_level = get_request_mcp_input_parameters()
+        templates = request_level.get(self._id) or request_level.get(self._name)
+        if not isinstance(templates, dict) or not templates:
+            return
+        for param_name, template in templates.items():
+            if not isinstance(param_name, str) or not param_name or not isinstance(template, str):
+                continue
+            template = template.strip()
+            if not (template.startswith("{{") and template.endswith("}}")):
+                continue
+            inner = template[2:-2].strip()
+            for namespace, variables in sources.items():
+                prefix = namespace + "."
+                if not (inner.startswith(prefix) and len(inner) > len(prefix)):
+                    continue
+                value = variables
+                for key in inner[len(prefix):].split("."):
+                    if isinstance(value, dict) and key in value:
+                        value = value[key]
+                    else:
+                        value = None
+                        break
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    break
+                value_str = str(value)
+                if not is_valid_outbound_header_value(value_str):
+                    logger.warning(
+                        "plugin dynamic credential param '%s' rejected: value contains characters "
+                        "not allowed in an HTTP header, plugin is %s", param_name, self._name,
+                    )
+                    break
+                # 仅并入 Headers 位置参数的值（语义=出站请求头；其他位置的
+                # {{inputs.*}} 引用维持既有环境变量通道语义，不在此覆盖）。
+                # 覆盖语义（不判 inputs 已有值）：inputs 里的同名值来自 LLM
+                # 工具调用参数——Java 侧 IrAdapter 把动态头 target_name 下发
+                # 进工具 schema，LLM 可能编造推测值，必须被绑定值覆盖
+                # （与环境变量通道同语义；工作流链路在上方 sources 空处早退，
+                # 字面值优先语义不经此路径）
+                for param in self._params:
+                    if param.name == param_name and str(getattr(param, "method", "Body")) == "Headers":
+                        inputs[param_name] = value_str
+                        break
+                break
+
     async def invoke(self, inputs: Input, **kwargs) -> Output:
         """
         异步调用（Tool 接口）
@@ -347,7 +426,14 @@ class RestfulApiToolNew(Tool):
         异步调用（与 RestFulAPI.ainvoke 完全一致）
         """
         inputs = self._merge_input_parameters(inputs)
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 弹出须发生在调用方作用域（helper **kwargs 形参是副本），否则
+        # 遥测键与 trace_handlers（不可序列化的 TraceManager）随
+        # create(**kwargs) 泄入发往第三方接口的请求参数
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(
+            tool_trace_info, trace_handlers=trace_handlers, **kwargs
+        )
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(
@@ -385,7 +471,14 @@ class RestfulApiToolNew(Tool):
         异步流式输出接口（与 RestFulAPI.astream 完全一致）
         """
         inputs = self._merge_input_parameters(inputs)
-        trace_manager = self._create_tracer_manager(**kwargs)
+        # 弹出须发生在调用方作用域（helper **kwargs 形参是副本），否则
+        # 遥测键与 trace_handlers（不可序列化的 TraceManager）随
+        # create(**kwargs) 泄入发往第三方接口的请求参数
+        tool_trace_info = extract_tool_trace_info(kwargs)
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(
+            tool_trace_info, trace_handlers=trace_handlers, **kwargs
+        )
         try:
             await trace_manager.on_plugin_start(inputs)
             request_params = self._request_params_creator.create(inputs, **kwargs)
@@ -449,12 +542,18 @@ class RestfulApiToolNew(Tool):
             request["headers"] = request_params.headers
         return request
 
-    def _create_tracer_manager(self, **kwargs) -> TraceManager:
+    def _create_tracer_manager(
+        self, tool_trace_info=None, trace_handlers=None, **kwargs
+    ) -> TraceManager:
         """创建追踪管理器"""
-        return TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None),
-            get_instance_info(self, blacklist=["auth", "headers"]),
-        )
+        instance_info = get_instance_info(self, blacklist=["auth", "headers"])
+        # 工具标识与 handlers 均由调用方从自身 kwargs 摘出后显式传入：
+        # 工具标识入扁平键供 core handler 盖 gen_ai.tool.call.id /
+        # gen_ai.tool.type；handlers 形参化后不再从副本 kwargs 里 pop
+        # （副本内 pop 不影响调用方，形参化后调用方无从漏传）
+        if tool_trace_info:
+            instance_info.update(tool_trace_info)
+        return TraceManager.generate_manager(trace_handlers, instance_info)
 
     def _create_error_invoke_response(self, error: Exception) -> dict:
         """生成 invoke error response"""

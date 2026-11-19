@@ -51,7 +51,6 @@ def _create_flow_mcp_with_params(params):
     mcp = FlowMcp.__new__(FlowMcp)
     mcp._conf = {"type": "sse", "url": "http://test", "tool_name": "test_tool"}
     mcp._is_older_version = False
-    mcp._header_params = {}
 
     mock_client = MagicMock()
     mock_client._tool_params = params
@@ -84,7 +83,7 @@ class TestFormatApiInputsNoneValue:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": None})
+        result, patches, _ = mcp._format_api_inputs({"arguments": None})
         assert result["arguments"] is None
         assert patches == {}
 
@@ -94,7 +93,7 @@ class TestFormatApiInputsNoneValue:
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"items": None})
+        result, _, _ = mcp._format_api_inputs({"items": None})
         assert result["items"] is None
 
     @staticmethod
@@ -103,7 +102,7 @@ class TestFormatApiInputsNoneValue:
         params = [MockParam("name", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"name": None})
+        result, _, _ = mcp._format_api_inputs({"name": None})
         assert result["name"] is None
 
     @staticmethod
@@ -112,7 +111,7 @@ class TestFormatApiInputsNoneValue:
         params = [MockParam("count", param_type="integer", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"count": None})
+        result, _, _ = mcp._format_api_inputs({"count": None})
         assert result["count"] is None
 
     @staticmethod
@@ -121,7 +120,7 @@ class TestFormatApiInputsNoneValue:
         params = [MockParam("flag", param_type="boolean", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"flag": None})
+        result, _, _ = mcp._format_api_inputs({"flag": None})
         assert result["flag"] is None
 
 
@@ -134,7 +133,7 @@ class TestFormatApiInputsEmptyString:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": ""})
+        result, patches, _ = mcp._format_api_inputs({"arguments": ""})
         assert result["arguments"] == ""
         assert patches == {}
 
@@ -144,7 +143,7 @@ class TestFormatApiInputsEmptyString:
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"items": ""})
+        result, _, _ = mcp._format_api_inputs({"items": ""})
         assert result["items"] == ""
 
     @staticmethod
@@ -153,7 +152,7 @@ class TestFormatApiInputsEmptyString:
         params = [MockParam("name", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"name": ""})
+        result, _, _ = mcp._format_api_inputs({"name": ""})
         assert result["name"] == ""
 
 
@@ -166,7 +165,7 @@ class TestFormatApiInputsValidValue:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": {"key": "value"}})
+        result, patches, _ = mcp._format_api_inputs({"arguments": {"key": "value"}})
         assert result["arguments"] == {"key": "value"}
         assert patches == {}
 
@@ -176,7 +175,7 @@ class TestFormatApiInputsValidValue:
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"items": [1, 2, 3]})
+        result, _, _ = mcp._format_api_inputs({"items": [1, 2, 3]})
         assert result["items"] == [1, 2, 3]
 
     @staticmethod
@@ -185,7 +184,7 @@ class TestFormatApiInputsValidValue:
         params = [MockParam("query", param_type="string", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"query": "hello world"})
+        result, _, _ = mcp._format_api_inputs({"query": "hello world"})
         assert result["query"] == "hello world"
 
     @staticmethod
@@ -194,7 +193,7 @@ class TestFormatApiInputsValidValue:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": "not valid json"})
+        result, patches, _ = mcp._format_api_inputs({"arguments": "not valid json"})
         # "not valid json" doesn't start with '{' or '[', so heuristic is skipped
         assert result["arguments"] == "not valid json"
         assert patches == {}
@@ -205,20 +204,22 @@ class TestFormatApiInputsHeaders:
 
     @staticmethod
     def test_headers_extracted_separately():
-        """method=Headers → extracted to _header_params, not in api_inputs"""
+        """method=Headers → extracted to returned header_params, not in api_inputs"""
         params = [
             MockParam("auth_token", param_type="string", method="Headers"),
             MockParam("query", param_type="string", method="Body"),
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({
+        result, _, header_params = mcp._format_api_inputs({
             "auth_token": "my_token",
             "query": "hello world",
         })
         assert "auth_token" not in result
         assert result["query"] == "hello world"
-        assert mcp._header_params["auth_token"] == "my_token"
+        assert header_params == {"auth_token": "my_token"}
+        # header 参数随返回值传递，不写实例字段（实例跨执行复用）
+        assert not hasattr(mcp, "_header_params")
 
     @staticmethod
     def test_none_header_value_skipped():
@@ -229,11 +230,11 @@ class TestFormatApiInputsHeaders:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({
+        result, _, header_params = mcp._format_api_inputs({
             "auth_token": None,
             "query": "hello",
         })
-        assert "auth_token" not in mcp._header_params
+        assert "auth_token" not in header_params
         assert result["query"] == "hello"
 
     @staticmethod
@@ -251,6 +252,36 @@ class TestFormatApiInputsHeaders:
 
         with pytest.raises(Exception):  # JiuWenBaseException 101876
             mcp._format_api_inputs({"auth_token": None, "query": "hello"})
+
+    @staticmethod
+    def test_header_value_illegal_charset_raises():
+        """method=Headers + 值含非 Latin-1/控制字符 → 显式报错（101876，带参数名）
+
+        头值直达出站请求头：非法字符（中文/CR/LF）须在节点入参层拦截，
+        而非穿透到 HTTP 客户端编码处失败（不可诊断，且宽松客户端下构成
+        请求头注入面）。与调测侧 isLatin1HeaderValue 同语义。
+        """
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers"),
+        ]
+        for bad in ("Bearer 中文令牌", "Bearer tok\r\nen", "bad\x00val"):
+            mcp = _create_flow_mcp_with_params(params)
+            with pytest.raises(Exception):  # JiuWenBaseException 101876
+                mcp._format_api_inputs({"auth_token": bad})
+
+    @staticmethod
+    def test_header_value_latin1_extended_passes():
+        """Latin-1 扩展区字符（é/ü 等，0x80~0xFF）合法放行"""
+        params = [
+            MockParam("auth_token", param_type="string", method="Headers"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        # 静态图复用：header_params 随 _format_api_inputs 返回值传递（三元组），
+        # 不再写 mcp._header_params 实例字段
+        result, _schema_patches, header_params = mcp._format_api_inputs({"auth_token": "Bearer café-ü"})
+        assert header_params["auth_token"] == "Bearer café-ü"
+        assert "auth_token" not in result
 
     @staticmethod
     def test_required_header_string_true_none_raises():
@@ -272,20 +303,48 @@ class TestFormatApiInputsHeaders:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({"auth_token": None, "query": "hello"})
-        assert "auth_token" not in mcp._header_params
+        result, _, header_params = mcp._format_api_inputs({"auth_token": None, "query": "hello"})
+        assert "auth_token" not in header_params
         assert result["query"] == "hello"
 
     @staticmethod
     def test_required_header_with_value_included():
-        """required header 有值 → 正常写入 _header_params，不报错"""
+        """required header 有值 → 正常随返回值传出，不报错"""
         params = [
             MockParam("auth_token", param_type="string", method="Headers", required=True),
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        mcp._format_api_inputs({"auth_token": "tok123"})
-        assert mcp._header_params["auth_token"] == "tok123"
+        _, _, header_params = mcp._format_api_inputs({"auth_token": "tok123"})
+        assert header_params == {"auth_token": "tok123"}
+
+    @staticmethod
+    def test_empty_string_header_value_skipped():
+        """FEAT-093：method=Headers + 空串 → 跳过（不注入空 Authorization 头）
+
+        引擎把未绑定的 ref 解析为 start 默认空串（非 None），
+        空值头会被下游鉴权层视为非法凭证，"未提供"不应产生头。
+        """
+        params = [
+            MockParam("Authorization", param_type="string", method="Headers"),
+            MockParam("query", param_type="string", method="Body"),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        result, _schema_patches, header_params = mcp._format_api_inputs({"Authorization": "", "query": "hello"})
+        assert "Authorization" not in header_params
+        assert result["query"] == "hello"
+
+    @staticmethod
+    def test_empty_string_required_header_raises():
+        """FEAT-093：method=Headers + required + 空串 → 与 None 一致显式报错"""
+        params = [
+            MockParam("Authorization", param_type="string", method="Headers", required=True),
+        ]
+        mcp = _create_flow_mcp_with_params(params)
+
+        with pytest.raises(Exception):  # JiuWenBaseException 101876
+            mcp._format_api_inputs({"Authorization": ""})
 
 
 class TestFormatApiInputsParamNotFound:
@@ -310,7 +369,7 @@ class TestFormatApiInputsJsonHeuristic:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
+        result, patches, _ = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
         assert result["arguments"] == {"key": "value"}
         assert patches == {"arguments": "object"}
 
@@ -320,7 +379,7 @@ class TestFormatApiInputsJsonHeuristic:
         params = [MockParam("items", param_type="array", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"items": "[1, 2, 3]"})
+        result, patches, _ = mcp._format_api_inputs({"items": "[1, 2, 3]"})
         assert result["items"] == [1, 2, 3]
         assert patches == {"items": "array"}
 
@@ -332,7 +391,7 @@ class TestFormatApiInputsJsonHeuristic:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
+        result, patches, _ = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
         assert result["arguments"] == {"key": "value"}
         assert patches == {"arguments": "object"}
 
@@ -344,7 +403,7 @@ class TestFormatApiInputsJsonHeuristic:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"items": '["a", "b"]'})
+        result, patches, _ = mcp._format_api_inputs({"items": '["a", "b"]'})
         assert result["items"] == ["a", "b"]
         assert patches == {"items": "array"}
 
@@ -356,7 +415,7 @@ class TestFormatApiInputsJsonHeuristic:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"payload": '{"key": "value"}'})
+        result, patches, _ = mcp._format_api_inputs({"payload": '{"key": "value"}'})
         assert result["payload"] == '{"key": "value"}'
         assert patches == {}
 
@@ -368,7 +427,7 @@ class TestFormatApiInputsJsonHeuristic:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"payload": "[1, 2]"})
+        result, patches, _ = mcp._format_api_inputs({"payload": "[1, 2]"})
         assert result["payload"] == "[1, 2]"
         assert patches == {}
 
@@ -379,7 +438,7 @@ class TestFormatApiInputsJsonHeuristic:
         del params[0].type_inferred  # simulate Param from other loaders
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"payload": '{"a": 1}'})
+        result, patches, _ = mcp._format_api_inputs({"payload": '{"a": 1}'})
         assert result["payload"] == '{"a": 1}'
         assert patches == {}
 
@@ -389,7 +448,7 @@ class TestFormatApiInputsJsonHeuristic:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": '{"broken": '})
+        result, patches, _ = mcp._format_api_inputs({"arguments": '{"broken": '})
         assert result["arguments"] == '{"broken": '
         assert patches == {}
 
@@ -399,7 +458,7 @@ class TestFormatApiInputsJsonHeuristic:
         params = [MockParam("arguments", param_type="object", method="Body")]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"arguments": "{}"})
+        result, patches, _ = mcp._format_api_inputs({"arguments": "{}"})
         assert result["arguments"] == {}
         assert patches == {"arguments": "object"}
 
@@ -409,7 +468,7 @@ class TestFormatApiInputsJsonHeuristic:
         params = [MockParam("count", param_type="string", method="Body", type_inferred=True)]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, patches = mcp._format_api_inputs({"count": "123"})
+        result, patches, _ = mcp._format_api_inputs({"count": "123"})
         assert result["count"] == "123"
         assert patches == {}
 
@@ -479,7 +538,7 @@ class TestBuildPatchedTool:
         schema = {"type": "object", "properties": {"arguments": {"type": "string"}}}
         mcp = _create_mcp_with_tool_card(params, schema)
 
-        _, patches = mcp._format_api_inputs({"arguments": '{"k": "v"}'})
+        _, patches, _ = mcp._format_api_inputs({"arguments": '{"k": "v"}'})
         assert patches == {"arguments": "object"}
         # shared schema untouched by _format_api_inputs
         assert schema["properties"]["arguments"]["type"] == "string"
@@ -529,7 +588,7 @@ class TestFormatApiInputsRegression:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({
+        result, _, _ = mcp._format_api_inputs({
             "query": "hello",
             "arguments": None,
         })
@@ -550,7 +609,7 @@ class TestFormatApiInputsRegression:
         ]
         mcp = _create_flow_mcp_with_params(params)
 
-        result, _ = mcp._format_api_inputs({
+        result, _, _ = mcp._format_api_inputs({
             "query": None,
             "arguments": None,
             "items": None,

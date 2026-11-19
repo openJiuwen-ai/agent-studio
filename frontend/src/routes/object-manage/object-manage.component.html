@@ -60,7 +60,15 @@
           <tbody>
             <tr *ngFor="let row of basicTable.data; trackBy: trackByFn" style="height: 64px">
               <td nzEllipsis>{{ row.name }}</td>
-              <td nzEllipsis nz-tooltip [nzTooltipTitle]="customTipTmpl" [nzTooltipTitleContext]="{ $implicit: row.schemasFormat }">
+              <td
+                nzEllipsis
+                nz-popover
+                nzPopoverTrigger="click"
+                nzPopoverPlacement="bottomLeft"
+                [nzPopoverContent]="schemaPopoverTpl"
+                [nzPopoverContentContext]="row.schemasFormat"
+                class="cursor-pointer"
+              >
                 {{ row.schemasFormat }}
               </td>
               <td nzEllipsis>{{ row.creator_id }}</td>
@@ -120,7 +128,7 @@
           <input nz-input formControlName="name" [placeholder]="'input_object_name' | i18nextEager" maxlength="50" style="width: 100%" />
           <ng-template #nameErrorTpl let-control>
             <ng-container *ngIf="control.hasError('required')">{{ 'validation_name_tip' | i18nextEager }}</ng-container>
-            <ng-container *ngIf="control.hasError('customVerify')">{{ 'validation_name_tip' | i18nextEager }}</ng-container>
+            <ng-container *ngIf="control.hasError('nameChAllow')">{{ 'validation_name_tip' | i18nextEager }}</ng-container>
             <ng-container *ngIf="control.hasError('minlength') || control.hasError('maxlength')">{{ 'validation_name_tip' | i18nextEager }}</ng-container>
           </ng-template>
         </nz-form-control>
@@ -128,7 +136,7 @@
 
       <nz-form-item>
         <nz-form-label>{{ 'object_variable' | i18nextEager }}</nz-form-label>
-        <nz-form-control>
+        <div>
           <div class="h-full w-full overflow-auto mt-2 rounded-2">
             <div class="flex items-center gap-2 mb-2 w-full">
               <div class="text-label text-gray-500 text-xs font-medium" style="flex: 1; min-width: 0">{{ 'variable_name' | i18nextEager }}</div>
@@ -149,6 +157,7 @@
                       <nz-form-item style="margin-bottom: 0">
                         <nz-form-control>
                           <input
+                            #varNameCtrl="ngModel"
                             nz-input
                             type="text"
                             [name]="'objectsFormName_' + param.depth + '_' + i"
@@ -158,7 +167,11 @@
                             (input)="onObjectNameChange()"
                             [valueValidityValidator]="getObjectInputNames(param)"
                             [placeholder]="'input_placeholder' | i18nextEager"
+                            [class.input-error]="varNameCtrl.invalid && (varNameCtrl.dirty || varNameCtrl.touched)"
                           />
+                          <div *ngIf="varNameCtrl.invalid && (varNameCtrl.dirty || varNameCtrl.touched)" class="error-tip">
+                            {{ varNameCtrl.errors?.serviceName?.tiErrorMessage }}
+                          </div>
                         </nz-form-control>
                       </nz-form-item>
                     </div>
@@ -170,6 +183,7 @@
                         [(ngModel)]="param.type"
                         (ngModelChange)="onObjectParamTypeChange(param)"
                         [nzOptions]="startTypeOptions"
+                        [nzOptionRender]="renderTpl"
                         [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                         style="width: 100%"
                       >
@@ -182,6 +196,7 @@
                           [(ngModel)]="param.type"
                           (ngModelChange)="onObjectParamTypeChange(param)"
                           [nzOptions]="startTypeOp"
+                          [nzOptionRender]="renderTpl"
                           [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                           style="width: 100%"
                         >
@@ -192,6 +207,7 @@
                             [(ngModel)]="param.type"
                             (ngModelChange)="onObjectParamTypeChange(param)"
                             [nzOptions]="standTypeOps"
+                            [nzOptionRender]="renderTpl"
                             [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                             style="width: 100%"
                           >
@@ -232,7 +248,7 @@
               </ng-template>
             </form>
           </div>
-        </nz-form-control>
+        </div>
       </nz-form-item>
     </form>
   </ng-container>
@@ -245,6 +261,13 @@
   </div>
 </ng-template>
 
-<ng-template #customTipTmpl let-context>
-  <div style="max-height: 400px; white-space: pre-wrap">{{ context }}</div>
+<ng-template #schemaPopoverTpl let-context>
+  <div style="width: 480px; max-height: 500px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: #191919">{{ context }}</div>
+</ng-template>
+
+<!-- 类型标签含尖括号，cascader 默认 innerHTML 渲染会吞掉，改用文本插值 -->
+<ng-template #renderTpl let-option>
+  <div class="flex w-full justify-between h-[22px]">
+    <p>{{ option.label }}</p>
+  </div>
 </ng-template>

@@ -4,7 +4,12 @@
       <nz-tab [nzTitle]="tab.title"> </nz-tab>
     }
   </nz-tabset>
-  <div class="type-title">{{ getTitleLabel() }}</div>
+  <div class="flex justify-between items-center">
+    <div class="type-title">{{ getTitleLabel() }}</div>
+    <button *ngIf="canPublish" nz-button nzType="primary" (click)="openPublishModal()">
+      {{ 'plaza_onshelf' | i18n }}
+    </button>
+  </div>
   <div class="search-box">
     <input nz-input [(ngModel)]="searchValue" class="w-[calc(100%-32px)]" (ngModelChange)="onNgModelChange($event)" />
     <button nz-button nzType="default" (click)="refresh()" class="h-8 w-8">
@@ -25,16 +30,25 @@
       <nz-spin></nz-spin>
     }
     @for (card of cards; track card.skillId || $index) {
-      <div class="card" (click)="gotoDetail(card)">
+      <div class="card" (click)="gotoDetail(card)" (mouseenter)="cardHovered = card.skillId" (mouseleave)="cardHovered = null">
         <div class="title">
           <div class="icon">
             <img [src]="card.icon" alt="" />
           </div>
           <div class="ml-[16px]">
             <div class="label mb-[4px]">{{ card.skillName }}</div>
-            <div>
+            <div class="flex gap-[4px]">
               @if (card.tagId && resourceConfig[card.tagId]?.id) {
                 <nz-tag>{{ resourceConfig[card.tagId].i18key | i18n }}</nz-tag>
+              }
+              @if (card.plazaSource === 'USER') {
+                <nz-tag style="background-color: #e6f7ff; color: #1890ff; border-color: #91d5ff">
+                  {{ 'skill.resource.tag.userPublish' | i18n }}
+                </nz-tag>
+              } @else {
+                <nz-tag style="background-color: #f5f5f5; color: #191919; border-color: #f5f5f5">
+                  {{ 'skill.resource.tag.officialTip' | i18n }}
+                </nz-tag>
               }
             </div>
           </div>
@@ -43,10 +57,23 @@
           {{ card.description }}
         </div>
         <div class="footer">
-          <div class="footer-icon">
-            <span nz-icon nzType="user"></span>
-          </div>
-          <div class="custom-tip footer-text">{{ 'skill.resource.tag.officialTip' | i18n }}</div>
+          @if (card.publishedAsset === 1 && card.isOwner && cardHovered === card.skillId) {
+            <button
+              nz-button
+              nzType="link"
+              nzSize="small"
+              (click)="unpublishSkill(card); $event.stopPropagation();"
+            >
+              {{ 'plaza_offshelf' | i18n }}
+            </button>
+          } @else {
+            <div class="footer-icon">
+              <span nz-icon nzType="user"></span>
+            </div>
+            <div class="custom-tip footer-text">
+              {{ card.creatorName }}
+            </div>
+          }
         </div>
       </div>
     }

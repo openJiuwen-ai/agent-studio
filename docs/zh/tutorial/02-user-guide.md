@@ -4190,10 +4190,10 @@ OpenJiuwen支持通过JSON文件形式导入API插件，可以直接将API插件
 
 这是配置文件中最复杂的部分，定义了插件如何组装参数以及如何处理返回值。
 
-- **输入参数定义 (input_schema)** 格式：JSON字符串数组。
-  该字段定义了API请求所需的Header、Body、Query参数。在编辑此字段时，必须严格遵守JSON转义规则（例如"必须写成\"），否则会导致导入失败。
-- **输出参数定义 (output_schema)** 格式：JSON字符串数组。
-  定义了API响应的结构，帮助Agent提取关键信息。
+- **输入参数定义 (input_schema)** 格式：JSON字符串（内容为 JSON Schema 对象，外加平台私有字段）。
+  该字段定义了API请求所需的Header、Body、Query、Path参数。在编辑此字段时，必须严格遵守JSON转义规则（例如"必须写成\"），否则会导致导入失败。必填项、`location`、数组 `items` 规则及私有字段含义见 [HTTP 工具 Schema 约定说明](../how-to/http-tool-schema-guide.md)。
+- **输出参数定义 (output_schema)** 格式：JSON字符串。
+  定义了API响应的结构，帮助Agent提取关键信息。出参不要求 `location`；完整约定同上。
 
 ###### 鉴权配置
 

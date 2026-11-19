@@ -32,6 +32,14 @@ class ServerSettings(BaseSettings):
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
     # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
     performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
+    # 性能日志级别，默认 WARNING (静默)；设为 INFO 才真正打印 perf 指标
+    performance_log_level: str = Field(default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL")
+
+    @field_validator("performance_log_level", mode="before")
+    @classmethod
+    def _perf_level_default(cls, v):
+        """空字符串按默认 WARNING 处理。"""
+        return v or "WARNING"
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -194,6 +202,11 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+    # 性能埋点级别（workflow_cache|hit/miss、ir_convert|、agent_group_stream| 等）。
+    # 缺省 WARNING 保持静默；排查性能问题时设为 INFO 打开埋点。
+    performance_level: str = Field(
+        default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -291,6 +304,13 @@ class CacheSettings(BaseSettings):
     )
     workflow_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    # Workflow 实例复用（issue #1555）：恒为静态图复用（引擎 reentrant compile
+    # + Patch B + LazyWorkflow 保留制缓存）；能力探测失败时进程级自动降级为直建。
+    # 注意与 MAX_WORKFLOW_CACHE_NUM 区分：后者是 BPMN spec 缓存队列（jiuwen
+    # orchestration 路径）的容量，本配置是 openjiuwen Workflow 实例缓存的容量。
+    workflow_instance_cache_num: int = Field(
+        default=100, ge=1, validation_alias="WORKFLOW_INSTANCE_CACHE_NUM"
     )
     agent_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1

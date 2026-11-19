@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.common.dto.ErrorDetail;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.error.PassthroughText;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import org.junit.jupiter.api.Test;
@@ -121,6 +122,111 @@ class ManagerHttpErrorResponseBuilderTest {
             SUGGESTION_KEY, REQ_ID, null, null, null, null);
         ResponseEntity<ErrorRsp> resp = builder.build(d500, Locale.CHINA);
         assertEquals(500, resp.getStatusCode().value());
+    }
+
+    // ---- 受管三段文案回退（COM-04 §5.2 修订，2026-11-02）----
+
+    private static final String ENGINE_CODE = "openjiuwen.101003";
+
+    private ErrorDescriptor engineDescriptor(PassthroughText passthrough) {
+        return new ErrorDescriptor(ENGINE_CODE, 500, ENGINE_CODE,
+            ENGINE_CODE + ".reason", ENGINE_CODE + ".suggestion", REQ_ID, null, null, null,
+            null, passthrough);
+    }
+
+    @Test
+    void passthroughTextUsedWhenI18nMisses() {
+        // I18nUtil 语义：key 缺失回显 key 本身（视为未命中）→ 使用受管文案
+        ManagerHttpErrorResponseBuilder b =
+            new ManagerHttpErrorResponseBuilder((key, args, locale) -> key);
+        ResponseEntity<ErrorRsp> resp = b.build(
+            engineDescriptor(new PassthroughText("LLM调用失败：Connection error",
+                "LLM组件调用模型服务失败", "请检查模型服务状态")), Locale.CHINA);
+        assertEquals(ENGINE_CODE, resp.getBody().getErrorCode());
+        assertEquals("LLM调用失败：Connection error", resp.getBody().getErrorMsg());
+        assertEquals("LLM组件调用模型服务失败", resp.getBody().getErrorReason());
+        assertEquals("请检查模型服务状态", resp.getBody().getErrorSuggestion());
+    }
+
+    @Test
+    void i18nHitWinsOverPassthrough() {
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 404, MSG_KEY, REASON_KEY, SUGGESTION_KEY,
+            REQ_ID, null, null, null, null, new PassthroughText("passthrough-msg", null, null));
+        ResponseEntity<ErrorRsp> resp = builder.build(d, Locale.CHINA);
+        assertEquals(MSG_KEY + "::resolved", resp.getBody().getErrorMsg());
+    }
+
+    @Test
+    void blankResolveWithoutPassthroughFailsClosed() {
+        ManagerHttpErrorResponseBuilder b =
+            new ManagerHttpErrorResponseBuilder((key, args, locale) -> "");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+            () -> b.build(descriptor(), Locale.CHINA));
+    }
+
+    // ---- 统一族格式（COM-04 §5.2 修订二期）----
+
+    @Test
+    void unifiedFamilyFormatForManagerSqlCode() {
+        // 评审修订（2026-11-04）：Manager 自有码不再挂依赖组件标签——统一族格式
+        // 会把既有接口的具体 error_msg 替换为族前缀并改写 error_reason 结构，
+        // 属破坏性对外契约变更。自有码保持原三段 i18n 契约（见
+        // ManagerErrorDescriptorFactory.newDescriptor 评审注释）。
+        com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory f =
+            new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory(
+                new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog());
+        ErrorDescriptor d = f.fromStudioError(
+            com.openjiuwen.studio.agent.common.enums.StudioError.SQL_EXECUTE_FAILED,
+            new RuntimeException("connection refused"));
+        org.junit.jupiter.api.Assertions.assertNull(d.getDownstreamComponentLabel());
+
+        ManagerHttpErrorResponseBuilder b = new ManagerHttpErrorResponseBuilder((key, args, locale) -> {
+            if ("openjiuwen.02001042".equals(key)) {
+                return "SQL执行失败。";
+            }
+            if ("openjiuwen.02001042.reason".equals(key)) {
+                return "数据库执行失败的具体原因。";
+            }
+            if ("openjiuwen.02001042.suggestion".equals(key)) {
+                return "请检查数据库状态。";
+            }
+            return key; // 其余 key 视为未命中
+        });
+        ResponseEntity<ErrorRsp> resp = b.build(d, Locale.CHINA);
+        assertEquals("SQL执行失败。", resp.getBody().getErrorMsg());
+        assertEquals("数据库执行失败的具体原因。", resp.getBody().getErrorReason());
+        assertEquals("请检查数据库状态。", resp.getBody().getErrorSuggestion());
+    }
+
+    @Test
+    void unifiedFamilyFormatForModelServiceUnavailableBuilderLabel() {
+        // 02501037 回归本职（上游模型探活失败的业务码）：不带下游组件标签，
+        // 构建器退回 i18n 三键原格式（用户裁定 builder 掉线走 02001131 兜底，
+        // 2026-11-02）
+        com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory f =
+            new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorDescriptorFactory(
+                new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog());
+        ErrorDescriptor d = f.fromStudioError(
+            com.openjiuwen.studio.agent.common.enums.StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE,
+            new RuntimeException("model check failed"));
+        org.junit.jupiter.api.Assertions.assertNull(d.getDownstreamComponentLabel());
+
+        ManagerHttpErrorResponseBuilder b = new ManagerHttpErrorResponseBuilder((key, args, locale) -> {
+            if ("openjiuwen.02501037".equals(key)) {
+                return "模型服务不可用";
+            }
+            if ("openjiuwen.02501037.reason".equals(key)) {
+                return "模型服务探活失败";
+            }
+            if ("openjiuwen.02501037.suggestion".equals(key)) {
+                return "请检查第三方模型配置是否正确";
+            }
+            return key;
+        });
+        ResponseEntity<ErrorRsp> resp = b.build(d, Locale.CHINA);
+        assertEquals("openjiuwen.02501037", resp.getBody().getErrorCode());
+        assertEquals("模型服务不可用", resp.getBody().getErrorMsg());
+        assertEquals("模型服务探活失败", resp.getBody().getErrorReason());
     }
 
     /** bug009 根因2: cause 为 ASE 时, args 透传给 resolver 填占位符, locale 不被误填。 */

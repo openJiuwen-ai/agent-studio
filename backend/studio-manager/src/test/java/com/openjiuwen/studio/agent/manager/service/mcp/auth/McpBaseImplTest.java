@@ -9,6 +9,8 @@ import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
@@ -17,7 +19,10 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.common.dto.auth.OauthInfo;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
+import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServiceDao;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
@@ -44,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -430,6 +436,406 @@ class McpBaseImplTest extends BaseTest {
         // 预期结果：第一位是 'X'，后面拼接去掉首位的脱敏符
         String expected = "X" + CommonConstant.ANONYMIZED_TEXT.substring(1);
         assertEquals(expected, result);
+    }
+
+    // ==== FEAT-093 动态鉴权（scope=DYNAMIC）校验用例 ====
+
+    private AuthInfo buildDynamicAuthInfo(AuthKeyInfo... keys) {
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of(keys));
+        return authInfo;
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：合法配置（仅 target_name，auth_key 为空）通过校验")
+    void test_validAuthInfo_dynamic_success() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+
+        mcpBase.validAuthInfo(buildDynamicAuthInfo(key));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：携带凭证值（auth_key 非空）拒绝保存")
+    void test_validAuthInfo_dynamic_with_value_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey("secret-value");
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为空拒绝")
+    void test_validAuthInfo_dynamic_blank_target_name_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("");
+        key.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 重复（大小写不敏感）拒绝")
+    void test_validAuthInfo_dynamic_duplicate_target_name_rejected() {
+        AuthKeyInfo key1 = new AuthKeyInfo();
+        key1.setTargetName("Authorization");
+        key1.setAuthKey(null);
+        AuthKeyInfo key2 = new AuthKeyInfo();
+        key2.setTargetName("authorization");
+        key2.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key1, key2)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为平台保留关联头拒绝（D-02/B07，防调测/运行期伪造）")
+    void test_validAuthInfo_dynamic_reserved_correlation_header_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("X-Request-Id");
+        key.setAuthKey(null);
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 含非法头名字符（空格/冒号/CR）拒绝（防请求头注入/走私）")
+    void test_validAuthInfo_dynamic_illegal_header_name_chars_rejected() {
+        for (String bad : new String[] {"Bad Header", "Auth:Inj", "X-Head\r\nX-Evil", "X-头"}) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName(bad);
+            key.setAuthKey(null);
+            Assertions.assertThrows(AgentStudioException.class,
+                () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)), "name: " + bad);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：target_name 为逐跳敏感头（Host/Content-Length 等）拒绝")
+    void test_validAuthInfo_dynamic_hop_by_hop_header_rejected() {
+        for (String bad : new String[] {"Host", "Content-Length", "Transfer-Encoding", "Connection"}) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName(bad);
+            key.setAuthKey(null);
+            Assertions.assertThrows(AgentStudioException.class,
+                () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(key)), "name: " + bad);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 超过 5 条拒绝（与前端/DTO 上限一致）")
+    void test_validAuthInfo_dynamic_more_than_five_keys_rejected() {
+        AuthKeyInfo[] keys = new AuthKeyInfo[6];
+        for (int i = 0; i < 6; i++) {
+            AuthKeyInfo key = new AuthKeyInfo();
+            key.setTargetName("X-Key-" + (i + 1));
+            key.setAuthKey(null);
+            keys[i] = key;
+        }
+
+        Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpBase.validAuthInfo(buildDynamicAuthInfo(keys)));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：domain 非 HEADERS 拒绝（值仅注入出站请求头层）")
+    void test_validAuthInfo_dynamic_query_domain_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.QUERY);
+        authInfo.setAuthKeys(List.of(key));
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 为空拒绝")
+    void test_validAuthInfo_dynamic_empty_keys_rejected() {
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of());
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：auth_keys 含 null 元素拒绝（防 NPE 逃逸成 500）")
+    void test_validAuthInfo_dynamic_null_key_element_rejected() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(Arrays.asList(key, null));
+
+        Assertions.assertThrows(AgentStudioException.class, () -> mcpBase.validAuthInfo(authInfo));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：更新校验直接返回新配置，不触发 auth_key 解密（值为空）")
+    void test_validIsNeedToUpdateAuthInfo_dynamic() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        AuthInfo result = mcpBase.validIsNeedToUpdateAuthInfo(authInfo, authInfo);
+
+        assertEquals(authInfo, result);
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：脱敏处理对 DYNAMIC 原样返回（auth_key 保持空）")
+    void test_anonymizeAuthInfo_dynamic() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        AuthInfo result = mcpBase.anonymizeAuthInfo(authInfo);
+
+        assertEquals("Authorization", result.getAuthKeys().get(0).getTargetName());
+        assertEquals(null, result.getAuthKeys().get(0).getAuthKey());
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：token 交换跳过空值 auth_key，不注入出站头")
+    void test_exchangeTokenByAuth_dynamic_skips_blank_key() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = buildDynamicAuthInfo(key);
+
+        Map<String, String> headers = new HashMap<>();
+
+        mcpBase.exchangeTokenByAuth(authInfo, headers, "http://example.com");
+
+        assertEquals(false, headers.containsKey("Authorization"));
+    }
+
+    // ==== FEAT-093 单智能体参数快照通道（parseMcpInput2ResourceParameter / fillExtendInfo） ====
+
+    private McpServiceEntity buildMcpServiceEntity(String serverConfig, AuthInfo authInfo) {
+        McpServiceEntity entity = new McpServiceEntity();
+        entity.setServerConfig(serverConfig);
+        entity.setAuthInfo(authInfo);
+        return entity;
+    }
+
+    private List<Map<String, Object>> parseResourceParams(String json) {
+        return JSON.parseObject(json, new TypeReference<List<Map<String, Object>>>() { });
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：参数快照追加 target_name 条目（值空，供前端绑定记忆/入参）")
+    void test_parseMcpInput2ResourceParameter_dynamic_appended() {
+        Mockito.doReturn("{\"url\":\"http://x\",\"headers\":{\"X-Token\":\"tok\"}}")
+                .when(encryptionAdapter).decrypt("enc-server-config");
+        AuthKeyInfo key1 = new AuthKeyInfo();
+        key1.setTargetName("Authorization");
+        key1.setAuthKey(null);
+        AuthKeyInfo key2 = new AuthKeyInfo();
+        key2.setTargetName("X-Custom");
+        key2.setAuthKey(null);
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", buildDynamicAuthInfo(key1, key2));
+
+        List<Map<String, Object>> params = parseResourceParams(mcpBase.parseMcpInput2ResourceParameter(entity));
+
+        assertEquals(3, params.size());
+        Map<String, Object> serverHeader = params.stream()
+                .filter(p -> "X-Token".equals(p.get("name"))).findFirst().orElseThrow();
+        assertEquals("tok", serverHeader.get("default"));
+        for (String dynamicName : new String[] {"Authorization", "X-Custom"}) {
+            Map<String, Object> dynamic = params.stream()
+                    .filter(p -> dynamicName.equals(p.get("name"))).findFirst().orElseThrow();
+            assertEquals(null, dynamic.get("default"));
+            assertEquals(false, dynamic.get("required"));
+            assertEquals("", ((Map<?, ?>) dynamic.get("value")).get("content"));
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：参数快照按名去重（大小写不敏感）且 null 元素安全跳过")
+    void test_parseMcpInput2ResourceParameter_dynamic_dedup_and_null_safe() {
+        Mockito.doReturn("{\"headers\":{\"Authorization\":\"abc\"}}")
+                .when(encryptionAdapter).decrypt("enc-server-config");
+        AuthKeyInfo dup = new AuthKeyInfo();
+        dup.setTargetName("authorization");
+        dup.setAuthKey(null);
+        AuthKeyInfo fresh = new AuthKeyInfo();
+        fresh.setTargetName("X-New");
+        fresh.setAuthKey(null);
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(Arrays.asList(dup, null, fresh));
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", authInfo);
+
+        List<Map<String, Object>> params = parseResourceParams(mcpBase.parseMcpInput2ResourceParameter(entity));
+
+        // server 头 Authorization 保留原值；同名（大小写不同）不重复追加；null 元素不炸
+        assertEquals(2, params.size());
+        Map<String, Object> auth = params.stream()
+                .filter(p -> "Authorization".equals(p.get("name"))).findFirst().orElseThrow();
+        assertEquals("abc", auth.get("default"));
+        assertEquals(1, params.stream().filter(p -> "X-New".equals(p.get("name"))).count());
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：非 DYNAMIC 服务参数快照行为不变（仅 server_config headers）")
+    void test_parseMcpInput2ResourceParameter_non_dynamic_unchanged() {
+        Mockito.doReturn("{\"headers\":{\"X-Token\":\"tok\"}}")
+                .when(encryptionAdapter).decrypt("enc-server-config");
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey("secret");
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.SERVICE);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of(key));
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", authInfo);
+
+        List<Map<String, Object>> params = parseResourceParams(mcpBase.parseMcpInput2ResourceParameter(entity));
+
+        assertEquals(1, params.size());
+        assertEquals("X-Token", params.get(0).get("name"));
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：extend_info 空白时回填含动态凭证参数的快照")
+    void test_fillExtendInfo_blank_fills_dynamic() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", buildDynamicAuthInfo(key));
+        Mockito.doReturn("{\"url\":\"http://x\"}").when(encryptionAdapter).decrypt("enc-server-config");
+
+        McpServiceDao serviceDao = mock(McpServiceDao.class);
+        MappingMapper mappingMapper = mock(MappingMapper.class);
+        when(serviceDao.selectById(anyString(), any(), any(), any())).thenReturn(entity);
+        Object originalDao = ReflectionTestUtils.getField(mcpBase, "serviceDao");
+        Object originalMapper = ReflectionTestUtils.getField(mcpBase, "mappingMapper");
+        try {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", serviceDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", mappingMapper);
+            MappingEntity agentMcp = new MappingEntity();
+            agentMcp.setResourceId("svc-1");
+            agentMcp.setValid(true);
+
+            mcpBase.fillExtendInfoOfMcpWhenRetrieveAgent(agentMcp);
+
+            List<Map<String, Object>> params = parseResourceParams(agentMcp.getExtendInfo());
+            assertEquals(1, params.size());
+            assertEquals("Authorization", params.get(0).get("name"));
+            Mockito.verify(mappingMapper).updateResourceParameterByAppIDAndResourceId(agentMcp);
+        } finally {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", originalDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", originalMapper);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：历史空列表快照（\"[]\"）回补动态凭证参数")
+    void test_fillExtendInfo_empty_list_refills() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", buildDynamicAuthInfo(key));
+        Mockito.doReturn("{\"url\":\"http://x\"}").when(encryptionAdapter).decrypt("enc-server-config");
+
+        McpServiceDao serviceDao = mock(McpServiceDao.class);
+        MappingMapper mappingMapper = mock(MappingMapper.class);
+        when(serviceDao.selectById(anyString(), any(), any(), any())).thenReturn(entity);
+        Object originalDao = ReflectionTestUtils.getField(mcpBase, "serviceDao");
+        Object originalMapper = ReflectionTestUtils.getField(mcpBase, "mappingMapper");
+        try {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", serviceDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", mappingMapper);
+            MappingEntity agentMcp = new MappingEntity();
+            agentMcp.setResourceId("svc-1");
+            agentMcp.setValid(true);
+            agentMcp.setExtendInfo("[]");
+
+            mcpBase.fillExtendInfoOfMcpWhenRetrieveAgent(agentMcp);
+
+            List<Map<String, Object>> params = parseResourceParams(agentMcp.getExtendInfo());
+            assertEquals(1, params.size());
+            assertEquals("Authorization", params.get(0).get("name"));
+            Mockito.verify(mappingMapper).updateResourceParameterByAppIDAndResourceId(agentMcp);
+        } finally {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", originalDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", originalMapper);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：无参数服务不回写（防每次详情加载反复落库）")
+    void test_fillExtendInfo_empty_new_parameter_no_write() {
+        McpServiceEntity entity = buildMcpServiceEntity("enc-server-config", null);
+        Mockito.doReturn("{\"url\":\"http://x\"}").when(encryptionAdapter).decrypt("enc-server-config");
+
+        McpServiceDao serviceDao = mock(McpServiceDao.class);
+        MappingMapper mappingMapper = mock(MappingMapper.class);
+        when(serviceDao.selectById(anyString(), any(), any(), any())).thenReturn(entity);
+        Object originalDao = ReflectionTestUtils.getField(mcpBase, "serviceDao");
+        Object originalMapper = ReflectionTestUtils.getField(mcpBase, "mappingMapper");
+        try {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", serviceDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", mappingMapper);
+            MappingEntity agentMcp = new MappingEntity();
+            agentMcp.setResourceId("svc-1");
+            agentMcp.setValid(true);
+            agentMcp.setExtendInfo("[]");
+
+            mcpBase.fillExtendInfoOfMcpWhenRetrieveAgent(agentMcp);
+
+            assertEquals("[]", agentMcp.getExtendInfo());
+            Mockito.verify(mappingMapper, Mockito.never())
+                    .updateResourceParameterByAppIDAndResourceId(any());
+        } finally {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", originalDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", originalMapper);
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：用户已配置的非空快照不被覆盖")
+    void test_fillExtendInfo_non_empty_list_untouched() {
+        McpServiceDao serviceDao = mock(McpServiceDao.class);
+        MappingMapper mappingMapper = mock(MappingMapper.class);
+        Object originalDao = ReflectionTestUtils.getField(mcpBase, "serviceDao");
+        Object originalMapper = ReflectionTestUtils.getField(mcpBase, "mappingMapper");
+        try {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", serviceDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", mappingMapper);
+            MappingEntity agentMcp = new MappingEntity();
+            agentMcp.setResourceId("svc-1");
+            agentMcp.setValid(true);
+            agentMcp.setExtendInfo("[{\"name\":\"Authorization\",\"defaultValue\":null}]");
+
+            mcpBase.fillExtendInfoOfMcpWhenRetrieveAgent(agentMcp);
+
+            assertEquals("[{\"name\":\"Authorization\",\"defaultValue\":null}]", agentMcp.getExtendInfo());
+            Mockito.verify(serviceDao, Mockito.never()).selectById(anyString(), any(), any(), any());
+            Mockito.verify(mappingMapper, Mockito.never())
+                    .updateResourceParameterByAppIDAndResourceId(any());
+        } finally {
+            ReflectionTestUtils.setField(mcpBase, "serviceDao", originalDao);
+            ReflectionTestUtils.setField(mcpBase, "mappingMapper", originalMapper);
+        }
     }
 
 }

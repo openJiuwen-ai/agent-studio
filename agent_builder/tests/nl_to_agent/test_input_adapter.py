@@ -83,6 +83,7 @@ class TestInputAdapterInit:
             "plugin": [],
             "knowledge": [],
             "workflow": [],
+            "skill": [],
         }
 
 
@@ -108,18 +109,19 @@ class TestRetrieverAdapter:
     )
     @staticmethod
     def test_calls_retriever_for_each_type(self, mock_retriever):
-        """对 plugin、knowledge、workflow 三种类型分别调用 retriever.retrieve"""
+        """对 plugin、knowledge、workflow、skill 四种类型分别调用 retriever.retrieve"""
         mock_instance = MagicMock()
         mock_instance.retrieve.return_value = []
         mock_retriever.return_value = mock_instance
         adapter = InputAdapter({}, {})
         adapter.retriever_adapter("query", res_num=5, min_score=0.5)
-        assert mock_instance.retrieve.call_count == 3
+        assert mock_instance.retrieve.call_count == 4
         call_args_list = [call.args for call in mock_instance.retrieve.call_args_list]
         types_called = [args[0] for args in call_args_list]
         assert "plugin" in types_called
         assert "knowledge" in types_called
         assert "workflow" in types_called
+        assert "skill" in types_called
 
     @patch(
         "agent_builder.nl_to_agent.adapter.input_adapter.ResourceRetriever"

@@ -213,6 +213,6 @@
       </div>
     }
   </div>
-  <meta-var-memory-modal [actionType]="'VIEW'" [agentId]="appId" #varMemoryModalView></meta-var-memory-modal>
+  <meta-var-memory-modal [actionType]="'VIEW'" [agentId]="appId" (saveMemoryVars)="onDebugVarMemorySaved($event)" #varMemoryModalView></meta-var-memory-modal>
 <!--  <meta-long-memory-modal [agentId]="appId" #longMemoryModalView></meta-long-memory-modal>-->
 </div>

@@ -361,3 +361,192 @@ async def _collect_async_iter(agen):
     async for item in agen:
         result.append(item)
     return result
+
+
+# --------------------------------------------------------------------------- #
+# A19-A21: ainvoke() — trace_handlers 透传发射插件事件（规划模式工具 span）
+# --------------------------------------------------------------------------- #
+
+def _make_recording_handler():
+    """构造记录 on_plugin_* 事件的 trace handler 替身。"""
+    handler = MagicMock()
+    handler.on_plugin_start = AsyncMock()
+    handler.on_plugin_end = AsyncMock()
+    handler.on_plugin_error = AsyncMock()
+    return handler
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_emits_plugin_events_with_trace_handlers(mock_pool):
+    """A19: 传 trace_handlers 时 on_plugin_start/end 成对发射，结果不变。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+    handler.on_plugin_start.assert_awaited_once()
+    handler.on_plugin_end.assert_awaited_once()
+    # start 事件载荷：(instance_info, inputs)；end 事件载荷：(outputs,)
+    start_args = handler.on_plugin_start.await_args.args
+    assert start_args[1] == {"input": "v"}
+    assert isinstance(start_args[0], dict)
+    assert handler.on_plugin_end.await_args.args[0] == result
+    handler.on_plugin_error.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_emits_plugin_error_on_exception(mock_pool):
+    """A20: 插件抛异常时 on_plugin_error 发射，错误包装不变。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(side_effect=RuntimeError("boom"))
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({}, trace_handlers=[handler]))
+
+    assert result["errCode"] == 105001
+    handler.on_plugin_start.assert_awaited_once()
+    handler.on_plugin_error.assert_awaited_once()
+    assert isinstance(handler.on_plugin_error.await_args.args[0], RuntimeError)
+    handler.on_plugin_end.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_without_trace_handlers_no_events(mock_pool):
+    """A21: 不传 trace_handlers 时不发射事件，行为与接线前一致。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+
+
+# A22-A25: ainvoke() — 遥测与业务隔离 + 失败口径（检视补强）
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_errcode_nonzero_fires_plugin_error(mock_pool):
+    """A22: 非 0 errCode → on_plugin_error（REST 口径），非 on_plugin_end。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"errCode": 500, "errMessage": "custom"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({}, trace_handlers=[handler]))
+
+    assert result == {"errCode": 500, "errMessage": "custom"}
+    handler.on_plugin_start.assert_awaited_once()
+    handler.on_plugin_error.assert_awaited_once()
+    assert "custom" in str(handler.on_plugin_error.await_args.args[0])
+    handler.on_plugin_end.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_trace_handlers_not_leaked_to_plugin(mock_pool):
+    """A23: trace_handlers 在包装器内弹出，不泄入插件实现入参。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    assert result["errCode"] == 0
+    assert "trace_handlers" not in mock_plugin.invoke.await_args.kwargs
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_handler_exception_does_not_fail_business(mock_pool):
+    """A24: 任一 handler 抛错只告警，成功调用不被误判进业务失败分支。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+    handler.on_plugin_start = AsyncMock(side_effect=RuntimeError("export down"))
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+    handler.on_plugin_end.assert_awaited_once()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.TraceManager")
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_manager_init_failure_disables_telemetry_only(mock_pool, mock_trace_manager):
+    """A25: manager 构造失败 → 遥测停用（返回 None），业务结果不受影响。"""
+    mock_trace_manager.generate_manager.side_effect = RuntimeError("bad handlers shape")
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[object()]))
+
+    assert result == {"data": {"key": "val"}, "errCode": 0, "errMessage": ""}
+
+
+# A26-A27: 二轮检视补强（errCode 口径显式 != 0 / instance_info 排除对象值成员）
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_errcode_none_fires_plugin_error(mock_pool):
+    """A26: errCode=None（falsy 非 0）→ on_plugin_error，与 PluginHandler error_code != 0 口径一致。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"errCode": None, "errMessage": "unset"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    result = asyncio.run(tool.ainvoke({}, trace_handlers=[handler]))
+
+    assert result == {"errCode": None, "errMessage": "unset"}
+    handler.on_plugin_error.assert_awaited_once()
+    handler.on_plugin_end.assert_not_awaited()
+
+
+@patch("jiuwen.extension.wrapper.custom_plugin_tool.component_class_pool")
+def test_ainvoke_instance_info_excludes_object_members(mock_pool):
+    """A27: instance_info 不携带 _plugin_instance/_card——get_instance_info 整拷 __dict__，插件内部状态不得进遥测。"""
+    mock_plugin = AsyncMock()
+    mock_plugin.invoke = AsyncMock(return_value={"key": "val"})
+    mock_pool.create_component_instance.return_value = mock_plugin
+
+    handler = _make_recording_handler()
+
+    card = CustomPluginCard(id="t", name="t", description="d", component_type="custom.x")
+    tool = CustomPluginTool(card)
+    import asyncio
+    asyncio.run(tool.ainvoke({"input": "v"}, trace_handlers=[handler]))
+
+    instance_info = handler.on_plugin_start.await_args.args[0]
+    assert set(instance_info["instance_attributes"]).isdisjoint({"_plugin_instance", "_card"})
+    assert instance_info["class_name"] == "CustomPluginTool"

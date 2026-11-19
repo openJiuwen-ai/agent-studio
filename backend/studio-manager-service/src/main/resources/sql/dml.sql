@@ -87,6 +87,23 @@ INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_e
 INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('8b3d6a1c-9f2e-4c7f-d5a8-3b6c9f1e2a7d', '生活服务', '生活服务', '2026-01-31 11:53:07', '2026-01-31 11:53:10', 'lifestyle services', NULL, 'prompt');
 
 -- ========================================
+-- 资产广场上架（FRS-091）：为插件预置行业分类（插件市场既有分类标签）
+-- MCP 暂不启用行业分类（平台精选无该维度），接口字段保留预留，需时再插入
+-- 说明：主键冲突即跳过（幂等）；老库增量执行本段（或重新执行 dml.sql）
+-- 插件行业分类
+-- ========================================
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000001', '通用', '通用', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'common', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000002', '教育', '教育', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'education', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000003', '医疗', '医疗', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'medical', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000004', '政务', '政务', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'government', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000005', '制造', '制造', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'manufacturing', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000006', '互联网', '互联网', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'internet', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000007', '金融', '金融', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'finance', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000008', '学术科研', '学术科研', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Academic Research', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000009', '文案创作', '文案创作', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Content Creation', NULL, 'plugin');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-00000000000a', '生活服务', '生活服务', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'lifestyle services', NULL, 'plugin');
+
+-- ========================================
 -- 自定义插件：DrawBox 框选与标注插件
 -- 注意：dml.sql 用于平台默认初始化（安装时执行一次）。
 -- 客户通过源码集成时运行 extensions/components/draw-box/init.sql，

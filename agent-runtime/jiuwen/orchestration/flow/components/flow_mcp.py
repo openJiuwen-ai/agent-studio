@@ -17,6 +17,7 @@ from jiuwen.orchestration.flow.constant import USER_FIELDS
 from jiuwen.orchestration.utils import Input, Output
 from jiuwen.plugin import Param
 from jiuwen.plugin.common.utils.ir_utils import Plugin, MCP_PARAM_LOCATIONS
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from jiuwen.plugin.models.mcpapi import McpAPI
 
@@ -134,6 +135,14 @@ class FlowMcp(Invokable):
             if param:
                 api_inputs[name] = transform_type(value, param.type, name)
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 对齐旧架构行为——未知参数打 WARNING（带参数名，迁移期可据此
+                    # 收集多余参数清理清单）后跳过，MCP 工具照常被调用
+                    logger.warning(
+                        "%s loose param validation: skip undefined param %s", TAG, name
+                    )
+                    continue
                 logger.error("%s _prepare_inputs ERR", TAG)
                 raise JiuWenBaseException(
                     error_code=StatusCode.WORKFLOW_API_INPUTS_ERROR.code,

@@ -4,6 +4,7 @@
 import json
 import re
 
+from agent_builder.common.logging.base import logger
 from agent_builder.nl_to_agent.base import OperatorInput
 from agent_builder.nl_to_agent.llm_agent.constructor.prompt import (
     META_PROMPT,
@@ -61,6 +62,9 @@ class AgentConstructor:
         # 匹配工作流列表
         pattern = r"<选择的工作流列表>\s*(\[(?:(?!<选择的工作流列表>|</选择的工作流列表>)[\s\S]){0,1000}?\])\s*</选择的工作流列表>"
         workflow_parse = parse_resources(pattern, content)
+        # 匹配技能列表
+        pattern = r"<选择的技能列表>\s*(\[(?:(?!<选择的技能列表>|</选择的技能列表>)[\s\S]){0,1000}?\])\s*</选择的技能列表>"
+        skills_parse = parse_resources(pattern, content)
         return [
             role_name,
             role_desc,
@@ -68,6 +72,7 @@ class AgentConstructor:
             tools_parse,
             knowledge_parse,
             workflow_parse,
+            skills_parse,
         ]
 
     @staticmethod
@@ -123,6 +128,44 @@ class AgentConstructor:
 
         return result
 
+    @staticmethod
+    def skills_version_match_parse(skill_info, skills_parse):
+        """
+        匹配技能列表并提取版本信息（白名单校验）
+
+        大模型输出的 skill_id 必须存在于候选技能列表中，非法引用剔除并记录日志；
+        版本字段一律从候选列表回填，不信任大模型输出。
+
+        :param skill_info: 全量的技能信息列表 (来自 inputs.skill_info)
+        :param skills_parse: 需要解析的技能简略列表
+        :return: 包含 skill_id 和 skill_version 的列表
+        """
+        if not skill_info or not skills_parse:
+            return []
+
+        version_lookup = {
+            item["resource_id"]: item.get("version")
+            for item in skill_info
+            if "resource_id" in item
+        }
+
+        result = []
+        for skill in skills_parse:
+            res_id = skill.get("resource_id")
+
+            # 只有当 resource_id 在全量信息中存在时才添加
+            if res_id in version_lookup:
+                result.append(
+                    {"skill_id": res_id, "skill_version": version_lookup[res_id]}
+                )
+            else:
+                logger.warning(
+                    "LLM selected skill %s not in candidate skill list, dropped.",
+                    res_id,
+                )
+
+        return result
+
     def llm_construct(self, prompt):
         """提示词构建"""
         uml_prompts = [{"role": "user", "content": prompt}]
@@ -167,6 +210,7 @@ class AgentConstructor:
             "TOOL_LIST": str(inputs.plugin_info),
             "KNOWLEDGE_BASE_LIST": str(inputs.knowledge_info),
             "WORKFLOW_LIST": str(inputs.sub_workflow_info),
+            "SKILL_LIST": str(inputs.skill_info),
         }
 
         filled_template = re.sub(r"\{\{(\w+)\}\}", self.replacer, CONSTRUCTOR_PROMPT)
@@ -180,6 +224,7 @@ class AgentConstructor:
                     tools_parse,
                     knowledge_parse,
                     workflow_parse,
+                    skills_parse,
                 ) = self.parse_content(item[FINAL_MSG])
 
                 tools_parse = self.resource_id_parse(inputs.plugin_info, tools_parse)
@@ -189,6 +234,7 @@ class AgentConstructor:
                 workflow_parse = self.resource_id_parse(
                     inputs.sub_workflow_info, workflow_parse
                 )
+                skills_parse = self.resource_id_parse(inputs.skill_info, skills_parse)
                 item[AGENT_MSG] = dict(
                     role_name=role_name,
                     role_desc=role_desc,
@@ -196,6 +242,7 @@ class AgentConstructor:
                     tools_id_parse=tools_parse,
                     knowledge_id_parse=knowledge_parse,
                     workflow_id_parse=workflow_parse,
+                    skills_id_parse=skills_parse,
                 )
                 self.controller.reset_llm_agent(item[FINAL_MSG])
             yield item
@@ -212,6 +259,7 @@ class AgentConstructor:
             "TOOL_LIST": str(inputs.plugin_info),
             "KNOWLEDGE_BASE_LIST": str(inputs.knowledge_info),
             "WORKFLOW_LIST": str(inputs.sub_workflow_info),
+            "SKILL_LIST": str(inputs.skill_info),
         }
 
         filled_template = re.sub(r"\{\{(\w+)\}\}", self.replacer, CONSTRUCTOR_PROMPT)
@@ -225,6 +273,7 @@ class AgentConstructor:
                     tools_parse,
                     knowledge_parse,
                     workflow_parse,
+                    skills_parse,
                 ) = self.parse_content(item[FINAL_MSG])
 
                 tools_parse = self.tools_version_match_parse(
@@ -236,6 +285,9 @@ class AgentConstructor:
                 workflow_parse = self.tools_version_match_parse(
                     inputs.sub_workflow_info, workflow_parse, "workflow"
                 )
+                skills_parse = self.skills_version_match_parse(
+                    inputs.skill_info, skills_parse
+                )
                 item[AGENT_MSG] = dict(
                     role_name=role_name,
                     role_desc=role_desc,
@@ -243,6 +295,7 @@ class AgentConstructor:
                     tools_id_parse=tools_parse,
                     knowledge_id_parse=knowledge_parse,
                     workflow_id_parse=workflow_parse,
+                    skills_id_parse=skills_parse,
                 )
                 await self.controller.async_reset_llm_agent(item[FINAL_MSG])
             yield item

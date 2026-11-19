@@ -150,6 +150,8 @@ export class AddMcpHalfModalComponent implements OnInit {
   public isCollapseMcpConfig: boolean = false;
   public fgGrantPermissionTip = '';
   public isDisabledConfirmBtn: boolean = false;
+  /** FEAT-093 动态鉴权头 vs 固定请求头同名冲突（冲突头名，空=无冲突；确认按钮置灰 + 红字提示） */
+  public dynamicAuthHeaderConflict: string = '';
 
   appMcpTabs: AssertSquareTagType[] = [
     {
@@ -180,6 +182,11 @@ export class AddMcpHalfModalComponent implements OnInit {
       label: this.i18n.transform('mcp_oauth_auth'),
       value: 'OAUTH',
     },
+    {
+      id: '4',
+      label: this.i18n.transform('mcp_dynamic_auth'),
+      value: 'DYNAMIC',
+    },
   ];
   authSecretPosition = [
     {
@@ -198,6 +205,8 @@ export class AddMcpHalfModalComponent implements OnInit {
     selectedAuthPos: 'HEADERS',
     authHeaderParams: [],
     authQueryParams: [],
+    /** FEAT-093 动态鉴权：仅配置出站头名（单列），凭证值不入库 */
+    dynamicAuthParams: [],
     authParams: {
       url: '',
       id: '',
@@ -313,6 +322,16 @@ export class AddMcpHalfModalComponent implements OnInit {
       this.mcpAuthConfigData.authParams.id = this.mcpModalSelected.auth_info.custom_oauth.client_id;
       this.mcpAuthConfigData.authParams.secret = this.mcpModalSelected.auth_info.custom_oauth.client_secret;
       this.mcpAuthConfigData.authParams.scope = this.mcpModalSelected.auth_info.custom_oauth.scope;
+      return;
+    }
+    if (this.mcpModalSelected.auth_info.scope === 'DYNAMIC') {
+      this.mcpAuthConfigData.selectedAuthType = 'DYNAMIC';
+      this.mcpAuthConfigData.dynamicAuthParams.length = 0;
+      for (let index = 0; index < this.mcpModalSelected.auth_info.auth_keys.length; index++) {
+        this.mcpAuthConfigData.dynamicAuthParams.push({
+          name: this.mcpModalSelected.auth_info.auth_keys[index].target_name,
+        });
+      }
       return;
     }
     if (this.mcpModalSelected.auth_info.scope === 'SERVICE') {
@@ -723,6 +742,18 @@ export class AddMcpHalfModalComponent implements OnInit {
       MessageComponent.showError(this.i18n.transform('MCPJSONData'));
       return;
     }
+    // FEAT-093 最终门：动态鉴权头 vs 固定请求头同名拒绝（后端同款约定，
+    // 前端在此兜底报错——JSON 模式直接编辑 editor 时无法前置监听）
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      const conflict = this.validateDynamicAuthHeaderConflict();
+      if (conflict) {
+        MessageComponent.showError(
+          this.i18n.transform('mcp_dynamic_auth_header_conflict', { header: conflict }));
+        this.isDisabledConfirmBtn = true;
+        this.cdr.detectChanges();
+        return;
+      }
+    }
     const data = {
       description: this.mcpModalSelected.description,
       description_en: this.mcpModalSelected.description_en,
@@ -837,6 +868,21 @@ export class AddMcpHalfModalComponent implements OnInit {
             client_secret: this.mcpAuthConfigData.authParams.secret,
             scope: this.mcpAuthConfigData.authParams.scope,
           },
+        };
+        return;
+      }
+      if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+        // FEAT-093 动态鉴权：仅保存出站头名，auth_key 恒为空（平台不存储凭证值）
+        mcpData.auth_info = {
+          scope: 'DYNAMIC',
+          domain: 'HEADERS',
+          auth_keys: this.mcpAuthConfigData.dynamicAuthParams
+            .filter(param => param.name && param.name.trim())
+            .map(param => ({
+              target_name: param.name.trim(),
+              source_name: null,
+              auth_key: null,
+            })),
         };
         return;
       }
@@ -1203,6 +1249,118 @@ export class AddMcpHalfModalComponent implements OnInit {
     return false;
   }
 
+  /** FEAT-093 是否展示动态鉴权参数表单（单列参数名） **/
+  isShowDynamicAuthConfig() {
+    return this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC';
+  }
+
+  /** FEAT-093 添加动态鉴权参数行（上限 5 条，与后端 auth_keys 约束一致） **/
+  handleClickAddDynamicAuthParams() {
+    if (this.mcpAuthConfigData.dynamicAuthParams.length >= 5) {
+      return;
+    }
+    this.mcpAuthConfigData.dynamicAuthParams.push({
+      name: '',
+    });
+    this.handleChangeDynamicAuthParam();
+  }
+
+  /** FEAT-093 删除动态鉴权参数行 **/
+  handleClickDeleteDynamicAuthParams(index: number) {
+    if (this.mcpAuthConfigData.dynamicAuthParams.length <= 0) {
+      return;
+    }
+    this.mcpAuthConfigData.dynamicAuthParams.splice(index, 1);
+    this.handleChangeDynamicAuthParam();
+  }
+
+  /** FEAT-093 动态鉴权参数校验：无参数/存在空名或重复名时禁用确认按钮（与后端 ≥1 条要求一致） */
+  handleChangeDynamicAuthParam() {
+    if (this.mcpAuthConfigData.selectedAuthType !== 'DYNAMIC') {
+      this.isDisabledConfirmBtn = false;
+      return;
+    }
+    const params = this.mcpAuthConfigData.dynamicAuthParams;
+    if (params.length <= 0) {
+      this.isDisabledConfirmBtn = true;
+      return;
+    }
+    const names = params.map(param => (param.name || '').trim()).filter(Boolean);
+    let hasError = params.some(param => !(param.name || '').trim())
+      || new Set(names.map(name => name.toLowerCase())).size !== names.length;
+    // FEAT-093 同名拒绝：动态鉴权头 vs 固定请求头（大小写不敏感）——
+    // 固定头先注入、动态凭证头按绑定值注入，同名互相覆盖（后端
+    // validDynamicAuthHeaderConflict 同款约定，前端前置拦截）
+    if (this.validateDynamicAuthHeaderConflict()) {
+      hasError = true;
+    }
+    this.isDisabledConfirmBtn = hasError;
+  }
+
+  /**
+   * FEAT-093 动态鉴权头 vs 固定请求头同名冲突（返回冲突头名，无冲突返回空串）。
+   * 固定头来源两形态：form 模式的 mcpModalData.headers 行 + JSON 模式
+   * editor 里的 headers 键（递归提取，与后端 parseMcpConfigHeaderInfo 同构）。
+   */
+  private validateDynamicAuthHeaderConflict(): string {
+    this.dynamicAuthHeaderConflict = '';
+    if (this.mcpAuthConfigData.selectedAuthType !== 'DYNAMIC') {
+      return '';
+    }
+    const dynamicNames = this.mcpAuthConfigData.dynamicAuthParams
+      .map(param => (param.name || '').trim().toLowerCase())
+      .filter(Boolean);
+    if (dynamicNames.length <= 0) {
+      return '';
+    }
+    // form 模式的固定头（mode 切换时与 editor 双向同步，两处都查）
+    for (const header of this.mcpModalData.headers) {
+      const key = (header.key || '').trim().toLowerCase();
+      if (key && dynamicNames.includes(key)) {
+        this.dynamicAuthHeaderConflict = header.key;
+        return header.key;
+      }
+    }
+    // JSON 模式 editor 里的 headers（递归提取嵌套层）
+    try {
+      const config = JSON.parse(this.mcpModalData.editor);
+      const jsonHeaders = this.extractHeadersFromConfig(config);
+      for (const name of Object.keys(jsonHeaders)) {
+        if (dynamicNames.includes(name.toLowerCase())) {
+          this.dynamicAuthHeaderConflict = name;
+          return name;
+        }
+      }
+    } catch {
+      // JSON 未成形（用户编辑中）——不在此处报格式错（已有 JSON 校验）
+    }
+    return '';
+  }
+
+  /** 递归提取 JSON 配置里的 headers 键（限深 10 层，与后端一致） */
+  private extractHeadersFromConfig(config: any, depth = 0): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (depth >= 10 || !config || typeof config !== 'object' || Array.isArray(config)) {
+      return headers;
+    }
+    for (const key of Object.keys(config)) {
+      if (key === 'headers' && typeof config[key] === 'object' && !Array.isArray(config[key])) {
+        Object.assign(headers, config[key]);
+        continue;
+      }
+      Object.assign(headers, this.extractHeadersFromConfig(config[key], depth + 1));
+    }
+    return headers;
+  }
+
+  /** FEAT-093 请求头 key 变更时触发同名冲突校验（禁用确认按钮 + 显示冲突提示） */
+  handleChangeHeaderKey() {
+    this.validateDynamicAuthHeaderConflict();
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      this.isDisabledConfirmBtn = !!this.dynamicAuthHeaderConflict;
+    }
+  }
+
   /** 是否展示密钥位置 **/
   isShowSecretPos() {
     return this.mcpAuthConfigData.selectedAuthType === 'SERVICE';
@@ -1260,6 +1418,10 @@ export class AddMcpHalfModalComponent implements OnInit {
     this.oauthErrors = { url: false, id: false, secret: false, scope: false };
     if (this.mcpAuthConfigData.selectedAuthType === 'SERVICE') {
       this.handleChangeAPIKeyRadio();
+      return;
+    }
+    if (this.mcpAuthConfigData.selectedAuthType === 'DYNAMIC') {
+      this.handleChangeDynamicAuthParam();
       return;
     }
     this.isDisabledConfirmBtn = false;
