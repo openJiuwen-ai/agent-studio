@@ -32,14 +32,14 @@ def _fake_otel(**overrides):
 
 
 def test_setup_disabled_is_noop(monkeypatch):
-    monkeypatch.setattr(tracer_otel_mod, "_INITIALIZED", False)
+    tracer_otel_mod.reset_otel_tracer_for_tests()
     monkeypatch.setattr(tracer_otel_mod, "_otel_settings", lambda: _fake_otel(enabled=False))
     tracer_otel_mod.setup_otel_tracer()
-    assert tracer_otel_mod._INITIALIZED is False
+    assert tracer_otel_mod.is_otel_tracer_initialized() is False
 
 
 def test_setup_raw_sdk_records_span(monkeypatch):
-    monkeypatch.setattr(tracer_otel_mod, "_INITIALIZED", False)
+    tracer_otel_mod.reset_otel_tracer_for_tests()
     monkeypatch.setattr(
         tracer_otel_mod,
         "_otel_settings",
@@ -70,7 +70,7 @@ def test_setup_raw_sdk_records_span(monkeypatch):
     monkeypatch.setattr(tracer_otel_mod, "_setup_raw_sdk", _install_memory)
 
     tracer_otel_mod.setup_otel_tracer()
-    assert tracer_otel_mod._INITIALIZED is True
+    assert tracer_otel_mod.is_otel_tracer_initialized() is True
 
     from opentelemetry import trace
 

@@ -17,6 +17,17 @@ logger = logging.getLogger("agent_builder.observability.tracer_otel")
 _INITIALIZED = False
 
 
+def is_otel_tracer_initialized() -> bool:
+    """Return whether ``setup_otel_tracer`` has already installed a provider."""
+    return _INITIALIZED
+
+
+def reset_otel_tracer_for_tests() -> None:
+    """Clear the init flag so unit tests can re-enter ``setup_otel_tracer``."""
+    global _INITIALIZED
+    _INITIALIZED = False
+
+
 def _otel_settings():
     from agent_builder.adapter.config_bridge import settings
 
