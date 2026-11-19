@@ -29,5 +29,6 @@ opentelemetry-api==1.42.1
 opentelemetry-sdk==1.42.1
 opentelemetry-exporter-otlp-proto-grpc==1.42.1
 opentelemetry-exporter-otlp-proto-http==1.42.1
+prometheus_client==0.21.1
 starlette==1.3.1
 jinja2==3.1.6

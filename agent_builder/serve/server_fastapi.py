@@ -197,9 +197,22 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     await _init_s3_storage()
     _load_customer_header_profile()
     _register_model_service_ports()
+    # #1655/#1724：消费 settings.otel，避免 OTEL_* 死配置
+    try:
+        from agent_builder.observability import setup_otel_tracer
+
+        setup_otel_tracer()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"OpenTelemetry setup failed (non-critical): {e}")
     try:
         yield
     finally:
+        try:
+            from agent_builder.observability.tracer_otel import force_flush
+
+            force_flush()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"OpenTelemetry flush failed (non-critical): {e}")
         # 优雅关闭 Redis：同步兼容桥（专用循环+连接池）与 Provider/legacy 客户端
         # （测试/集成环境反复启停时防泄漏；一次性进程由 daemon 线程兜底）
         try:
@@ -245,6 +258,40 @@ def instance_app() -> FastAPI:
     # 禁止在保留 establish 为 @app.middleware 后再 add_middleware(dispatcher)——
     # 那样 dispatcher 会跑到 establish 外层，与目标序相反（§6.4 第 4 点）。
     app.add_middleware(FlaskRouteDispatchMiddleware, flask_app=prompt_manage_app)
+
+    # #1659/#1727：Prometheus 文本指标（3-8-1）— 须在 Flask catch-all 之前注册路由
+    from agent_builder.observability import metrics_router, record_http_request
+
+    app.include_router(metrics_router)
+
+    @app.middleware("http")
+    async def metrics_http_counter(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path != "/metrics":
+            record_http_request("builder", request.method, response.status_code)
+        return response
+
+    @app.middleware("http")
+    async def otel_http_span(request: Request, call_next):
+        """Root HTTP span when OTEL_ENABLED — any builder request becomes a Jaeger span."""
+        from agent_builder.adapter.config_bridge import settings as builder_settings
+
+        if not builder_settings.otel.enabled:
+            return await call_next(request)
+        try:
+            from opentelemetry import trace
+        except ImportError:
+            return await call_next(request)
+
+        tracer = trace.get_tracer(builder_settings.otel.service_name or "agent-builder")
+        span_name = f"{request.method} {request.url.path}"
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.target", request.url.path)
+            span.set_attribute("http.route", request.url.path)
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
+            return response
 
     @app.middleware("http")
     async def establish_inbound_context(request: Request, call_next):

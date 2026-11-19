@@ -239,6 +239,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
             <version>3.5.12</version>
         </dependency>
+        <!-- #1659/#1727：Prometheus 指标导出（3-8-1） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>1.15.4</version>
+        </dependency>
     </dependencies>
     <build>
         <resources>

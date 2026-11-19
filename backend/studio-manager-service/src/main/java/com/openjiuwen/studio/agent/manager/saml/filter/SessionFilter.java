@@ -115,6 +115,7 @@ public class SessionFilter extends OncePerRequestFilter {
     private boolean isPublicPath(String path) {
         return path.startsWith("/login") || path.startsWith("/saml/") || path.startsWith("/api/public/")
             || path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/images/")
-            || path.equals("/v3/auth/tokens") || path.startsWith("/health");
+            || path.equals("/v3/auth/tokens") || path.startsWith("/health")
+            || path.startsWith("/actuator") || path.equals("/metrics");
     }
 }

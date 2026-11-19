@@ -226,8 +226,20 @@ redis:
   # 0.75 表示保留 75%、清理 25%。默认 0.75。
   history-eviction-threshold: ${redis_history_eviction_threshold:0.75}
 
-# health check
+# health check + Prometheus metrics (#1659/#1727, 3-8-1)
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: studio-manager
   health:
     redis:
       enabled: false

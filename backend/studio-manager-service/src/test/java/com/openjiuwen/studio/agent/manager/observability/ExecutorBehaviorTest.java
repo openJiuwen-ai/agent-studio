@@ -90,10 +90,8 @@ class ExecutorBehaviorTest {
     void observability_beans_propagate_mdc() throws Exception {
         ObservabilityAsyncConfig oac = new ObservabilityAsyncConfig();
 
-        // P4 只落地 ObservabilityAsyncConfig 的 7 个受管 executor（5 propagating + 2 clearing，
-        // 后者由 background_executor_clears_mdc / delayWarmup 覆盖）。sync_01 基线 executor
-        // （AsyncConfig.mcpTaskExecutor / ThreadPoolConfiguration.* 等）未 retrofit MdcTaskDecorator，
-        // 属 COM-02 全量 landscape 任务，不在本轮 P4 范围；故本断言只覆盖已落地 beans。
+        // ObservabilityAsyncConfig 传播池（5）+ 清空池另测；AsyncConfig / ThreadPoolConfiguration
+        // 已统一 retrofit MdcTaskDecorator（#1652/#1721），本断言仍覆盖 Observability 传播池。
         List<ThreadPoolTaskExecutor> propagating = new ArrayList<>(List.of(
             oac.requestDerivedAsyncExecutor(4, 16, 200, 60),
             oac.promptModelCallExecutor(2, 4, 50, 60),
