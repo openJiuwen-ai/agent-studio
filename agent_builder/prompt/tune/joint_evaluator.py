@@ -256,9 +256,24 @@ class JointEvaluatorWithRef:
         return accuracy, res_eval, res_evaluation
 
     def _format_prompt_template(self, question, predict, label):
-        """format_prompt_template"""
-        prompt_template = self.access_answer_prompt.replace("{{question}}", question)
-        prompt_template = prompt_template.replace("{{answer_match}}", predict)
-        prompt_template = prompt_template.replace("{{actual_answer}}", label)
+        """format_prompt_template
+
+        单次扫描替换三个占位符。链式 str.replace 会把插入内容里出现的
+        后续占位符字面量再次重写：模型答案若含 "{{actual_answer}}" 字面
+        量，第三步 replace 会把它换成参考答案，judge 收到被污染的数据，
+        评分被偏置。
+        """
+        mapping = {
+            "{{question}}": question,
+            "{{answer_match}}": predict,
+            "{{actual_answer}}": label,
+        }
+        pattern = re.compile(
+            r"\{\{(question|answer_match|actual_answer)\}\}"
+        )
+        prompt_template = pattern.sub(
+            lambda m: mapping["{{" + m.group(1) + "}}"],
+            self.access_answer_prompt,
+        )
 
         return prompt_template
