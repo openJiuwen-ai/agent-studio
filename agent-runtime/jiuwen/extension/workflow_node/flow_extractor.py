@@ -21,8 +21,10 @@ Extractor - 信息提取组件
 """
 
 import asyncio
+import hashlib
 import json
 import re
+from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -47,10 +49,13 @@ from openjiuwen.core.workflow.components.component import WorkflowComponent
 from pydantic import BaseModel, ConfigDict, Field
 
 USER_FIELDS = "userFields"
-WORKFLOW_CHAT_MANAGER = "workflow_chat_manager"
 WORKFLOW_LLM_EXTRA_CONFIGS = "llm_extra_configs"
 LLM_INPUTS = "llm_inputs"
 LLM_OUTPUTS = "llm_outputs"
+
+# 执行内模型解析缓存上限：请求级 model_map 变化时按指纹缓存，淘汰最旧项，
+# 避免实例上无界累积请求派生配置。
+_LLM_CACHE_LIMIT = 4
 
 DEFAULT_EXAMPLE_CONTENT = """用户输入: 我是小明，性别是男
 指定参数：[name:姓名, age:年龄, gender:性别]
@@ -358,16 +363,17 @@ class Extractor(WorkflowComponent):
         """
         super().__init__()
         self.component_config = None
-        self._workflow_llm_extra_configs = {}
-        self.model_map = {}
         self.extractor_config = ExtractorConfig()
-        self.chat_manager = None
-        self.llm = None
         self.prompt: Optional[PromptTemplate] = None
         self.error_message = DEFAULT_ERROR_INFO
         # 懒初始化双检锁：init 名为初始化、实为 invoke 首调的懒初始化
-        # （实例跨执行复用，并发首调只建一次 Model）。
+        # （实例跨执行复用，并发首调只建一次配置/prompt）。
         self._init_lock: asyncio.Lock = asyncio.Lock()
+        self._initialized = False
+        # 执行内模型解析缓存：llm_extra_configs.model_map 是请求级参数
+        # （workflow_runner 按请求注入），模型按 map 指纹有界缓存——同一配置
+        # 跨执行复用，不同请求各用各的映射，不落实例级单一模型。
+        self._llm_cache: "OrderedDict[str, Model]" = OrderedDict()
         # 执行期状态（inputs / user_response / extracted_key_fields）不落实例：
         # user_response 随调用链参数传递（invoke → reply_key_fields →
         # update_key_fields → extract_key_fields → create_prompt_template_input）；
@@ -434,34 +440,55 @@ class Extractor(WorkflowComponent):
         conf = self.dict_keys_camel_to_snake(conf)
         self.check_config(conf)
 
-        self._workflow_llm_extra_configs = (
-            get_workflow_param(session, WORKFLOW_LLM_EXTRA_CONFIGS) or {}
-        )
-        self.model_map = self._workflow_llm_extra_configs.get("model_map", {})
-
         self.extractor_config = ExtractorConfig(**format_extractor_configs(conf))
 
-        self.chat_manager = session.get_global_state(WORKFLOW_CHAT_MANAGER)
-
-        self.llm = self._create_llm_instance(session)
-
         self.initial_prompt()
+
+        self._initialized = True
 
     async def _ensure_initialized(
         self, conf: dict, session: Session, context: ModelContext
     ) -> None:
         """懒初始化双检加锁：并发首调只执行一次 init。
 
-        实例跨执行复用（静态图复用）后，invoke 首调的 ``if not self.llm``
-        守卫与 ``init`` 之间若无互斥，并发首调会重复建 Model（旧实例泄漏、
-        后者覆盖前者）。``init`` 自身保持同步实现（兼容遗留两阶段初始化）。
+        实例跨执行复用（静态图复用）后，invoke 首调的初始化守卫与 ``init``
+        之间若无互斥，并发首调会重复初始化。``init`` 自身保持同步实现
+        （兼容遗留两阶段初始化）；模型不再在 init 内构建（model_map 属
+        请求级参数，见 ``_resolve_llm``）。
         """
-        if self.llm:
+        if self._initialized:
             return
         async with self._init_lock:
-            if self.llm:
+            if self._initialized:
                 return
             self.init(conf, session, context)
+
+    @staticmethod
+    def _model_map_fingerprint(model_map: dict) -> str:
+        """model_map 的稳定指纹（键序无关；请求级配置只作缓存键，不落实例）。"""
+        payload = json.dumps(model_map or {}, sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    async def _resolve_llm(self, session: Session) -> Model:
+        """按当次请求的 ``model_map`` 解析模型（有界缓存 + 双检锁）。
+
+        ``llm_extra_configs`` 由 workflow_runner 按请求注入，属请求级参数：
+        建模期固化首个请求的映射会让后续执行模型路由错乱。按 map 指纹缓存，
+        不同请求各用各的模型配置；相同配置跨执行复用。
+        """
+        extra_configs = get_workflow_param(session, WORKFLOW_LLM_EXTRA_CONFIGS) or {}
+        model_map = extra_configs.get(ExtractorKeyword.MODEL_MAP, {}) or {}
+        key = self._model_map_fingerprint(model_map)
+        async with self._init_lock:
+            cached = self._llm_cache.get(key)
+            if cached is not None:
+                self._llm_cache.move_to_end(key)
+                return cached
+            llm = self._create_llm_instance(session, model_map=model_map)
+            self._llm_cache[key] = llm
+            while len(self._llm_cache) > _LLM_CACHE_LIMIT:
+                self._llm_cache.popitem(last=False)
+            return llm
 
     def check_config(self, conf: dict):
         """
@@ -566,8 +593,9 @@ class Extractor(WorkflowComponent):
             ],
         )
 
-    def _create_llm_instance(self, session=None) -> Model:
-        """创建 LLM 实例"""
+    def _create_llm_instance(self, session=None, model_map=None) -> Model:
+        """创建 LLM 实例（model_map 为当次请求的模型映射）。"""
+        model_map = model_map or {}
         model_name = self.extractor_config.model_name
         model_type = self.extractor_config.model_type
 
@@ -597,8 +625,8 @@ class Extractor(WorkflowComponent):
                 api_base=api_base,
                 verify_ssl=verify_ssl,
             )
-        elif self.model_map:
-            model_config_dict = self.model_map.get(model_name, {})
+        elif model_map:
+            model_config_dict = model_map.get(model_name, {})
             if model_config_dict:
                 client_config = ModelClientConfig(**model_config_dict)
             else:
@@ -685,7 +713,7 @@ class Extractor(WorkflowComponent):
         }
 
     async def extract_key_fields(
-        self, chat_history: list, session: Session, user_response: str
+        self, chat_history: list, session: Session, user_response: str, llm: Model
     ) -> dict:
         """
         extract key fields from chat history
@@ -699,7 +727,7 @@ class Extractor(WorkflowComponent):
         await session.trace({LLM_INPUTS: [msg.model_dump() for msg in messages]})
 
         try:
-            response = await self._invoke_llm(messages)
+            response = await self._invoke_llm(messages, llm)
         except Exception as e:
             # 透传真实原因：friendly_message 对 ModelServiceError 取 .msg 剥 [code] 前缀
             # （如「模型服务API地址配置有误：...未配置环境变量 ali」），其余异常保留 str(e)。
@@ -742,8 +770,8 @@ class Extractor(WorkflowComponent):
         filled_template = self.prompt.format(template_input)
         return filled_template.to_messages()
 
-    async def _invoke_llm(self, messages: List[BaseMessage]) -> str:
-        """调用 LLM"""
+    async def _invoke_llm(self, messages: List[BaseMessage], llm: Model) -> str:
+        """调用 LLM（模型随调用链传入，不读实例字段）。"""
         workflow_logger.info(
             "Extractor LLM invoke started",
             event_type=LogEventType.WORKFLOW_COMPONENT_START,
@@ -755,7 +783,7 @@ class Extractor(WorkflowComponent):
             },
         )
 
-        response = await self.llm.invoke(messages=messages)
+        response = await llm.invoke(messages=messages)
         content = response.content
 
         workflow_logger.info(
@@ -800,7 +828,11 @@ class Extractor(WorkflowComponent):
         return chat_history
 
     async def update_key_fields(
-        self, context: ModelContext, session: Session, user_response: str
+        self,
+        context: ModelContext,
+        session: Session,
+        user_response: str,
+        llm: Model,
     ) -> dict:
         """
         updating key fields
@@ -812,7 +844,7 @@ class Extractor(WorkflowComponent):
             context, k=self.extractor_config.chat_history_max_rounds
         )
         cur_extracted_key_fields = await self.extract_key_fields(
-            chat_history, session, user_response
+            chat_history, session, user_response, llm
         )
         cur_extracted_key_fields = {
             k: v
@@ -822,14 +854,18 @@ class Extractor(WorkflowComponent):
         return cur_extracted_key_fields
 
     async def reply_key_fields(
-        self, context: ModelContext, session: Session, user_response: str
+        self,
+        context: ModelContext,
+        session: Session,
+        user_response: str,
+        llm: Model,
     ) -> ExtractorOutput:
         """
         Reply key fields output.
         """
         extractor_output = ExtractorOutput(user_response=user_response)
         cur_extracted_key_fields = await self.update_key_fields(
-            context, session, user_response
+            context, session, user_response, llm
         )
         extractor_output.update_key_field(cur_extracted_key_fields)
         return extractor_output
@@ -848,9 +884,12 @@ class Extractor(WorkflowComponent):
         Returns:
             Output: 输出数据，格式: {"userFields": {"user_response": str, ...}}
         """
-        if not self.llm:
+        if not self._initialized:
             conf = inputs.get("config", {})
             await self._ensure_initialized(conf, session, context)
+
+        # 模型按当次请求的 model_map 解析（请求级参数，不落实例），随调用链传入。
+        llm = await self._resolve_llm(session)
 
         workflow_logger.info(
             "Extractor start invoke",
@@ -879,6 +918,6 @@ class Extractor(WorkflowComponent):
 
         await session.trace({"user": user_response})
 
-        res = await self.reply_key_fields(context, session, user_response)
+        res = await self.reply_key_fields(context, session, user_response, llm)
 
         return {USER_FIELDS: res.as_dict()}

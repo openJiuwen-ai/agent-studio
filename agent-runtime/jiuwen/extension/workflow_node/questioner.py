@@ -1185,9 +1185,14 @@ class Questioner(WorkflowComponent):
             provider = _get_model_config_provider()
             llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-            self._model = Model(
-                model_client_config=llm_comp_config.model_client_config,
-                model_config=llm_comp_config.model_config,
+            from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+            self._model = bind_request_scoped_auth(
+                Model(
+                    model_client_config=llm_comp_config.model_client_config,
+                    model_config=llm_comp_config.model_config,
+                ),
+                llm_comp_config.model_client_config,
             )
             self._initialized = True
         except Exception as e:
