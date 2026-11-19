@@ -143,6 +143,89 @@ class TestFlowApiStateless:
 
 
 # =============================================================================
+# FlowCustomApi
+# =============================================================================
+
+
+class TestFlowCustomApiStateless:
+    @staticmethod
+    def test_no_instance_final_output_field():
+        """实例不再持有流式末帧字段（源码级 + 实例级双断言）。"""
+        from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
+
+        src = inspect.getsource(FlowCustomApi)
+        assert "self._final_stream_output" not in src
+        assert not hasattr(FlowCustomApi(), "_final_stream_output")
+
+    @staticmethod
+    def test_final_stream_output_via_contextvar():
+        """get_stream_output 读 ContextVar 通道（引擎 _post_stream 消费）。"""
+        from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
+
+        api = FlowCustomApi.__new__(FlowCustomApi)  # 跳过重构造
+        ctx.set_stream_final_output({"userFields": {"raw_output": "x"}})
+        assert api.get_stream_output() == {"userFields": {"raw_output": "x"}}
+        ctx.set_stream_final_output(None)
+        assert api.get_stream_output() is None
+
+    @pytest.mark.asyncio
+    async def test_stream_writes_final_output_to_channel(self):
+        """流式末帧写入通道，且保持引擎可见形态（userFields 包裹）。
+
+        io_state 引用路径为 ``${node.userFields.field}``——通道值必须保持
+        ``{userFields: {...}}`` 包裹形态，否则下游非流式节点引用解析失败。
+        """
+        from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
+
+        api = FlowCustomApi()
+        api._conf = {"userFields": {"outputs": [{"id": "raw_output"}]}}
+        api._user_fields = {"outputs": [{"id": "raw_output"}]}
+        session = MagicMock()
+        session.get_session_id = MagicMock(return_value="sess-1")
+
+        async def _api_stream():
+            yield SimpleNamespace(content="hello ")
+            yield SimpleNamespace(content="world")
+
+        frames = [
+            frame
+            async for frame in api._transform_async_stream_data(_api_stream(), session)
+        ]
+
+        assert len(frames) == 3  # 2 个流式帧 + 1 个 finish 帧
+        expected = {"userFields": {"raw_output": "hello world"}}
+        assert ctx.get_stream_final_output() == expected
+        assert api.get_stream_output() == expected
+
+    @pytest.mark.asyncio
+    async def test_stream_entry_resets_stale_final_output_on_failure(self):
+        """入口复位末帧通道：上一执行的末帧不串入本执行（判别用例）。
+
+        预置 stale 末帧后驱动 stream 在**写末帧之前**失败。删掉入口
+        ``set_stream_final_output(None)`` 时本用例读到 stale 值转红。
+        """
+        from jiuwen.extension.workflow_node.flow_custom_api import FlowCustomApi
+        from jiuwen.extension.workflow_node.utils import JiuWenBaseException
+
+        ctx.set_stream_final_output({"stale": True})
+
+        api = FlowCustomApi()
+        api._conf = {}
+        api._api_id = "api-1"
+        api._api = MagicMock()
+        api._api.astream = MagicMock(side_effect=RuntimeError("boom"))
+        session = MagicMock()
+        session.trace = AsyncMock()
+
+        with pytest.raises(JiuWenBaseException):
+            async for _ in api.stream({}, session=session, context=MagicMock()):
+                pass
+
+        assert ctx.get_stream_final_output() is None
+        assert api.get_stream_output() is None
+
+
+# =============================================================================
 # FlowQA
 # =============================================================================
 
