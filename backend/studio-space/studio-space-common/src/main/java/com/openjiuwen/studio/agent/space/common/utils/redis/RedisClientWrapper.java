@@ -31,7 +31,9 @@ public class RedisClientWrapper implements RedisClient {
 
     @Override
     public boolean exists(String key) {
-        return run(() -> redisClient.exists(key), "exists");
+        // false 是合法业务值（键不存在）：判定类调用会把降级 false 当业务结论（故障期 fail-open），
+        // 故障时显式抛出保持 fail-closed，仅以清晰异常替代原先的拆箱 NPE
+        return runOrThrow(() -> redisClient.exists(key), "exists");
     }
 
     @Override
@@ -61,12 +63,13 @@ public class RedisClientWrapper implements RedisClient {
 
     @Override
     public boolean expire(String key, Duration duration) {
-        return run(() -> redisClient.expire(key, duration), "expire");
+        // TTL 静默失效会改变业务窗口语义（定时失效的键永不过期），故障时显式抛出
+        return runOrThrow(() -> redisClient.expire(key, duration), "expire");
     }
 
     @Override
     public boolean delete(String key) {
-        return run(() -> redisClient.delete(key), "delete");
+        return Boolean.TRUE.equals(run(() -> redisClient.delete(key), "delete"));
     }
 
     @Override
@@ -100,7 +103,7 @@ public class RedisClientWrapper implements RedisClient {
         return new RedisLock() {
             @Override
             public boolean tryLock(Duration maxWait) {
-                return run(() -> lock.tryLock(maxWait), "tryLock");
+                return Boolean.TRUE.equals(run(() -> lock.tryLock(maxWait), "tryLock"));
             }
 
             @Override
@@ -121,6 +124,23 @@ public class RedisClientWrapper implements RedisClient {
         redisCost(startTime, methodName);
 
         return result;
+    }
+
+    /**
+     * primitive 返回值方法专用：false/0 既是合法业务值又是潜在降级值，调用方无法区分
+     * （存在性/配额类判定会把降级当业务结论，形成故障期 fail-open），故故障时记录后
+     * 显式抛出包装异常保持 fail-closed，仅以清晰异常替代原先的拆箱 NPE。
+     */
+    private <T> T runOrThrow(ThrowingSupplier<T> operation, String methodName) {
+        long startTime = getStartTime();
+        try {
+            return operation.get();
+        } catch (Exception e) {
+            log.error("redis operation failed, method: {}", methodName, e);
+            throw new IllegalStateException("Redis operation failed: " + methodName, e);
+        } finally {
+            redisCost(startTime, methodName);
+        }
     }
 
     private void run(Runnable operation, String methodName) {
@@ -149,12 +169,13 @@ public class RedisClientWrapper implements RedisClient {
 
     @Override
     public long getAndIncrement(String key, int timeoutSeconds) {
-        return run(() -> redisClient.getAndIncrement(key, timeoutSeconds), "getAndIncrement");
+        // 0 是合法业务值（首次计数）：配额类调用方无法区分降级与真实 0，故障时显式抛出保持 fail-closed
+        return runOrThrow(() -> redisClient.getAndIncrement(key, timeoutSeconds), "getAndIncrement");
     }
 
     @Override
     public long addAndGet(String key, long dela, int timeoutSeconds) {
-        return run(() -> redisClient.addAndGet(key, dela, timeoutSeconds), "addAndGet");
+        return runOrThrow(() -> redisClient.addAndGet(key, dela, timeoutSeconds), "addAndGet");
     }
 
     @Override
@@ -184,11 +205,11 @@ public class RedisClientWrapper implements RedisClient {
 
     @Override
     public boolean tryLockWithId(String key, String value, long expireSeconds) {
-        return run(() -> redisClient.tryLockWithId(key, value, expireSeconds), "doWithRedisLock");
+        return Boolean.TRUE.equals(run(() -> redisClient.tryLockWithId(key, value, expireSeconds), "doWithRedisLock"));
     }
 
     @Override
     public boolean unlockWithId(String key, String value) {
-        return run(() -> redisClient.unlockWithId(key, value), "releaseLock");
+        return Boolean.TRUE.equals(run(() -> redisClient.unlockWithId(key, value), "releaseLock"));
     }
 }
