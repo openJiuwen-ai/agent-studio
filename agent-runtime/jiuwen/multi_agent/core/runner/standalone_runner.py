@@ -33,6 +33,88 @@ from jiuwen.multi_agent.core.stream.stream_handler import (
     STREAM_END_FRAME,
 )
 
+try:  # OTel 为可选依赖：未安装/未启用时保持原有行为
+    from opentelemetry import context as otel_context
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.trace.propagation.tracecontext import (
+        TraceContextTextMapPropagator,
+    )
+except ImportError:  # pragma: no cover
+    otel_context = otel_trace = TraceContextTextMapPropagator = None
+
+from jiuwen.multi_agent.core.common.message_type import EnvelopeMetadata
+
+_TRACE_CONTEXT_KEY = "traceparent"
+
+
+def _current_traceparent() -> str:
+    """把发送方当前活动 span 序列化为 W3C traceparent（无有效 span 时返回空）。
+
+    只写字符串：EnvelopeMetadata.extra 会参与 to_dict 状态序列化，
+    OTel Context/Span 对象不可序列化。
+    """
+    if otel_trace is None:
+        return ""
+    try:
+        span_context = otel_trace.get_current_span().get_span_context()
+    except Exception as exc:
+        logger.debug("Failed to read current span context: %s", exc)
+        return ""
+    if span_context is None or not span_context.is_valid:
+        return ""
+    return (
+        f"00-{span_context.trace_id:032x}-{span_context.span_id:016x}"
+        f"-{int(span_context.trace_flags):02x}"
+    )
+
+
+def _trace_metadata():
+    """把当前活动 span 包成信封 metadata（无有效 span 时返回 None）。"""
+    traceparent = _current_traceparent()
+    if not traceparent:
+        return None
+    return EnvelopeMetadata(extra={_TRACE_CONTEXT_KEY: traceparent})
+
+
+def _attach_envelope_context(envelope: MessageEnvelope):
+    """按信封携带的 traceparent 恢复发送方上下文，返回 detach token。
+
+    只接受与本请求同一 trace 的信封上下文：中断恢复会从 Redis 恢复上一次
+    请求排队的信封，其 traceparent 指向已结束的旧 trace；直接继承会让成员
+    span 落到旧 trace，使本次请求再次拆成多条 trace。
+    """
+    if otel_context is None or otel_trace is None or envelope.metadata is None:
+        return None
+    traceparent = (envelope.metadata.extra or {}).get(_TRACE_CONTEXT_KEY)
+    if not traceparent:
+        return None
+    try:
+        ctx = TraceContextTextMapPropagator().extract(
+            {_TRACE_CONTEXT_KEY: traceparent}
+        )
+        envelope_span_context = otel_trace.get_current_span(ctx).get_span_context()
+        if not envelope_span_context.is_valid:
+            return None
+        current_span_context = otel_trace.get_current_span().get_span_context()
+        if (
+            current_span_context.is_valid
+            and current_span_context.trace_id != envelope_span_context.trace_id
+        ):
+            return None
+        return otel_context.attach(ctx)
+    except Exception as exc:
+        logger.debug("Failed to attach envelope trace context: %s", exc)
+        return None
+
+
+def _detach_context(token) -> None:
+    if token is None or otel_context is None:
+        return
+    try:
+        otel_context.detach(token)
+    except Exception as exc:
+        logger.debug("Failed to detach envelope trace context: %s", exc)
+
 
 @dataclass(kw_only=True)
 class ProcessResult:
@@ -136,6 +218,10 @@ class StandaloneRunner:
 
         future = Future()
 
+        # 记录发送方当前 OTel 上下文：成员在后台任务执行时无法继承发送方的
+        # contextvars，只能靠信封把 traceparent 带过去。
+        metadata = _trace_metadata()
+
         envelope = SendMessageEnvelope(
             message=message,
             sender=sender,
@@ -143,6 +229,7 @@ class StandaloneRunner:
             future=future,
             stream_handler=stream_handler,
             message_id=message_id,
+            metadata=metadata,
         )
         # Add message to queue
         logger.debug(
@@ -186,6 +273,21 @@ class StandaloneRunner:
         if handler in self._intervention_handlers:
             self._intervention_handlers.remove(handler)
 
+    @staticmethod
+    def _create_processing_task(envelope: MessageEnvelope, handler) -> Task:
+        """在信封携带的发送方上下文中创建处理任务。
+
+        create_task 只复制创建时的 contextvars，而消息循环运行在
+        AgentRunSpace 的后台任务里（创建于无 span 的上下文），必须显式
+        attach 发送方的 OTel 上下文，成员 span 才会挂到发送方 Agent 下。
+        attach/detach 在同步段内配对，不跨 await。
+        """
+        token = _attach_envelope_context(envelope)
+        try:
+            return asyncio.create_task(handler(envelope))
+        finally:
+            _detach_context(token)
+
     async def _process_next(self) -> ProcessResult:
         """Process the next message in the queue."""
         # Check if stopped
@@ -208,7 +310,9 @@ class StandaloneRunner:
                     "process send message from [%s] to [%s]",
                     envelope.sender, envelope.recipient,
                 )
-                task = asyncio.create_task(self._process_send_message(envelope))
+                task = self._create_processing_task(
+                    envelope, self._process_send_message
+                )
                 self._running_tasks.add(task)
                 task.add_done_callback(self._envelope_asynctask_callback(envelope))
             elif isinstance(envelope, ResponseMessageEnvelope):
@@ -216,7 +320,9 @@ class StandaloneRunner:
                     "process response message from [%s] to [%s]",
                     envelope.sender, envelope.recipient,
                 )
-                task = asyncio.create_task(self._process_response_message(envelope))
+                task = self._create_processing_task(
+                    envelope, self._process_response_message
+                )
                 self._running_tasks.add(task)
                 task.add_done_callback(self._envelope_asynctask_callback(envelope))
             else:
@@ -295,6 +401,7 @@ class StandaloneRunner:
                     recipient=sender,
                     original_message_id=message_id,  # 关联到原始发送消息
                     future=envelope.future,
+                    metadata=_trace_metadata(),
                 )
             )
 
