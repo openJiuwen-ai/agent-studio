@@ -54,6 +54,10 @@ class RequestScopedAuthModel:
     async def stream(self, *args, **kwargs):
         self._inject(kwargs)
         result = self._model.stream(*args, **kwargs)
+        # 与 invoke 同一口径：内层可能是普通 async def（返回 async iterator），
+        # 此时需先 await，否则落入同步迭代分支抛 TypeError 并泄漏未 await 警告。
+        if inspect.isawaitable(result):
+            result = await result
         if hasattr(result, "__aiter__"):
             async for chunk in result:
                 yield chunk

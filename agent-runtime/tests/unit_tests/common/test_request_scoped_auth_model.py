@@ -30,6 +30,30 @@ class _RecordingModel:
         yield "chunk"
 
 
+class _CoroutineStreamModel:
+    """stream 为普通 async def、返回值是 async iterator 的形态。
+
+    与 ``_RecordingModel`` 的 async generator 形态不同：调用 ``stream()``
+    先得到一个 coroutine，await 之后才是可迭代对象（core 的
+    ``async_trace_stream`` 显式兼容同款形态）。
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    async def invoke(self, *args, **kwargs):
+        self.calls.append(kwargs)
+        return "ok"
+
+    async def stream(self, *args, **kwargs):
+        self.calls.append(kwargs)
+
+        async def _chunks():
+            yield "chunk"
+
+        return _chunks()
+
+
 def _set_token(token: str):
     """绑定带指定 token（或空 token）的请求上下文，返回 reset token。"""
     headers = {"X-Auth-Token": token} if token else {}
@@ -109,6 +133,25 @@ class TestRequestScopedAuthModel:
 
         assert chunks == ["chunk"]
         assert _auth_headers(model.calls[0]) == {"X-Auth-Token": "tok-stream"}
+
+    @pytest.mark.asyncio
+    async def test_stream_awaits_coroutine_returning_inner_stream(self):
+        """内层 stream 是普通 async def（返回 async iterator）时也正确迭代并注入。"""
+        from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+        model = _CoroutineStreamModel()
+        wrapped = bind_request_scoped_auth(
+            model, SimpleNamespace(request_scoped_auth=True)
+        )
+
+        token = _set_token("tok-coroutine")
+        try:
+            chunks = [chunk async for chunk in wrapped.stream(messages=[])]
+        finally:
+            _request_ctx.reset(token)
+
+        assert chunks == ["chunk"]
+        assert _auth_headers(model.calls[0]) == {"X-Auth-Token": "tok-coroutine"}
 
     @pytest.mark.asyncio
     async def test_caller_headers_merged_without_mutation(self):
