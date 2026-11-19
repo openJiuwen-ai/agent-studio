@@ -722,7 +722,11 @@ class InMemoryRedisPyStub:
         if count is None:
             if not container:
                 return None
-            return container.pop()
+            member = container.pop()
+            # 真实 Redis：集合弹空自动删 key（与下方 count 分支同口径）
+            if not container:
+                self._delete_key(store_key)
+            return member
         # redis-py / fakeredis 语义：带 count 的 spop 返回 list（非 set）
         popped = random.sample(sorted(container), min(count, len(container)))
         container -= set(popped)
@@ -749,6 +753,9 @@ class InMemoryRedisPyStub:
         dst = self._container(_enc(destination), "set", create=True)
         src.remove(_enc(member))
         dst.add(_enc(member))
+        # 真实 Redis：源集合移空后自动删 key（与 srem/spop 空容器清理同口径）
+        if not src:
+            self._delete_key(_enc(source))
         return True
 
     async def sinter(self, *keys: Any) -> Set[bytes]:
