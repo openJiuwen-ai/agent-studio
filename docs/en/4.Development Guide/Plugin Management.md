@@ -12,7 +12,7 @@ Connect to an existing service, which can be either a custom plugin service you 
 Connect to any MCP-compliant server using one of five transport protocols. All tools exposed by the server are automatically discovered and registered.
 
 `IDE Plugin-Create in IDE`: Create manually code plugin
-Define plugin tools by writing code and run the code plugin by [Starting the Local Sandbox Service](../../2.Installation%20Guide/Local%20Installation/Windows_Installation.md#windows-sandbox).
+Define plugin tools by writing code and run the code plugin by [Starting the Local Sandbox Service](../2.Installation%20Guide/Local%20Installation/Windows_Installation.md#windows-sandbox).
 
 
 ## Method 1: Create Plugin Based on Existing Service
