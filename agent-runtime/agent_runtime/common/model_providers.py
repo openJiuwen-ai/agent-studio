@@ -462,9 +462,11 @@ class IRModelConfigProvider(ModelConfigProvider):
         frequency_penalty = hyper_params.get("frequency_penalty", None)
 
         # Build auth headers
-        ctx = _request_ctx.get()
-        auth_token = ctx.headers.get("X-Auth-Token", "") if ctx else ""
-        custom_headers = {"X-Auth-Id": auth_id, "X-Auth-Token": auth_token}
+        # 请求级凭证（X-Auth-Token）不在此烘焙：组件实例与 Model 跨执行复用，
+        # 建模期取首个请求的 token 会串用（多用户越权/计费错乱，轮换后 401
+        # 不愈）。只放静态头，token 由 request_scoped_model 代理在每次调用时
+        # 从请求上下文注入。
+        custom_headers = {"X-Auth-Id": auth_id}
         # D-02/B07（SYNC-01 P3.4）：最终边界剥离关联 Header（含伪造值，大小写不敏感）
         strip_correlation_headers(custom_headers)
 
@@ -476,6 +478,7 @@ class IRModelConfigProvider(ModelConfigProvider):
             timeout=base.timeout,
             verify_ssl=base.ssl_verify,
             custom_headers=custom_headers,
+            request_scoped_auth=True,
         )
 
         extra_body = None

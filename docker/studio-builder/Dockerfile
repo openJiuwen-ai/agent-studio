@@ -7,6 +7,8 @@ RUN groupadd -g 1000 service && useradd -u 1000 -g service -s /bin/bash -m servi
 ENV SERVICE_HOME=/opt/cloud/agent-builder
 ENV PACKAGES_HOME=/usr/local/lib/python3.11/site-packages
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
+# jemalloc 行为参数(空=库内默认;部署时按场景覆盖,如 background_thread:true)
+ENV MALLOC_CONF=""
 
 WORKDIR $SERVICE_HOME
 
@@ -17,8 +19,9 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget libpq-dev vim procps gawk hostname sed coreutils findutils bash \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget libpq-dev vim procps gawk hostname sed coreutils findutils bash libjemalloc2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
 
 # 先复制 requirements.txt，单独安装依赖以利用 Docker 层缓存
 COPY agent_builder/requirements.txt $SERVICE_HOME/app/agent_builder/requirements.txt
@@ -64,5 +67,4 @@ USER 1000:1000
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=31015
 
-# 参考 studio-runtime：先 init.sh（目录/TLS），再 start.sh（nohup 拉起服务 + 主循环保活）
 CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; exec ./script/start.sh"]

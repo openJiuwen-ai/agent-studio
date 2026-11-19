@@ -17,6 +17,7 @@
         <result column="used_version" jdbcType="VARCHAR" property="usedVersion"/>
         <result column="workspace_id" jdbcType="VARCHAR" property="workspaceId"/>
         <result column="project_id" jdbcType="VARCHAR" property="projectId"/>
+        <result column="plaza_source" jdbcType="VARCHAR" property="plazaSource"/>
     </resultMap>
 
     <resultMap id="SearchResultMap" type="com.openjiuwen.studio.agent.manager.bo.SkillDetails" extends="BaseResultMap">
@@ -74,6 +75,21 @@
                 used_version = #{skill.usedVersion, jdbcType=VARCHAR}
             </if>
         </set>
+        WHERE skill_id = #{skillId, jdbcType=VARCHAR}
+    </update>
+
+    <update id="updatePublishAsset">
+        UPDATE t_skill
+        SET published_asset = #{publishedAsset, jdbcType=VARCHAR},
+            plaza_source = #{plazaSource, jdbcType=VARCHAR},
+            updated_at = #{updatedAt, jdbcType=BIGINT}
+        WHERE skill_id = #{skillId, jdbcType=VARCHAR}
+    </update>
+
+    <update id="updateTagById">
+        UPDATE t_skill
+        SET tag_id = #{tagId, jdbcType=VARCHAR},
+            updated_at = #{updatedAt, jdbcType=BIGINT}
         WHERE skill_id = #{skillId, jdbcType=VARCHAR}
     </update>
 
@@ -199,6 +215,7 @@
         <if test="skillIds == null or skillIds.size() == 0">
             1=0
         </if>
+        AND t_skill.published_asset = '1'
     </select>
     <select id="searchBySkillIdAndDomainId" resultMap="SearchResultMap">
         SELECT

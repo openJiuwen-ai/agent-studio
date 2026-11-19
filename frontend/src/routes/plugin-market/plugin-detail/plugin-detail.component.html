@@ -3,6 +3,7 @@
     (update)="getPluginDetails()"
     [pluginInfo]="plugin"
     (visionSelectedChangeEvent)="visionSelectedChange($event)"
+    (plazaUpdateClick)="openPlazaVersionUpdateModal()"
   ></meta-plugin-header-new>
   <div class="preview" *ngIf="previewVersionId">
     <div class="mr-[8px] text-[#1476FF]">

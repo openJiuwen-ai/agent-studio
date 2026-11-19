@@ -42,6 +42,7 @@
             <img *ngIf="s4.includes('generate' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/osteogenesis.svg')"/>
             <img *ngIf="s4.includes('plugin' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/create-icon.svg')"/>
             <img *ngIf="s4.includes('knowledge' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/jiaoyan.svg')"/>
+            <img *ngIf="s4.includes('skill' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/optimize.svg')"/>
             <img *ngIf="s4.includes('cfg_text' | i18nextEager) || s4.includes('complete' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/success.svg')"/>
             <img *ngIf="!s4.includes('planner' | i18nextEager) && !s4.includes('common_query' | i18nextEager) && !s4.includes('generate' | i18nextEager) && !s4.includes('cfg_text' | i18nextEager) && !s4.includes('complete' | i18nextEager)" [src]="changeUrl('assets/ng2workflow/jiaoyan.svg')"/>
             <span>{{ s4 }}</span>
@@ -130,7 +131,7 @@
                   <div class="q-options">
                     <div *ngFor="let opt of q.options"
                          class="opt-btn"
-                         [class.active]="q.selected === opt"
+                         [class.active]="q.selected?.includes(opt)"
                          [class.disabled]="!last"
                          (click)="last && onToggleOption(q, opt)">
                       {{ opt }}

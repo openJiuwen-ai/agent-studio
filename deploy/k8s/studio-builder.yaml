@@ -27,6 +27,9 @@ spec:
               value: '0.0.0.0'
             - name: SERVER_PORT
               value: '31015'
+            # jemalloc 行为参数（空=库内默认；LD_PRELOAD 由镜像内启动脚本自动设置）
+            - name: MALLOC_CONF
+              value: ''
             # ======== [必填] Redis ========
             # 单机模式：配置 REDIS_HOST、REDIS_PORT、REDIS_PASSWORD
             # 集群模式：配置 REDIS_CLUSTER_NODES、REDIS_PASSWORD、REDIS_MODE=cluster

@@ -13,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployResp;
@@ -267,4 +268,24 @@ public interface IMcpServiceManagerService {
      * @param body body
      */
     Boolean updateMcpAuthInfo(String projectId, String id, String workspaceId, AuthInfo body);
+
+    /**
+     * publishServer：将已部署的 MCP 服务实例上架到资产广场（平台精选，跨租户可见）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param req 上架请求（service_id 必填，category 可选）
+     * @return 服务目录条目 ID（同一实例重复上架返回既有条目并刷新快照）
+     */
+    String publishServer(String projectId, String workspaceId, McpServerShelfReq req);
+
+    /**
+     * unpublishServer：将 MCP 服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param serverId 服务目录条目 ID
+     * @return 服务目录条目 ID（重复下架幂等）
+     */
+    String unpublishServer(String projectId, String workspaceId, String serverId);
 }

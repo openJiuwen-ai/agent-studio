@@ -335,15 +335,16 @@ class Start(WorkflowComponent):
                     if data_type == DataType.ARRAY.value:
                         # 数组的 schema 是元素类型定义(标量或 object 皆同),
                         # default_value 在本层。空默认(None/''/'[]' 及各空写法)
-                        # 统一归一为 None:渲染为空且不出现 '[]' 字面量,但 key
-                        # 保留在 values_define —— Redis 会话变量存取与
-                        # SetVariable 持久化都以 values_define 成员为门控,
-                        # key 缺失会导致跨轮丢值;引用解析层 None 与
-                        # key 缺失等价(未命中同返 None)
+                        # 统一归一为 []：key 仍保留在 values_define（Redis /
+                        # SetVariable 门控依赖成员资格）；容器用 [] 而非 None，
+                        # 避免下游对 memory.a[0].b 一类下标引用时对 None 做
+                        # `x in ...` 抛 TypeError。
                         converted = Start._transform_type(
                             data_type, default_val, var_id
                         )
-                        result[var_id] = None if converted == [] else converted
+                        result[var_id] = (
+                            [] if converted is None or converted == [] else converted
+                        )
                     elif data_type == DataType.OBJECT.value:
                         # 对象:整体 default_value 优先;空默认(None/''/'{}')
                         # 时从子字段默认值组装,组装仍空则 None(注册语义同上),

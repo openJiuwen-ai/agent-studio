@@ -266,7 +266,6 @@ public class ExcelUtil {
             throw new AgentStudioException(StudioError.EXPORT_EXCEL_VALIDATE_FAILED);
         }
         try (OutputStream outputStream = response.getOutputStream()) {
-            // 设置返回数据编码请求头信息
             response.setCharacterEncoding("UTF-8");
             response.setContentType("application/vnd.ms-excel;charset=UTF-8");
             String dateTime = DateUtil.formatCompact(new Date());
@@ -285,12 +284,6 @@ public class ExcelUtil {
         }
     }
 
-    /**
-     * 校验单元格内容，检查是否包含特殊字符开始的动态数据交换内容
-     *
-     * @param workbook
-     * @return
-     */
     private static Boolean validateExportExcel(Workbook workbook) {
         int numberOfSheets = workbook.getNumberOfSheets();
         for (int indOfSheet = NUM_ZERO; indOfSheet < numberOfSheets; indOfSheet++) {
@@ -319,5 +312,32 @@ public class ExcelUtil {
             }
         }
         return true;
+    }
+
+    /**
+     * 导出值前置校验(瘦身修订 2026-11-04 1C)。
+     *
+     * <p>EasyExcel 动态表头模式下无 Workbook 中间产物,原
+     * validateExportExcel(Workbook) 的 DDE 特殊字符前缀检查改为对
+     * 扁平行值在写流前执行——语义一致(=,+,-,@ 起头拒绝导出),
+     * 失败抛原 EXPORT_EXCEL_VALIDATE_FAILED。
+     *
+     * <p>注:exportExcelFile(Workbook,...) 仍被 PromptTemplateService 的
+     * 原生 POI 导出路径调用(评审修订 2026-11-04:review 误判死代码),
+     * 保留不动。
+     *
+     * @param flatRows 扁平化导出行(值列,不含表头)
+     */
+    public static void validateExportValues(List<List<Object>> flatRows) {
+        for (int indOfRow = NUM_ZERO; indOfRow < flatRows.size(); indOfRow++) {
+            List<Object> row = flatRows.get(indOfRow);
+            for (int indOfCell = NUM_ZERO; indOfCell < row.size(); indOfCell++) {
+                Object value = row.get(indOfCell);
+                if (value != null && StringUtil.isStartWithSpecialCharacter(String.valueOf(value))) {
+                    log.error("row {} col {} is start with special character", indOfRow + NUM_ONE, indOfCell + NUM_ONE);
+                    throw new AgentStudioException(StudioError.EXPORT_EXCEL_VALIDATE_FAILED);
+                }
+            }
+        }
     }
 }

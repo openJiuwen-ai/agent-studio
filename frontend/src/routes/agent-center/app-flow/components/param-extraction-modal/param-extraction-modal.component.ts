@@ -1066,7 +1066,6 @@ export class ParamExtractionModalComponent
 
   //配置工作流
   async configureProcessingFlow(flow: any, domainObjectName: string) {
-    console.log(flow)
     if (!domainObjectName) {
       MessageComponent.showWarn(
         this.i18n.transform('paramextractionmodalcomponent_522'),
@@ -1101,7 +1100,6 @@ export class ParamExtractionModalComponent
         nodeInfo: this.nodeInfo,
       },
       nzOnOk: () => {
-        console.log(111111111)
       },
     } as any);
 

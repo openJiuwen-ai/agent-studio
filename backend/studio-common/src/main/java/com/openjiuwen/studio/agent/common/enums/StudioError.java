@@ -688,6 +688,15 @@ public enum StudioError {
      */
     DOWNSTREAM_DEPENDENCY_FAILED(BAD_GATEWAY, COMMON, "1131"),
 
+    /**
+     * 资产当前状态不允许上架到资产广场（Skill 处于开发中或尚无发布版本）
+     */
+    ASSET_NOT_PUBLISHABLE(BAD_REQUEST, COMMON, "1132"),
+    /**
+     * 已上架到资产广场的资源不可直接删除，需先下架（对标团队共享删除校验）
+     */
+    RESOURCE_PUBLISHED_CANNOT_BE_DELETE(BAD_REQUEST, COMMON, "1133"),
+
 
     /**
      * ============================== AGENT ==============================

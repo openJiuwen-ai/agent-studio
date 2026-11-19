@@ -59,6 +59,12 @@ public class JsonSchemaUtils {
         if (StringUtils.isBlank(jsonSchema)) {
             return true;
         }
+        // 前端历史兜底会把「无出入参」写成 "{}"；与 blank 一样视为无 schema，避免误报缺 type。
+        // 注意：不能放行 "[]"——校验通过后会原样落库，IrAdapter 用 SchemaConfig 反序列化顶层数组会抛 JSONException，把 02401003 推迟成运行/转 IR 的 500。
+        String trimmed = jsonSchema.trim();
+        if ("{}".equals(trimmed) || "null".equalsIgnoreCase(trimmed)) {
+            return true;
+        }
         ObjectMapper mapper = new ObjectMapper();
         JsonNode schemaNode;
         try {

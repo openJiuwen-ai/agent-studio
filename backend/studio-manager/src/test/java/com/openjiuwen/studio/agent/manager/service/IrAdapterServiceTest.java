@@ -21,6 +21,8 @@ import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.manager.dto.AgentInfo;
 import com.openjiuwen.studio.agent.manager.dto.KnowledgeRepoReference;
@@ -52,6 +54,7 @@ import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -890,6 +893,123 @@ class IrAdapterServiceTest extends BaseTest {
             List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, true);
             assertEquals(1, result.size());
         }
+    }
+
+    // ==== FEAT-093 动态鉴权（scope=DYNAMIC）arguments 追加用例 ====
+
+    private McpServiceEntity mockDynamicMcpEntity(AuthInfo authInfo) {
+        McpServiceEntity mcpEntity = mock(McpServiceEntity.class);
+        when(mcpEntity.getServerConfig()).thenReturn("encryptedServerConfig");
+        when(mcpEntity.getAuthInfo()).thenReturn(authInfo);
+        return mcpEntity;
+    }
+
+    private AuthInfo buildDynamicAuthInfo() {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey(null);
+        AuthInfo authInfo = new AuthInfo();
+        authInfo.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        authInfo.setDomain(AuthInfo.DomainEnum.HEADERS);
+        authInfo.setAuthKeys(List.of(key));
+        return authInfo;
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：DYNAMIC auth_keys 的 target_name 追加为 Headers 入参（method=Headers/required=false）")
+    public void test_parseAgentMcpParams_dynamic_auth_appended() throws Exception {
+        McpServiceEntity mcpEntity = mockDynamicMcpEntity(buildDynamicAuthInfo());
+        when(encryptionAdapter.decrypt("encryptedServerConfig")).thenReturn("decryptedServerConfig");
+
+        try (MockedStatic<CommonUtil> commonUtilMock = mockStatic(CommonUtil.class)) {
+            commonUtilMock.when(() -> CommonUtil.parseMcpConfigHeaderInfo("decryptedServerConfig"))
+                .thenReturn(new HashMap<>());
+
+            List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, true);
+
+            assertEquals(1, result.size());
+            Map<String, Object> param = result.get(0);
+            assertEquals("Authorization", param.get("name"));
+            assertEquals("Headers", param.get("method"));
+            assertEquals("string", param.get("type"));
+            assertEquals(false, param.get("required"));
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：与 server_config headers 同名参数去重（server_config 优先）")
+    public void test_parseAgentMcpParams_dynamic_auth_dedup_with_server_headers() throws Exception {
+        McpServiceEntity mcpEntity = mockDynamicMcpEntity(buildDynamicAuthInfo());
+        when(encryptionAdapter.decrypt("encryptedServerConfig")).thenReturn("decryptedServerConfig");
+
+        try (MockedStatic<CommonUtil> commonUtilMock = mockStatic(CommonUtil.class)) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Authorization", "static-value");
+            commonUtilMock.when(() -> CommonUtil.parseMcpConfigHeaderInfo("decryptedServerConfig"))
+                .thenReturn(headers);
+
+            List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, false);
+
+            assertEquals(1, result.size());
+            assertEquals("static-value", result.get(0).get("default_value"));
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：与 server_config headers 仅大小写不同视为同名去重（HTTP 头名大小写不敏感）")
+    public void test_parseAgentMcpParams_dynamic_auth_dedup_case_insensitive() throws Exception {
+        McpServiceEntity mcpEntity = mockDynamicMcpEntity(buildDynamicAuthInfo());
+        when(encryptionAdapter.decrypt("encryptedServerConfig")).thenReturn("decryptedServerConfig");
+
+        try (MockedStatic<CommonUtil> commonUtilMock = mockStatic(CommonUtil.class)) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("authorization", "static-value");
+            commonUtilMock.when(() -> CommonUtil.parseMcpConfigHeaderInfo("decryptedServerConfig"))
+                .thenReturn(headers);
+
+            List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, false);
+
+            assertEquals(1, result.size());
+            assertEquals("authorization", result.get(0).get("name"));
+            assertEquals("static-value", result.get(0).get("default_value"));
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：非 DYNAMIC scope 不追加（存量行为不变）")
+    public void test_parseAgentMcpParams_non_dynamic_scope_not_appended() throws Exception {
+        AuthKeyInfo key = new AuthKeyInfo();
+        key.setTargetName("Authorization");
+        key.setAuthKey("encrypted-value");
+        AuthInfo serviceAuth = new AuthInfo();
+        serviceAuth.setScope(AuthInfo.ScopeEnum.SERVICE);
+        serviceAuth.setDomain(AuthInfo.DomainEnum.HEADERS);
+        serviceAuth.setAuthKeys(List.of(key));
+
+        McpServiceEntity mcpEntity = mockDynamicMcpEntity(serviceAuth);
+        when(encryptionAdapter.decrypt("encryptedServerConfig")).thenReturn("decryptedServerConfig");
+
+        try (MockedStatic<CommonUtil> commonUtilMock = mockStatic(CommonUtil.class)) {
+            commonUtilMock.when(() -> CommonUtil.parseMcpConfigHeaderInfo("decryptedServerConfig"))
+                .thenReturn(new HashMap<>());
+
+            List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, false);
+
+            assertTrue(result.isEmpty());
+        }
+    }
+
+    @Test
+    @DisplayName("FEAT-093 动态鉴权：server_config 为空时（早期 return 之前的空 map 场景）不追加")
+    public void test_parseAgentMcpParams_dynamic_auth_with_empty_server_config() throws Exception {
+        McpServiceEntity mcpEntity = mock(McpServiceEntity.class);
+        when(mcpEntity.getServerConfig()).thenReturn(null);
+        when(mcpEntity.getAuthInfo()).thenReturn(buildDynamicAuthInfo());
+
+        List<Map<String, Object>> result = irAdapterService.parseAgentMcpParams(mcpEntity, false);
+
+        // serverConfig 为 null 时方法直接返回空列表（不进入 DYNAMIC 追加分支）
+        assertTrue(result.isEmpty());
     }
 
     /**

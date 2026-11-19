@@ -77,7 +77,9 @@ class ValidateAction(RailsAction):
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """执行校验"""
         args = context.get("arguments", {})
-        validated_args = {}
+        # 以原始参数为基底：只覆盖配置了校验的字段，未配置校验的字段原样保留，
+        # 避免部分字段勾选校验时其余字段被丢弃导致误触发重复追问
+        validated_args = dict(args)
 
         for key in self.extra_args.keys():
             value = args.get(key)
@@ -109,7 +111,8 @@ class FormatAction(RailsAction):
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """执行格式化"""
         args = context.get("arguments", {})
-        formatted_args = {}
+        # 以原始参数为基底：只覆盖配置了格式化的字段，未配置的字段原样保留
+        formatted_args = dict(args)
 
         for key in self.extra_args.keys():
             value = args.get(key)

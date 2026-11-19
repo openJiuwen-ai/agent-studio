@@ -156,7 +156,8 @@ class TestFlowMcpLooseValidation:
             _mock_workflow_logger(records),
         )
         comp = _make_flow_mcp()
-        api_inputs, schema_patches = comp._format_api_inputs(
+        # 静态图复用：header_params 作为第三个返回值（不落实例字段）
+        api_inputs, schema_patches, _header_params = comp._format_api_inputs(
             {"query": "a", "extra": "b"}
         )
         assert api_inputs == {"query": "a"}

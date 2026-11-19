@@ -21,6 +21,7 @@ import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.VersionInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.service.IPluginService;
@@ -164,5 +165,16 @@ public class PluginApiController implements PluginApi {
         String versionId, String workspaceId) {
         return ResponseModel.success(
             pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId));
+    }
+
+    @Override
+    public ResponseEntity<String> publishPlugin(String projectId, String pluginId, String workspaceId,
+        PluginShelfReq body) {
+        return ResponseModel.success(pluginService.publishPlugin(projectId, workspaceId, pluginId, body));
+    }
+
+    @Override
+    public ResponseEntity<String> unpublishPlugin(String projectId, String pluginId, String workspaceId) {
+        return ResponseModel.success(pluginService.unpublishPlugin(projectId, workspaceId, pluginId));
     }
 }

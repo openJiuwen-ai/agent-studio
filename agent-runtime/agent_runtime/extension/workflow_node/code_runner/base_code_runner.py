@@ -48,6 +48,38 @@ class CodeRunner(ABC):
         pass
 
 
+# 注入到沙箱/本地包装脚本：加固 json.loads，避免空串/自然语言抛出含糊的
+# Expecting value: line 1 column 1 (char 0)，并给出可行动的错误信息。
+# 用户代码里的 `import json` 仍命中同一 sys.modules 条目，补丁持续生效。
+_SAFE_JSON_LOADS_PROLOGUE = """
+import json as _json_mod
+_orig_json_loads = _json_mod.loads
+
+def _guarded_json_loads(s, *args, **kwargs):
+    # 仍抛 JSONDecodeError（ValueError 子类），保证用户代码里
+    # `except json.JSONDecodeError` 的 soft-fail 路径继续命中。
+    if s is None or (isinstance(s, str) and not str(s).strip()):
+        raise _json_mod.JSONDecodeError(
+            "json.loads received empty input; "
+            "check upstream QA/Code input is non-empty JSON",
+            doc="" if s is None else str(s),
+            pos=0,
+        )
+    try:
+        return _orig_json_loads(s, *args, **kwargs)
+    except _json_mod.JSONDecodeError as e:
+        preview = repr(s[:120]) if isinstance(s, str) else repr(s)
+        raise _json_mod.JSONDecodeError(
+            f"json.loads received non-JSON input {preview}: {e.msg}",
+            e.doc,
+            e.pos,
+        ) from e
+
+_json_mod.loads = _guarded_json_loads
+json = _json_mod
+"""
+
+
 def build_wrapped_code(user_code: str, inputs: dict) -> str:
     """将用户代码包装为可执行的 Python 脚本
 
@@ -67,6 +99,8 @@ def build_wrapped_code(user_code: str, inputs: dict) -> str:
 import sys
 import json
 import io
+
+{_SAFE_JSON_LOADS_PROLOGUE}
 
 # 将用户 stdout 重定向到 StringIO，避免 print() 污染 JSON 输出
 _console_buffer = io.StringIO()

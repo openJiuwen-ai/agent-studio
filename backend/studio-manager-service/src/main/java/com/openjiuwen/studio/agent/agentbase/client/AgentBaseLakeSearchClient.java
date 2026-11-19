@@ -21,7 +21,6 @@ import com.openjiuwen.studio.agent.foundation.base.exception.ErrorCode;
 import com.openjiuwen.studio.agent.foundation.base.utils.RandomUtil;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.hc.client5.http.entity.mime.HttpMultipartMode;
 import org.apache.hc.client5.http.entity.mime.InputStreamBody;
 import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
@@ -287,7 +286,7 @@ public class AgentBaseLakeSearchClient {
     private void doKerberosLogin() throws IOException, LoginException {
         try {
             logger.info("Begin to login by kerberos authentication.");
-            String principal = KerberosUtil.getPrincipalNames(userKeytabFile, PATTERN)[0];
+            String principal = KeytabPrincipalReader.getPrincipalNames(userKeytabFile, PATTERN)[0];
             Map<String, String> options = new HashMap<>();
             options.put("useTicketCache", "false");
             options.put("useKeyTab", "true");

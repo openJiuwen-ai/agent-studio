@@ -1,0 +1,25 @@
+<div>
+  <form nz-form nzLayout="vertical">
+    <nz-form-item>
+      <nz-form-label>{{ 'skill.shelf.selectTag' | i18nextEager }}</nz-form-label>
+      <nz-form-control>
+        <nz-select
+          [(ngModel)]="selectedTagId"
+          [ngModelOptions]="{ standalone: true }"
+          nzAllowClear
+          nzPlaceHolder="{{ 'skill.shelf.selectTagPlaceholder' | i18nextEager }}"
+        >
+          <nz-option
+            *ngFor="let opt of options"
+            [nzLabel]="opt.i18key | i18nextEager"
+            [nzValue]="opt.id"
+          ></nz-option>
+        </nz-select>
+      </nz-form-control>
+    </nz-form-item>
+  </form>
+  <div class="mt-[16px] flex justify-end gap-[8px]">
+    <button nz-button (click)="onCancel()">{{ 'cancel' | i18nextEager }}</button>
+    <button nz-button nzType="primary" (click)="onOk()">{{ 'ok' | i18nextEager }}</button>
+  </div>
+</div>
