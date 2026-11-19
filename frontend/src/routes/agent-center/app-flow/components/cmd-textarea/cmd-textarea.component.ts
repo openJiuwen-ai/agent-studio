@@ -379,10 +379,16 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       end = sel.end;
     }
 
-    // 超过最大长度截断（粘贴会替换选区内容，需补回被替换长度）
+    // 超过最大长度截断（粘贴会替换选区内容，需补回被替换长度）。
+    // 被替换长度按可见字符计算：选区终点可能计入渲染末尾 <br> 的幻影
+    // 换行（全选时 end = 可见长度 + 1），需钳制到可见长度内，否则预算
+    // 多算 1 导致粘贴可超限；渲染拼接仍用原始 start/end（删除幻影换行）
     if (this.maxLength) {
+      const visibleLength = current.replace(/\n$/, '').length;
+      const replacedLength =
+        Math.min(end, visibleLength) - Math.min(start, visibleLength);
       const leaveLength = Math.max(
-        this.maxLength - (current.replace(/\n$/, '').length - (end - start)),
+        this.maxLength - (visibleLength - replacedLength),
         0,
       );
       if (clipboardContent.length > leaveLength) {
