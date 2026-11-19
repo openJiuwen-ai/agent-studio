@@ -312,7 +312,7 @@ export class AppComponent implements OnInit {
           authMatch[1] === '&'
             ? window.location.hash.replace(authMatch[0], '')
             : window.location.hash.replace(authMatch[0], '?').replace('?&', '?');
-        history.replaceState(null, '', window.location.pathname + stripped);
+        history.replaceState(null, '', window.location.pathname + window.location.search + stripped);
       }
     }
     const url = new URL(window.location.href);
