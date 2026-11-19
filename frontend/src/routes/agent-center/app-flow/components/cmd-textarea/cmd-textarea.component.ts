@@ -24,6 +24,22 @@ const PANAEL_PADDING = 16;
 const MAX_VIEW_ITEMS = 6;
 const LEFT_OFFSET = 6;
 
+// 撤销/重做：原生撤销栈会被 processContent/renderFromText 的 innerHTML
+// 整体重写摧毁（且 Enter/退格/粘贴均为 preventDefault + 手动 DOM 手术），
+// 因此基于纯文本快照自建历史栈。连续普通输入在时间窗内合并为一条撤销
+// 记录，结构性编辑（回车/删除/粘贴/变量插入/缩进）单独成条。
+const UNDO_LIMIT = 100;
+const UNDO_COALESCE_MS = 1000;
+const STRUCTURAL_KEYS = new Set([
+  'Enter',
+  'Backspace',
+  'Delete',
+  'Tab',
+  'paste',
+  'cut',
+  'template',
+]);
+
 export interface CmdTextareaVariableItem {
   label: string;
   value: string;
@@ -109,6 +125,18 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   private preAction: string = ''; // 记录按键
 
+  // ===== 撤销/重做 =====
+  private undoStack: Array<{ text: string; offset: number }> = [];
+
+  private redoStack: Array<{ text: string; offset: number }> = [];
+
+  // 最近一次编辑事务后的编辑器状态，作为下一次编辑的"编辑前快照"
+  private lastState: { text: string; offset: number } = { text: '', offset: 0 };
+
+  private lastPushTime = 0; // 上次撤销记录入栈时间，用于连续输入合并
+
+  private applyingHistory = false; // 撤销/重做回放中，emit 不再记录历史
+
   private onChange: (value: string) => void = () => {};
 
   private onTouched: () => void = () => {};
@@ -126,13 +154,29 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   writeValue(value: string): void {
-    value=value?.trim()??''
-    value=this.escapeHTML(value);
-      setTimeout(()=>{
-
-        this.editor.nativeElement.innerHTML = `${value}<br>` || '<br>'
-        this.cdr.detectChanges();
-      })
+    const raw = value?.trim() ?? '';
+    const escaped = this.escapeHTML(raw);
+    setTimeout(() => {
+      this.editor.nativeElement.innerHTML = `${escaped}<br>`;
+      // 外部真实变更（节点回填/表单重置）时重建撤销基线。
+      // 对比口径必须一致（lastState.text 同样 trim 比较），否则带末尾
+      // 空格/首行缩进的 ngModel 回写会被误判为外部变更而清空撤销栈——
+      // 正是本组件要修的问题复现。同值回写不重置历史。
+      if (raw !== this.lastState.text.trim()) {
+        this.lastState = { text: raw, offset: raw.length };
+        this.undoStack = [{ ...this.lastState }];
+        this.redoStack = [];
+        // 基线重建后重置连续输入合并窗口：外部回填后的首次输入
+        // 必须独立成条，不能被并入回填前的输入串
+        this.lastPushTime = 0;
+      } else if (raw !== this.lastState.text) {
+        // 仅首尾空白差异：writeValue 渲染的是 trim 后文本，保留撤销栈，
+        // 只把基线对齐到实际渲染内容
+        this.lastState = { text: raw, offset: raw.length };
+        this.lastPushTime = 0;
+      }
+      this.cdr.detectChanges();
+    });
   }
 
   selection: Selection | null = null;
@@ -331,6 +375,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
   handlePaste(event: ClipboardEvent) {
     event.preventDefault();
+    // 标记结构性编辑（右键粘贴无 keydown，这里兜底设置）
+    this.preAction = 'paste';
 
     // 获取剪贴板中的文本内容
     let clipboardContent = event.clipboardData?.getData('text/plain') || '';
@@ -371,7 +417,18 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   onKeyDown(event: KeyboardEvent) {
-    this.preAction = event.key;
+    if (this.handleUndoShortcut(event)) {
+      return;
+    }
+    // Ctrl/Cmd+X、Ctrl/Cmd+V 标记为结构性编辑（剪切/粘贴），撤销时单独成条
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && event.key.toLowerCase() === 'x') {
+      this.preAction = 'cut';
+    } else if (mod && event.key.toLowerCase() === 'v') {
+      this.preAction = 'paste';
+    } else {
+      this.preAction = event.key;
+    }
     if (
       ['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key) &&
       this.showList
@@ -448,7 +505,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     }
     if (event.key === 'Backspace' || event.key === 'Delete') {
       this.handleBackspaceOrDelete(event);
-      this.onContentChange();
+      // 手动 DOM 手术（preventDefault 过）不会触发 input 事件，需要显式
+      // emit；原生删除由 input 事件驱动 onContentChange，不再无条件重复
+      // emit，结构上避免一次删除产生"编辑前+编辑后"两条撤销记录
+      if (event.defaultPrevented) {
+        this.onContentChange();
+      }
     }
     this.showList = false;
   }
@@ -543,9 +605,12 @@ export class CmdTextareaComponent implements ControlValueAccessor {
         return;
       }
       if (targetNode.classList.contains('highlight') || targetNode.classList.contains('highlight-inline')) {
+        // 整块删除变量：不要在此 emit——onKeyDown 在
+        // handleBackspaceOrDelete 之后统一调用 onContentChange，
+        // 双 emit 会往撤销栈压入一条与当前状态相同的记录，首次
+        // Ctrl+Z 变成无操作
         targetNode.remove();
         event.preventDefault();
-        this.onContentChange();
       }
     }
   }
@@ -718,6 +783,8 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     if (!editor || !item) {
       return;
     }
+    // 标记结构性编辑（变量插入），撤销时单独成条
+    this.preAction = 'template';
     // FB-4 修复：放弃 range/文本节点手术，改为基于字符偏移的纯文本模型插入。
     // 旧实现（对 startNode.textContent 做 slice、deleteContents+insertNode）在光标
     // 落在已 highlight 包裹的 {{var}} 块上/旁时，startContainer 会是元素节点而非干净
@@ -1173,8 +1240,185 @@ export class CmdTextareaComponent implements ControlValueAccessor {
   }
 
   private emit(): void {
-    this.onChange(this.getEditorTextContent().replace(/\n$/, ''));
+    this.pushUndo();
+    // innerText 只读一次，复用给 onChange 与 syncLastState，避免每次按键
+    // 的热点路径重复读取。必须读原始 innerText（含变量块后的 \u200B
+    // 零宽字符）：syncLastState 的光标偏移换算与 saveCursorPosition 的
+    // DOM 文本计数同口径，若传入去零宽后的文本，偏移会按去零宽下标
+    // 错算，多出光标前的变量块数
+    const rawText = this.editor?.nativeElement.innerText ?? '\n';
+    this.onChange(rawText.replaceAll('\u200B', '').replace(/\n$/, ''));
     this.onTouched();
+    this.syncLastState(rawText);
+  }
+
+  /**
+   * 撤销/重做快捷键拦截：Ctrl/Cmd+Z 撤销，Ctrl/Cmd+Shift+Z、Ctrl/Cmd+Y 重做。
+   * 原生撤销栈已被 innerHTML 整体重写摧毁，必须接管；输入法组合期间不劫持
+   * （交给输入法自行处理）。返回 true 表示已消费该按键。
+   */
+  private handleUndoShortcut(event: KeyboardEvent): boolean {
+    if (this.inInput || !(event.ctrlKey || event.metaKey) || event.altKey) {
+      return false;
+    }
+    const key = event.key.toLowerCase();
+    if (key === 'z' && !event.shiftKey) {
+      event.preventDefault();
+      this.undo();
+      return true;
+    }
+    if (key === 'y' || (key === 'z' && event.shiftKey)) {
+      event.preventDefault();
+      this.redo();
+      return true;
+    }
+    return false;
+  }
+
+  /** 撤销：弹出编辑前快照并渲染，当前状态压入重做栈 */
+  private undo(): void {
+    const snap = this.undoStack.pop();
+    if (!snap) {
+      return;
+    }
+    this.redoStack.push({ ...this.lastState });
+    // 重置连续输入合并窗口：撤销后的下一次编辑必须独立成条，
+    // 否则会被合并进撤销前的输入串，且重做会覆盖新输入
+    this.lastPushTime = 0;
+    // 直接置内部标志关闭变量列表，绕过 setter 避免二次 processContent
+    this._showList = false;
+    this.applyingHistory = true;
+    try {
+      this.renderFromText(snap.text, snap.offset);
+      this.emit();
+    } finally {
+      this.applyingHistory = false;
+    }
+  }
+
+  /** 重做：弹出重做快照并渲染，当前状态压回撤销栈 */
+  private redo(): void {
+    const snap = this.redoStack.pop();
+    if (!snap) {
+      return;
+    }
+    this.undoStack.push({ ...this.lastState });
+    // 重置连续输入合并窗口：重做后的下一次编辑必须独立成条，
+    // 否则会被合并进重做前的输入串，再次撤销会一次性吞掉过多内容
+    this.lastPushTime = 0;
+    this._showList = false;
+    this.applyingHistory = true;
+    try {
+      this.renderFromText(snap.text, snap.offset);
+      this.emit();
+    } finally {
+      this.applyingHistory = false;
+    }
+  }
+
+  /**
+   * 把"编辑前快照"（lastState）压入撤销栈。
+   * 栈顶已记录该状态（文本与光标偏移均一致）时跳过（同一事务的
+   * 重复 emit，如删除键的 keydown 预处理 + input 事件双触发；
+   * 偏移也须一致，否则纯光标移动后的首次撤销无法回到真实编辑
+   * 前位置）；连续普通输入（含输入法组合中间态）在时间窗内合并
+   * 为一条；结构性编辑单独成条。任何新编辑都会清空重做栈。
+   */
+  private pushUndo(): void {
+    if (this.applyingHistory) {
+      return;
+    }
+    // 任何新编辑都使重做栈失效——必须放在合并/去重的提前返回之前：
+    // 否则"撤销后立即输入（该条被合并跳过入栈）→ 重做"会用旧内容
+    // 覆盖掉刚输入的新内容
+    this.redoStack = [];
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (
+      top &&
+      top.text === this.lastState.text &&
+      top.offset === this.lastState.offset
+    ) {
+      this.lastPushTime = Date.now();
+      return;
+    }
+    const now = Date.now();
+    const structural = STRUCTURAL_KEYS.has(this.preAction);
+    const typingLike =
+      !structural &&
+      (this.inInput || this.preAction === 'Process' || this.preAction?.length === 1);
+    if (typingLike && now - this.lastPushTime < UNDO_COALESCE_MS) {
+      this.lastPushTime = now;
+      return;
+    }
+    this.undoStack.push({ ...this.lastState });
+    if (this.undoStack.length > UNDO_LIMIT) {
+      this.undoStack.shift();
+    }
+    // 结构性编辑单独成条：入栈后清零合并窗口，紧随其后的普通输入
+    // 独立成条，避免一次 Ctrl+Z 连结构编辑带后续输入一起回退；
+    // 普通输入入栈后维持窗口，继续合并后续连续输入
+    this.lastPushTime = structural ? 0 : now;
+  }
+
+  /**
+   * 只读同步当前编辑器纯文本与光标偏移到 lastState，作为下一次编辑
+   * 事务的"编辑前快照"。不做任何光标/DOM 副作用；光标不在编辑器内
+   * 时（理论上不会发生）偏移退化为文本末尾。文本未变时（如删除键的
+   * keydown 预处理、末尾回车）跳过克隆选区的测量开销，保留上次偏移。
+   */
+  private syncLastState(rawText?: string): void {
+    const editor = this.editor?.nativeElement;
+    if (!editor) {
+      return;
+    }
+    // 复用 emit 已读取的原始 innerText（含 \u200B），避免热点路径（每次
+    // 按键）重复读取；偏移换算与 saveCursorPosition 的 DOM 文本计数同口径
+    const innerText = rawText ?? editor.innerText;
+    const text = innerText.replaceAll('\u200B', '').replace(/\n$/, '');
+    if (!this.applyingHistory && text === this.lastState.text) {
+      return;
+    }
+    let raw = -1;
+    this.saveCursorPosition(editor, (o: number) => {
+      raw = o;
+    });
+    let offset = text.length;
+    if (raw >= 0) {
+      offset = 0;
+      const limit = Math.min(raw, innerText.length);
+      for (let i = 0; i < limit; i++) {
+        if (innerText[i] !== '\u200B') {
+          offset++;
+        }
+      }
+      offset = Math.min(offset, text.length);
+    }
+    this.lastState = { text, offset };
+  }
+
+  /**
+   * selectionchange 光标追踪：纯光标移动（无内容变化）时把换算后的
+   * 偏移同步到 lastState，使下一次编辑的撤销快照记录真实编辑前光标
+   * 位置。文本已变化（编辑尚未 emit）时跳过，交由 syncLastState 全量
+   * 同步，避免快照出现"旧文本+新光标"的错配。
+   */
+  private trackCursorOffset(editor: HTMLElement, raw: number): void {
+    if (this.applyingHistory || raw < 0) {
+      return;
+    }
+    const rawText = editor.innerText;
+    const text = rawText.replaceAll('\u200B', '').replace(/\n$/, '');
+    if (text !== this.lastState.text) {
+      return;
+    }
+    let offset = 0;
+    const limit = Math.min(raw, rawText.length);
+    for (let i = 0; i < limit; i++) {
+      if (rawText[i] !== '\u200B') {
+        offset++;
+      }
+    }
+    this.lastState.offset = Math.min(offset, text.length);
   }
 
   private scrollToVisibleArea(): void {
@@ -1615,6 +1859,16 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       });
       this.restoreCursorPosition(this.editor.nativeElement, charOffset);
     }
+
+    // 纯光标移动（无内容变化）时把换算后的偏移同步到 lastState，
+    // 使下一次编辑的撤销快照记录真实编辑前光标位置；文本已变化
+    // （编辑尚未 emit）时由 trackCursorOffset 内部跳过，交由
+    // syncLastState 全量同步
+    let rawOffset = -1;
+    this.saveCursorPosition(this.editor.nativeElement, (o: number) => {
+      rawOffset = o;
+    });
+    this.trackCursorOffset(this.editor.nativeElement, rawOffset);
   };
 
   applyStyle(content: string): string {
