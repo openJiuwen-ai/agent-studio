@@ -27,14 +27,12 @@ IntentDetection - 意图识别组件
 
 import ast
 import asyncio
-import copy
 import json
 import logging
 import os
 import re
 import time
 import traceback
-from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
@@ -253,21 +251,6 @@ class KnowledgeConfig:
     scope: str = "faq"
 
 
-class ExecutionStatus(str, Enum):
-    """执行状态枚举。"""
-
-    START = "START"
-    END = "END"
-    USER_INTERACT = "USER_INTERACT"
-
-
-@dataclass
-class IntentDetectionState:
-    """意图识别组件执行状态。"""
-
-    status: ExecutionStatus = ExecutionStatus.START
-
-
 # ==============================================================================
 # 工具函数
 # ==============================================================================
@@ -369,8 +352,6 @@ class IntentDetection(WorkflowComponent):
         self._init_lock: asyncio.Lock = asyncio.Lock()
         self.intent_config = IntentDetectionConfig(**self._get_config_info(conf))
         self.intent_config_retry = IntentDetectionConfig(**self._get_config_info(conf))
-        self.node_state = IntentDetectionState()
-        self.node_state_retry = IntentDetectionState()
         self.search = {}
         self.faq_config = conf.get("kg", {})
         self.get_kg_instance(self.faq_config)
@@ -387,26 +368,6 @@ class IntentDetection(WorkflowComponent):
             self.intent_config.default_class = CLASSIFICATION_DEAFULT_OLD
         self.mem_conf = conf.get("memory", {})
         self._router = BranchRouter()  # 分支路由器
-
-    # --------------------------------------------------------------------------
-    # 状态管理
-    # --------------------------------------------------------------------------
-
-    def reset(self) -> bool:
-        """重置组件状态。"""
-        self.intent_config = copy.deepcopy(self.intent_config_retry)
-        self.node_state = copy.deepcopy(self.node_state_retry)
-        if len(self.matching_items) == 0:
-            self.intent_config.default_class = CLASSIFICATION_DEAFULT_OLD
-        return True
-
-    def get_state(self) -> IntentDetectionState:
-        """获取当前执行状态。"""
-        return self.node_state
-
-    def load_state(self, state: IntentDetectionState) -> None:
-        """从输入状态恢复。"""
-        self.node_state = deepcopy(state)
 
     # --------------------------------------------------------------------------
     # 主入口
@@ -478,8 +439,6 @@ class IntentDetection(WorkflowComponent):
         # （component.py on_invoke），测试桩（非 Session/BaseSession）跳过。
         if isinstance(session, (Session, BaseSession)):
             self._router.set_session(session)
-        # node_state 为遗留接口（引擎不读写），入口重建复位避免跨执行残留。
-        self.node_state = IntentDetectionState()
 
         chat_history = self._get_chat_history(context, session)
         current_inputs = dict()
@@ -831,7 +790,7 @@ class IntentDetection(WorkflowComponent):
             resolve_trace_identity,
         )
 
-        return build_traced_model(
+        traced_model = build_traced_model(
             Model(
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
@@ -841,6 +800,13 @@ class IntentDetection(WorkflowComponent):
             # 业务 workflow_id 经 identity 附到独立/子 span（壳自身值优先）
             session_id=DEFINITION_SCOPED_SESSION_ID,
             identity=resolve_trace_identity(self, self._session),
+        )
+        # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token
+        # 由代理在每次调用时按当次请求注入（非 IR 策略原样返回）。
+        from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+        return bind_request_scoped_auth(
+            traced_model, llm_comp_config.model_client_config
         )
 
     async def get_llm_result(
@@ -962,7 +928,6 @@ class IntentDetection(WorkflowComponent):
             "type": "GLOBAL_INTENT",
             "intent": result,
         }
-        self.node_state.status = ExecutionStatus.USER_INTERACT
         session, _, _ = current_component_exec()
         return session.interact(interrupt_message)
 
@@ -972,7 +937,6 @@ class IntentDetection(WorkflowComponent):
             "type": "GLOBAL_INTENT",
             "intent": result,
         }
-        self.node_state.status = ExecutionStatus.USER_INTERACT
         session, _, _ = current_component_exec()
         return session.interact(interrupt_message)
 
@@ -1147,7 +1111,6 @@ class IntentDetection(WorkflowComponent):
                 classificationId=intent_id_name.get(CLASSIFICATION_ID, ""),
                 name=intent_id_name.get(CLASSIFICATION_NAME, ""),
             )
-        self.node_state.status = ExecutionStatus.END
         intent_id_name = self._get_intent_id_name(self.intent_config, intent_class)
         return dict(
             result=intent_class,

@@ -19,19 +19,18 @@
 2. 实例上不再挂执行期字段（`_session` / `conversation_id` /
    `few_shot_example`），辅助方法经 ContextVar / 参数取会话；
 3. 懒初始化双检加锁：并发首调只建一次 Model；
-4. node_state 为遗留接口，invoke 入口重建复位（上一执行残留不串入）。
+4. node_state / node_state_retry 为遗留死状态（引擎不读写），实例字段与
+   写入、reset/get_state/load_state 一并删除。
 """
 import asyncio
+import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from openjiuwen.core.session import execution_session_ctx as ctx
-from jiuwen.extension.workflow_node.intent_detection import (
-    ExecutionStatus,
-    IntentDetection,
-)
+from jiuwen.extension.workflow_node.intent_detection import IntentDetection
 
 
 def _conf() -> dict:
@@ -288,18 +287,23 @@ class TestIntentDetectionStateless:
         )
         assert comp._get_llm_instance.call_count == 1
 
-    @pytest.mark.asyncio
-    async def test_node_state_rebuilt_at_invoke_entry(self):
-        """invoke 入口重建 node_state：上一执行残留状态不串入本执行。"""
+    @staticmethod
+    def test_no_dead_node_state_instance_field():
+        """node_state / node_state_retry 为遗留死状态（引擎不读写），不再落实例。
+
+        旧实现仅在实例字段上记录 status，invoke 入口重建复位；引擎从不读取
+        该状态，属共享实例上的无意义执行期写入（违反「执行期状态不落实例」
+        契约），一并删除。
+        """
+        from jiuwen.extension.workflow_node.intent_detection import IntentDetection
+
+        src = inspect.getsource(IntentDetection)
+        assert "self.node_state" not in src
+        assert "node_state_retry" not in src
+
         comp = IntentDetection(_conf())
-        comp.node_state.status = ExecutionStatus.END  # 上一执行残留
-        # FAQ 命中路径提前返回、不写 node_state——只有入口重建才能回到 START
-        comp.intent_config.enable_knowledge = True
-        comp.get_faq_result = AsyncMock(return_value="分类1")
-
-        await comp.invoke({"input": "查天气"}, _mock_session(), MagicMock())
-
-        assert comp.node_state.status == ExecutionStatus.START
+        assert not hasattr(comp, "node_state")
+        assert not hasattr(comp, "node_state_retry")
 
     @staticmethod
     def test_global_intent_interrupt_reads_session_from_component_exec():
@@ -315,7 +319,6 @@ class TestIntentDetectionStateless:
             ctx.reset_component_exec(token)
 
         session.interact.assert_called_once()
-        assert comp.node_state.status == ExecutionStatus.USER_INTERACT
 
 
 class TestComponentExecSessionTypeContract:
