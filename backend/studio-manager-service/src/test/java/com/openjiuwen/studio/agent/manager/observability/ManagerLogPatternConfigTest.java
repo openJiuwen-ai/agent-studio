@@ -106,6 +106,17 @@ class ManagerLogPatternConfigTest {
         return null;
     }
 
+    private Element logger(Document doc, String name) {
+        NodeList list = doc.getElementsByTagName("Logger");
+        for (int i = 0; i < list.getLength(); i++) {
+            Element el = (Element) list.item(i);
+            if (name.equals(el.getAttribute("name"))) {
+                return el;
+            }
+        }
+        return null;
+    }
+
     private String appenderPattern(Document doc, String appenderName) {
         Element app = appender(doc, appenderName);
         if (app == null) {
@@ -175,6 +186,17 @@ class ManagerLogPatternConfigTest {
     @Test
     void performanceAppenderReferencesPerfPattern() throws Exception {
         assertThat(appenderPattern(loadXml(), "ROLLING_FILE_PERFORM")).isEqualTo("${PERF_LOG_PATTERN}");
+    }
+
+    @Test
+    void performanceLoggerReferencesAsyncPerfAppender() throws Exception {
+        Element logger = logger(loadXml(), "PERFORM_LOGGER");
+        assertThat(logger).as("PERFORM_LOGGER 须存在").isNotNull();
+        NodeList refs = logger.getElementsByTagName("AppenderRef");
+        assertThat(refs.getLength()).as("PERFORM_LOGGER 须引用唯一 appender").isEqualTo(1);
+        assertThat(((Element) refs.item(0)).getAttribute("ref"))
+            .as("PERFORM_LOGGER 须引用 ASYNC_ROLLING_FILE_PERFORM")
+            .isEqualTo("ASYNC_ROLLING_FILE_PERFORM");
     }
 
     @Test

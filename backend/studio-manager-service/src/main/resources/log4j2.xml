@@ -126,5 +126,10 @@
         <Logger name="AUDIT_LOGGER" level="info" additivity="false">
             <AppenderRef ref="ASYNC_ROLLING_FILE_TRACE"/>
         </Logger>
+
+        <!-- 性能日志 Logger，引用 ASYNC_ROLLING_FILE_PERFORM -->
+        <Logger name="PERFORM_LOGGER" level="info" additivity="false">
+            <AppenderRef ref="ASYNC_ROLLING_FILE_PERFORM"/>
+        </Logger>
     </Loggers>
 </Configuration>
