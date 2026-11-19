@@ -574,9 +574,16 @@ class InMemoryRedisPyStub:
         if count is None:
             if not container:
                 return None
-            return container.pop(0) if left else container.pop()
+            value = container.pop(0) if left else container.pop()
+            # 真实 Redis：列表弹空自动删 key（exists→0/type→none/scan 不可见），
+            # 与下方 count 分支及 srem/spop/ltrim 的空容器清理同口径
+            if not container:
+                self._delete_key(key)
+            return value
         if count >= 0:
-            popped = container[:count] if left else container[-count:][::-1]
+            # count=0：无副作用返回空列表。lpop 半边 [:0] 天然为空；rpop 半边
+            # [-0:] 会切片出整个列表（Python -0==0 陷阱），须显式按 lpop 口径归零
+            popped = container[:count] if left or count == 0 else container[-count:][::-1]
             if left:
                 del container[:count]
             elif count > 0:
