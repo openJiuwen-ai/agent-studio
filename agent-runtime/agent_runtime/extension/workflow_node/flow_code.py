@@ -8,6 +8,7 @@ FlowCode - 代码节点组件（基于 LocalCodeRunner，subprocess 执行）
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Optional, Union
 
@@ -247,6 +248,9 @@ class FlowCode(WorkflowComponent):
         super().__init__()
         self._conf: Optional[FlowCodeConfig] = None
         self._code_runner: Optional[CodeRunner] = None
+        # 懒初始化互斥：同步实现单事件循环内原子，但组件可能经线程池调用，
+        # check-then-act 无锁会重复创建 CodeRunner（与其余组件加锁口径一致）。
+        self._code_runner_lock = threading.Lock()
         if conf is not None:
             self._init_conf(conf)
 
@@ -426,6 +430,15 @@ class FlowCode(WorkflowComponent):
         return local_runner.create(code_op)
 
     def _ensure_code_runner(self):
+        """懒初始化 CodeRunner：双检加锁，并发（含跨线程）只创建一次。"""
+        if self._code_runner is not None:
+            return
+        with self._code_runner_lock:
+            if self._code_runner is not None:
+                return
+            self._create_code_runner()
+
+    def _create_code_runner(self):
         """Lazy-load CodeRunner instance using Runner pattern.
 
         Selects the appropriate CodeRunner based on exec_env configuration:
@@ -436,9 +449,6 @@ class FlowCode(WorkflowComponent):
         Raises:
             BuildError: SysOperation not found, sandbox not configured, or local exec disabled.
         """
-        if self._code_runner is not None:
-            return
-
         from agent_runtime.common.config import settings
 
         exec_env = self._conf.exec_env or "sandbox"
