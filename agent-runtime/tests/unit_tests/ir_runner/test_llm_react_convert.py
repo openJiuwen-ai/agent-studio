@@ -30,6 +30,9 @@ class TestConvertLlmReactNode:
         configs, node_id = _load_agent_configs()
 
         mock_llm_comp_config = MagicMock()
+        # 非 IR 策略：client config 不带请求级认证标记，模型不应被代理包装。
+        # （MagicMock 自动属性恒为真值，须显式置 False 才等价于真实非 IR 配置）
+        mock_llm_comp_config.model_client_config.request_scoped_auth = False
         mock_model = MagicMock()
         mock_provider = AsyncMock()
         mock_provider.get_llm_config = AsyncMock(return_value=mock_llm_comp_config)
