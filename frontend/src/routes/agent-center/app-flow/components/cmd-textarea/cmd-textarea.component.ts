@@ -382,7 +382,7 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     // 超过最大长度截断（粘贴会替换选区内容，需补回被替换长度）
     if (this.maxLength) {
       const leaveLength = Math.max(
-        this.maxLength - (current.length - (end - start)),
+        this.maxLength - (current.replace(/\n$/, '').length - (end - start)),
         0,
       );
       if (clipboardContent.length > leaveLength) {
