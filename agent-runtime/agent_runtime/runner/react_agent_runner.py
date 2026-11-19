@@ -290,9 +290,16 @@ class ReActAgentRunner:
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-        return Model(
-            model_client_config=llm_comp_config.model_client_config,
-            model_config=llm_comp_config.model_config,
+        from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+        # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token 由
+        # 代理在每次调用时按当次请求注入（非 IR 策略原样返回）。
+        return bind_request_scoped_auth(
+            Model(
+                model_client_config=llm_comp_config.model_client_config,
+                model_config=llm_comp_config.model_config,
+            ),
+            llm_comp_config.model_client_config,
         )
 
     def _convert_arguments_to_schema(self, arguments: list) -> dict:

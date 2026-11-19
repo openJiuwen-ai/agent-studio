@@ -164,12 +164,19 @@ class LLMChain(WorkflowComponent):
                 resolve_trace_identity,
             )
 
-            return build_traced_model(
+            traced_model = build_traced_model(
                 model,
                 session_id=DEFINITION_SCOPED_SESSION_ID,
                 # 静态图复用下实例不落 session（self._session 不再赋值），
                 # 执行期身份改从引擎 ContextVar 通道取（首调前入口已 set）
                 identity=resolve_trace_identity(self, current_component_exec()[0]),
+            )
+            # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token
+            # 由代理在每次调用时按当次请求注入（非 IR 策略原样返回）。
+            from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+            return bind_request_scoped_auth(
+                traced_model, llm_comp_config.model_client_config
             )
 
         except ValidationError as e:
