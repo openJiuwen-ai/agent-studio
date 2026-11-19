@@ -133,7 +133,8 @@ class TestRequestScopedAuthModel:
         }
         assert caller_headers == {"X-Auth-Id": "auth-1", "X-Auth-Token": "stale"}
 
-    def test_non_request_scoped_config_is_not_wrapped(self):
+    @staticmethod
+    def test_non_request_scoped_config_is_not_wrapped():
         """非 IR 策略（无标记）的模型原样返回，不改变既有行为。"""
         from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
 

@@ -1,5 +1,8 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# 本文件以白盒方式钉住懒初始化互斥语义：并发去重计数没有公开入口可观测，
+# 必须直接驱动受保护的懒初始化方法并读取受保护字段，故按测试需要直接访问。
+# pylint: disable=protected-access
 """FlowCode._ensure_code_runner 线程安全测试（issue #1705 / P2-1）。
 
 懒初始化 check-then-act 无互斥：单事件循环下同步实现原子，但若经线程池

@@ -295,8 +295,6 @@ class TestIntentDetectionStateless:
         该状态，属共享实例上的无意义执行期写入（违反「执行期状态不落实例」
         契约），一并删除。
         """
-        from jiuwen.extension.workflow_node.intent_detection import IntentDetection
-
         src = inspect.getsource(IntentDetection)
         assert "self.node_state" not in src
         assert "node_state_retry" not in src
