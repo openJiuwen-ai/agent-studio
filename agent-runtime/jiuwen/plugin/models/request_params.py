@@ -192,13 +192,6 @@ class RequestParamsCreator:
         auth_type = self._api_auth.get(constant.AUTH_SCOPE)
         if not auth_type:
             return
-        # 兜底：scope=SERVICE 但 auth_keys/headers/query 全空时不走解密路径
-        if (
-            not self._api_auth.get("auth_keys")
-            and not self._api_auth.get("headers")
-            and not self._api_auth.get("query")
-        ):
-            return
         auth_params = {}
         if auth_type == constant.AUTH_USER:
             runtime_auth = kwargs.get("runtime_auth", None)
@@ -210,6 +203,13 @@ class RequestParamsCreator:
                 return
             auth_params = self._get_user_auth_params(runtime_auth)
         if auth_type == constant.AUTH_SERVICE:
+            # 兜底：scope=SERVICE 但 auth_keys/headers/query 全空时不走解密路径
+            if (
+                not self._api_auth.get("auth_keys")
+                and not self._api_auth.get("headers")
+                and not self._api_auth.get("query")
+            ):
+                return
             try:
                 auth_params = ApiUtils.decrypt_service_auth(self._api_auth)
                 if not auth_params.get("headers") and not auth_params.get("query"):
