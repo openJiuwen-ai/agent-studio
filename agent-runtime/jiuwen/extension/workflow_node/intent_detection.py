@@ -840,7 +840,9 @@ class IntentDetection(WorkflowComponent):
             # conversation_id，后续执行都会错归属，故统一走定义级会话；
             # 业务 workflow_id 经 identity 附到独立/子 span（壳自身值优先）
             session_id=DEFINITION_SCOPED_SESSION_ID,
-            identity=resolve_trace_identity(self, self._session),
+            # 执行期 session 经引擎 ContextVar 通道读取（实例跨执行复用，不落实例），
+            # 与 llm_chain/questioner 同款；实例属性 _session 已随静态图复用重构移除
+            identity=resolve_trace_identity(self, current_component_exec()[0]),
         )
 
     async def get_llm_result(
