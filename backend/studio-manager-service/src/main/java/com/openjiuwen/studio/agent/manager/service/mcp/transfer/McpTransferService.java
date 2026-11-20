@@ -7,7 +7,7 @@ import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq;
-import com.openjiuwen.studio.agent.manager.dto.McpTransferFile;
+import com.openjiuwen.studio.agent.manager.dto.McpTransferLine;
 import com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp;
 import com.openjiuwen.studio.agent.manager.dto.McpTransferServiceDefinition;
 import com.openjiuwen.studio.agent.manager.entity.McpOperationEntity;
@@ -28,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -50,7 +49,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 public class McpTransferService {
 
     private static final Logger log = LoggerFactory.getLogger(McpTransferService.class);
-    private static final String NAME_SUFFIX = "-导入";
     private static final int NAME_MAX = 64;
 
     @Autowired
@@ -75,31 +73,29 @@ public class McpTransferService {
     private McpDeploymentAdapter deploymentAdapter;
 
     /**
-     * 导出：校验管理权限 → 读取定义与快照 → 解密 → 安全投影 → 二次扫描 → 单 JSON。
+     * 导出：校验管理权限 → 读取定义与快照 → 解密 → 安全投影 → 二次扫描 → JSONL（一个服务一行）。
      */
     public String exportServices(String projectId, String workspaceId, McpTransferExportReq req) {
         List<McpServiceEntity> entities = loadExportEntities(projectId, workspaceId, req);
         List<String> knownSecrets = new ArrayList<>();
 
-        McpTransferFile file = new McpTransferFile();
-        file.setFormat(McpTransferFile.FORMAT_VALUE);
-        file.setVersion(McpTransferFile.CURRENT_VERSION);
-        file.setExportedAt(Instant.now().toString());
-        List<McpTransferServiceDefinition> definitions = new ArrayList<>();
-
+        StringBuilder jsonl = new StringBuilder();
         for (McpServiceEntity entity : entities) {
-            definitions.add(projectForExport(entity, knownSecrets));
+            McpTransferLine line = new McpTransferLine();
+            line.setImportType(McpTransferLine.IMPORT_TYPE_VALUE);
+            line.setVersion(McpTransferLine.CURRENT_VERSION);
+            line.setPayload(projectForExport(entity, knownSecrets));
+            jsonl.append(McpJsonUtils.toJson(line)).append('\n');
         }
-        file.setServices(definitions);
 
-        String json = McpJsonUtils.toJson(file);
-        if (json.getBytes(StandardCharsets.UTF_8).length > McpTransferFile.MAX_FILE_BYTES) {
+        String content = jsonl.toString();
+        if (content.getBytes(StandardCharsets.UTF_8).length > McpTransferLine.MAX_FILE_BYTES) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID,
                 "export file exceeds 10 MiB limit; reduce selection");
         }
         // 已知凭据值二次扫描：命中即拒绝（L2 §2.3.1）
-        sanitizer.scanForKnownSecrets(json, knownSecrets);
-        return json;
+        sanitizer.scanForKnownSecrets(content, knownSecrets);
+        return content;
     }
 
     /**
@@ -186,14 +182,14 @@ public class McpTransferService {
                     "service_ids must be empty when selection is ALL");
             }
             List<McpServiceEntity> list = serviceDao.listMcpServiceByTenant(tenantId, workspaceId);
-            if (list.size() > McpTransferFile.MAX_SERVICES) {
+            if (list.size() > McpTransferLine.MAX_SERVICES) {
                 throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                     "workspace has more than 100 manageable services; select in batches");
             }
             return list;
         }
         List<String> ids = req.getServiceIds();
-        if (ids == null || ids.isEmpty() || ids.size() > McpTransferFile.MAX_SERVICES) {
+        if (ids == null || ids.isEmpty() || ids.size() > McpTransferLine.MAX_SERVICES) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                 "service_ids must contain 1 to 100 items for IDS selection");
         }
@@ -269,47 +265,59 @@ public class McpTransferService {
         }
     }
 
-    private List<McpTransferServiceDefinition> parseAndValidateFile(String fileContent) {
+    List<McpTransferServiceDefinition> parseAndValidateFile(String fileContent) {
         if (fileContent == null || fileContent.isBlank()) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID, "file is empty");
         }
-        byte[] bytes = fileContent.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length > McpTransferFile.MAX_FILE_BYTES) {
+        if (fileContent.getBytes(StandardCharsets.UTF_8).length > McpTransferLine.MAX_FILE_BYTES) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID, "file exceeds 10 MiB limit");
         }
-        McpTransferFile file;
-        try {
-            file = McpJsonUtils.fromJson(fileContent, McpTransferFile.class);
-        } catch (Exception e) {
-            throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID,
-                "file is not valid UTF-8 JSON");
-        }
-        if (file == null || !McpTransferFile.FORMAT_VALUE.equals(file.getFormat())) {
-            throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID,
-                "format field must be " + McpTransferFile.FORMAT_VALUE);
-        }
-        if (file.getVersion() == null || !file.getVersion().equals(McpTransferFile.CURRENT_VERSION)) {
-            throw new AgentStudioException(StudioError.MCP_TRANSFER_VERSION_UNSUPPORTED,
-                "version " + file.getVersion() + " is not supported");
-        }
-        List<McpTransferServiceDefinition> services = file.getServices();
-        if (services == null || services.isEmpty()) {
-            throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID, "services array is empty");
-        }
-        if (services.size() > McpTransferFile.MAX_SERVICES) {
-            throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
-                "services array exceeds 100 items");
-        }
-        for (int i = 0; i < services.size(); i++) {
-            McpTransferServiceDefinition def = services.get(i);
-            validateDefinition(def, i);
+        // JSONL：一个服务一行；跳过空行（与插件/工作流导入同口径）
+        String[] rawLines = fileContent.split("\\r?\\n", -1);
+        List<McpTransferServiceDefinition> definitions = new ArrayList<>();
+        for (int i = 0; i < rawLines.length; i++) {
+            String raw = rawLines[i].trim();
+            if (raw.isEmpty()) {
+                continue;
+            }
+            int lineNo = i + 1;
+            McpTransferLine line;
+            try {
+                line = McpJsonUtils.fromJson(raw, McpTransferLine.class);
+            } catch (Exception e) {
+                throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID,
+                    "line " + lineNo + " is not valid JSON");
+            }
+            if (line == null || !McpTransferLine.IMPORT_TYPE_VALUE.equals(line.getImportType())) {
+                throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID,
+                    "line " + lineNo + ": import_type must be " + McpTransferLine.IMPORT_TYPE_VALUE);
+            }
+            if (line.getVersion() == null || !line.getVersion().equals(McpTransferLine.CURRENT_VERSION)) {
+                throw new AgentStudioException(StudioError.MCP_TRANSFER_VERSION_UNSUPPORTED,
+                    "line " + lineNo + ": version " + line.getVersion() + " is not supported");
+            }
+            McpTransferServiceDefinition def = line.getPayload();
+            if (def == null) {
+                throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
+                    "line " + lineNo + ": payload is missing");
+            }
+            validateDefinition(def, lineNo);
             sanitizer.validateImportSafety(def);
+            definitions.add(def);
         }
-        return services;
+        if (definitions.isEmpty()) {
+            throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
+                "no service lines in file");
+        }
+        if (definitions.size() > McpTransferLine.MAX_SERVICES) {
+            throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
+                "file exceeds " + McpTransferLine.MAX_SERVICES + " service lines");
+        }
+        return definitions;
     }
 
-    private void validateDefinition(McpTransferServiceDefinition def, int index) {
-        String at = "services[" + index + "]";
+    private void validateDefinition(McpTransferServiceDefinition def, int lineNo) {
+        String at = "line " + lineNo;
         if (StringUtils.isBlank(def.getName()) || def.getName().length() < 2 || def.getName().length() > NAME_MAX) {
             throw fieldInvalid(at + ".name must be 2-64 characters");
         }
@@ -341,9 +349,9 @@ public class McpTransferService {
         String projectId, String workspaceId, Set<String> usedNames) {
         McpServiceEntity entity = new McpServiceEntity();
         entity.setId(CommonUtil.getUUID());
-        entity.setName(allocateName(def.getName(), usedNames, NAME_SUFFIX));
+        entity.setName(allocateName(def.getName(), usedNames));
         entity.setNameEn(StringUtils.isBlank(def.getNameEn()) ? null
-            : allocateName(def.getNameEn(), usedNames, "-import"));
+            : allocateName(def.getNameEn(), usedNames));
         entity.setDescription(def.getDescription());
         entity.setDescriptionEn(def.getDescriptionEn());
         entity.setOrgType(normalizeOrgType(def.getOrgType()));
@@ -375,19 +383,19 @@ public class McpTransferService {
     }
 
     /**
-     * 名称避让：先截断基础名称保留完整后缀，-导入/-导入-2 递增直到唯一。
+     * 名称避让（2026-11-21 用户裁定：纯数字后缀，不带"导入"字样）：
+     * 原名未被占用时直接沿用；冲突时追加 -1、-2 递增直到唯一。
+     * 先截断基础名称保留完整数字后缀（name 列 64 上限）；大小写不敏感。
      */
-    static String allocateName(String base, Set<String> used, String suffix) {
-        String truncated = base.length() > NAME_MAX - suffix.length()
-            ? base.substring(0, NAME_MAX - suffix.length()) : base;
-        String candidate = truncated + suffix;
-        int n = 2;
+    static String allocateName(String base, Set<String> used) {
+        String candidate = base;
+        int n = 0;
         while (used.contains(candidate.toLowerCase())) {
-            String nSuffix = suffix + "-" + n;
-            String t = base.length() > NAME_MAX - nSuffix.length()
-                ? base.substring(0, NAME_MAX - nSuffix.length()) : base;
-            candidate = t + nSuffix;
             n++;
+            String nSuffix = "-" + n;
+            String truncated = base.length() > NAME_MAX - nSuffix.length()
+                ? base.substring(0, NAME_MAX - nSuffix.length()) : base;
+            candidate = truncated + nSuffix;
         }
         used.add(candidate.toLowerCase());
         return candidate;

@@ -164,6 +164,10 @@ public class McpOperationService {
                     log.error("reload execution failed. operation={}", operationId, t);
                     failItem(operation, item, safeCode(t), safeReason(t));
                 } finally {
+                    // 受理时已 claim 的活动操作声明，无论成功/失败/异常都要释放
+                    // （成功路径 commitToolSnapshot 已顺带置 NULL，此处幂等兜底；
+                    //   失败路径若不释放，终态 FAILED 不在超时回收范围，该服务将被永久 409 锁死）
+                    operationDao.releaseOperationOnService(item.getServiceId(), operation.getId());
                     clearContext();
                 }
             });

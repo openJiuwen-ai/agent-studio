@@ -59,6 +59,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -638,12 +639,12 @@ public interface McpServiceManagerApi {
         + " selection=IDS 时 service_ids 必填（1~100 去重）；selection=ALL 表示当前工作空间全部可管理实例。",
         tags = {"McpServiceManager"})
     @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "迁移文件 JSON", response = String.class),
+        @ApiResponse(code = 200, message = "迁移文件 JSONL 下载（一个服务一行）", response = Resource.class),
         @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class)
     })
-    @RequestMapping(value = "/v1/{project_id}/mcp/service/export", produces = {"application/json"},
+    @RequestMapping(value = "/v1/{project_id}/mcp/service/export", produces = {"application/x-ndjson"},
         consumes = {"application/json"}, method = RequestMethod.POST)
-    ResponseEntity<String> exportMcpServices(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+    ResponseEntity<Resource> exportMcpServices(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
         @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
         @PathVariable("project_id") String projectId,
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)

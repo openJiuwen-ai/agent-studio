@@ -4784,7 +4784,7 @@ public enum StudioError {
     /**
      * MCP迁移文件格式非法（非JSON根对象/重复键/深度超限等结构级错误）
      */
-    MCP_TRANSFER_FORMAT_INVALID(BAD_REQUEST, COMPONENT, "1183"),
+    MCP_TRANSFER_FORMAT_INVALID(BAD_REQUEST, COMPONENT, "1191"),
 
     /**
      * MCP迁移文件字段非法（缺必填/枚举不符/名称不合法/交叉校验失败）

@@ -54,8 +54,10 @@ public class McpToolSnapshotService {
     @Autowired
     private McpServiceMapper serviceMapper;
 
-    @Autowired
-    private McpOperationService operationService;
+    /** 通过 ApplicationContext 延迟获取，规避 McpOperationService ↔ McpToolSnapshotService 循环 */
+    private McpOperationService getOperationService() {
+        return applicationContext.getBean(McpOperationService.class);
+    }
 
     /**
      * 拉取工具（typed 结果）。复用既有 getMcpServiceToolList 连接链路：
@@ -110,13 +112,13 @@ public class McpToolSnapshotService {
         McpServiceEntity entity = serviceDao.getMcpServiceById(item.getServiceId(), operation.getTenantId(),
             null, operation.getProjectId(), operation.getWorkspaceId());
         if (entity == null) {
-            operationService.failItem(operation, item, StudioError.MCP_SERVICE_NOT_EXIST.getCode(),
+            getOperationService().failItem(operation, item, StudioError.MCP_SERVICE_NOT_EXIST.getCode(),
                 "service not found or not in scope");
             return;
         }
         if (entity.getActiveMcpOperationId() != null
             && !operation.getId().equals(entity.getActiveMcpOperationId())) {
-            operationService.failItem(operation, item, StudioError.MCP_OPERATION_CONFLICT.getCode(),
+            getOperationService().failItem(operation, item, StudioError.MCP_OPERATION_CONFLICT.getCode(),
                 "another operation is active");
             return;
         }
@@ -126,7 +128,7 @@ public class McpToolSnapshotService {
 
         if (!result.success()) {
             // 失败路径：不写 tools/server_config/fc_instance_status/fail_reason（L2 §3.4）
-            operationService.failItem(operation, item, result.errorCode(), result.safeReason());
+            getOperationService().failItem(operation, item, result.errorCode(), result.safeReason());
             return;
         }
 
@@ -138,7 +140,7 @@ public class McpToolSnapshotService {
             operation.getProjectId(), operation.getWorkspaceId(), operation.getId(), expectedRevision, toolsJson);
         if (updated != 1) {
             // 0=被删除/配置冲突/任务已过期/操作所有权丢失（L2 §5.5）
-            operationService.failItem(operation, item, StudioError.MCP_OPERATION_CONFLICT.getCode(),
+            getOperationService().failItem(operation, item, StudioError.MCP_OPERATION_CONFLICT.getCode(),
                 "snapshot commit failed ownership check; original data preserved");
             return;
         }
@@ -152,7 +154,7 @@ public class McpToolSnapshotService {
         item.setFinishedDate(new Timestamp(System.currentTimeMillis()));
         // finishOperationItem 由 operationService.succeedItem 完成（含汇总）
         item.setResultJson(toJson(diff));
-        operationService.succeedItemRaw(operation, item);
+        getOperationService().succeedItemRaw(operation, item);
     }
 
     /**

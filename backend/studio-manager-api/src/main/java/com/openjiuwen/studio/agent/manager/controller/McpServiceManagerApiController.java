@@ -202,13 +202,16 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     }
 
     @Override
-    public ResponseEntity<String> exportMcpServices(String projectId, String workspaceId,
-        com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body) {
-        String json = mcpServiceManagerService.exportMcpServices(projectId, workspaceId, body);
-        return ResponseEntity.ok()
-            .header("Content-Type", "application/json; charset=UTF-8")
-            .header("Content-Disposition", "attachment; filename=mcp-services-transfer.json")
-            .body(json);
+    public ResponseEntity<org.springframework.core.io.Resource> exportMcpServices(String projectId,
+        String workspaceId, com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body) {
+        String jsonl = mcpServiceManagerService.exportMcpServices(projectId, workspaceId, body);
+        byte[] bytes = jsonl.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ResponseModel.TransferResource resource =
+            new ResponseModel.TransferResource(new java.io.ByteArrayInputStream(bytes));
+        resource.setFilename("mcp-services.jsonl");
+        resource.setContentType("application/x-ndjson");
+        resource.setLength((long) bytes.length);
+        return ResponseModel.successDownload(resource);
     }
 
     @Override

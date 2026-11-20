@@ -792,8 +792,8 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
                 return;
               }
               CommonUtils.downloadFile(
-                new Blob([res], { type: 'application/json' }),
-                `mcp-services-${this.commonLogic.getFormattedDateTime()}.json`,
+                new Blob([res], { type: 'application/x-ndjson' }),
+                `mcp-services-${this.commonLogic.getFormattedDateTime()}.jsonl`,
                 true,
               );
             })
@@ -819,7 +819,7 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   public importMcp() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json';
+    input.accept = '.jsonl';
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) {
