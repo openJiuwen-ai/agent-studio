@@ -27,7 +27,7 @@ studio-db-ext/
   mapper/                           # 可选：databaseId=sqlserver 的外部 Mapper XML
     AgentMapperSqlServer.xml        # 例：FROM_UNIXTIME → DATEADD
     McpServerRatingMapperSqlServer.xml       # 必做：评分 upsert → MERGE
-    PeEvaluationTaskMapperSqlServer.xml      # 必做：评估结果批量 upsert → MERGE
+    PeEvaluationTaskMapperSqlServer.xml      # 必做：评估批量 MERGE + queryByTaskIdAndStatus 单引号
   classes/                          # javac 输出（打 jar 前把 mapper 拷到 classes/ext-mapper/）
   ext/
     studio-db-ext.jar               # 打好的扩展包（运行时进 loader.path）
@@ -66,8 +66,9 @@ studio-db-ext/
 业务 REST 不用改；改的是**部署与扩展包**。
 
 > Interceptor 适合改 **已变成 `?` 之后**仍可识别的碎片：LIMIT / 布尔 / 反引号 / `UUID()` / `NOW()` 等。  
-> **`ON DUPLICATE KEY UPDATE`、`FROM_UNIXTIME` 等整段重写必须用外部 Mapper**（步骤 3.6）。  
+> **`ON DUPLICATE KEY UPDATE`、`FROM_UNIXTIME`、双引号字符串字面量等必须用外部 Mapper**（步骤 3.6）。  
 > 原因：`StatementHandler.prepare` 时 `BoundSql` 里已是 `?`，ParameterMapping 已固定；若在 Interceptor 里再写回 `#{serverId}` 之类，会当字面量发出且参数个数对不上，必然失败。  
+> 双引号不要在 Interceptor 里全局 `"…"`→`'…'`：SQL Server 默认 `QUOTED_IDENTIFIER=ON` 时双引号本就是合法标识符，盲改会误伤。  
 > 裸 MySQL `SELECT ... FOR UPDATE` 也不要指望 Interceptor 自动改；定时任务锁走 Quartz `MSSQLDelegate`。
 
 ---
@@ -527,7 +528,7 @@ com.openjiuwen.studio.ext.ExtDbAutoConfiguration
 
 ### 步骤 3.6 外部 Mapper（处理 Interceptor 不好改的整段 SQL）
 
-Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整段 upsert），用**同 namespace、同 id、带 `databaseId="sqlserver"`** 的外部语句。MyBatis 按语句的 **`databaseId` 属性**选型，不是靠「路径靠前覆盖 SQL 文本」。
+Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整段 upsert、MySQL 风格双引号字符串），用**同 namespace、同 id、带 `databaseId="sqlserver"`** 的外部语句。MyBatis 按语句的 **`databaseId` 属性**选型，不是靠「路径靠前覆盖 SQL 文本」。
 
 1. 在 `studio-db-ext/mapper/` 新建例如 `AgentMapperSqlServer.xml`（核心是把 `FROM_UNIXTIME(updated_at/1000)` 写成 `DATEADD(...)`）：
 
@@ -591,13 +592,24 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 </mapper>
 ```
 
-**(b) 评估结果批量** — `mapper/PeEvaluationTaskMapperSqlServer.xml`（形态示例；字段/typeHandler 请对照产品内置补齐）：
+**(b) 评估任务** — `mapper/PeEvaluationTaskMapperSqlServer.xml`（形态示例；字段/typeHandler 请对照产品内置补齐）。  
+同一文件须覆盖两处：批量 upsert（MERGE）**以及** `queryByTaskIdAndStatus`（内置用双引号字符串，SQL Server 会当标识符）：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.openjiuwen.studio.prompt.engineering.mapper.PeEvaluationTaskMapper">
+  <!-- 内置：status in ("pending", …)；QUOTED_IDENTIFIER=ON 下会 Invalid column name -->
+  <select id="queryByTaskIdAndStatus" databaseId="sqlserver"
+          resultMap="EvaluationTaskBaseMap">
+    SELECT *
+    FROM t_pe_evaluation_task
+    WHERE task_id = #{taskId}
+      AND status IN ('pending', 'running', 'pausing', 'retrying')
+      AND workspace_id = #{workspaceId}
+  </select>
+
   <insert id="batchInsertEvalResult" databaseId="sqlserver">
     MERGE INTO t_pe_evaluation_result AS target
     USING (
@@ -630,9 +642,12 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 </mapper>
 ```
 
-> SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，若新增语句须同样补外部 Mapper。  
+> SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，以及 `in ("…")` / `= "…"` 这类双引号字面量；若新增语句须同样补外部 Mapper。  
 >
-> **批量上限**：`USING (VALUES …)` 单语句最多 **1000** 行（错误 10738）。产品 `batchInsertEvalResult` 调用方未分批；提示词/结果很多时，请在业务侧分批调用、改为临时表+`MERGE`，或在外部 Mapper 文档中写明「单次 ≤1000，超出必失败」。
+> **批量上限**：`USING (VALUES …)` 单语句最多 **1000** 行（错误 10738）。产品 `batchInsertEvalResult` 调用方未分批；提示词/结果很多时，请在业务侧分批调用、改为临时表+`MERGE`，或在外部 Mapper 文档中写明「单次 ≤1000，超出必失败」。  
+>
+> **双引号字符串**：不要在 `rewrite()` 里全局替换。SQL Server JDBC 默认 `QUOTED_IDENTIFIER=ON`，双引号是标识符；仓内已知必炸点是 `PeEvaluationTaskMapper.queryByTaskIdAndStatus`（见上）。升级后可用  
+> `rg 'in\s*\(\s*"|=\s*"[a-zA-Z]' --glob '*Mapper*.xml'` 再扫一遍。
 
 3. **`mapper-locations` 与加载语义**（易误解，请按此理解）：
 
@@ -1040,6 +1055,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | 驱动已是目标库但 URL 仍是 mariadb/mysql | 同时覆盖 `SPRING_DATASOURCE_URL` 与 `spring_datasource_url`（及 username/password/driver 大小写两套） |
 | 列表空 / 导出读文件 500 | 先查 §9「数据准备」：workspace 状态、种子数据、`dsl_path` 是否指向真实文件 |
 | `Invalid column name 'false'` | Interceptor 未加载或未改写布尔；查日志是否有 `[VendorSqlRewrite]` |
+| `Invalid column name 'pending'`（或 `running` / `pausing` / `retrying`） | 内置 `queryByTaskIdAndStatus` 用了双引号字符串；SQL Server 当标识符。补 `PeEvaluationTaskMapperSqlServer.xml` 中 `databaseId="sqlserver"` 且改为单引号的同 id 语句（步骤 3.6）；**不要**在 Interceptor 全局改双引号 |
 | 可空 `deleted` 行丢失 | 勿用 `<> 1` 替代 `IS NOT true`；确认 `ISNULL(col,0)<>1` 或外部 Mapper 的 `(col IS NULL OR col=0)` |
 | 评估批量 MERGE 报 10738 | VALUES 单批 >1000；业务分批或改临时表方案 |
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
