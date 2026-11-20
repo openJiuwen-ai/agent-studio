@@ -17,7 +17,8 @@ from typing import AsyncIterator, Dict, List, Optional, Union
 from agent_runtime.common.kb_config_providers import OBSKnowledgeBaseConfigProvider
 import logging
 
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
 from agent_runtime.extension.workflow_node.kb_adapter.base import clamp_threshold
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
@@ -291,8 +292,10 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
 
     async def _cache_redis(self, key: str, value: str, ttl_seconds: int) -> None:
         try:
-            redis_client = get_redis_client()
-            await redis_client.set(key, value, ex=ttl_seconds)
+            redis_client = accessor.get_redis()
+            await redis_client.set(
+                key, value, duration=Duration.seconds(ttl_seconds)
+            )
         except Exception as e:
             workflow_logger.warning("FlowKnowledgeRetrieval failed to cache redis key=%s: %s", key, e)
 

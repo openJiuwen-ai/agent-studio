@@ -33,13 +33,48 @@ logger = logging.getLogger("agent_builder.server_fastapi")
 apps_map = [builder_router, model_service_router, prompt_manage_app]
 
 
+async def _init_redis_provider() -> None:
+    """装配 Redis Provider（缺省 native=行为不变；企业设 REDIS_PROVIDER 切换）。
+
+    装配含 ping fail-fast；成功后 common_utils 委托层自动切换：
+    异步面（history 存储 SPI 直调）与同步面（get_sync_client 返回同步兼容桥）。
+    适配层包未安装（独立环境）时回退 legacy 客户端；**装配失败则 fail-fast
+    终止启动**——history 异步存储直调 accessor，半可用状态（同步通/异步永久
+    RedisConfigError）是慢性隐蔽故障，显式失败交由进程重启自愈更可运维
+    （与 runtime server lifespan 行为一致）。
+    """
+    try:
+        from common_utils.redis_provider_bootstrap import init_redis_provider
+    except ImportError:
+        logger.warning(
+            "redis adapter packages not installed, fallback to legacy redis client"
+        )
+        return
+    client = await init_redis_provider()
+    if client is None:
+        # Redis 未配置（REDIS_HOST/CLUSTER_NODES 全空）：维持 legacy 行为
+        logger.warning("Redis not configured, provider not initialized")
+        return
+    logger.info("Redis provider initialized (delegation active)")
+
+
 async def _ping_redis() -> None:
     """Best-effort Redis ping at startup (fail-fast on misconfig).
 
     n2l history.py creates its client lazily from the same config_bridge
     settings; this only validates config at boot. Warn-and-continue on failure.
+    Provider 已装配时装配期已 ping fail-fast，直接确认不再重复探活。
     """
     try:
+        try:
+            from redis_spi import accessor
+
+            if accessor.is_initialized():
+                logger.info("Redis connection check passed (provider assembled)")
+                return
+        except ImportError:
+            pass
+
         from common_utils.redis_manager import RedisClientManager
 
         mgr = RedisClientManager.get_instance()
@@ -154,6 +189,9 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     from agent_builder.adapter.llm_bridge import set_main_loop
     set_main_loop(asyncio.get_running_loop())
 
+    # Redis Provider 装配（缺省 native；成功后委托层异步/同步面自动切换）
+    await _init_redis_provider()
+
     await _init_prompt_store()
     await _ping_redis()
     await _init_s3_storage()
@@ -162,6 +200,14 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     try:
         yield
     finally:
+        # 优雅关闭 Redis：同步兼容桥（专用循环+连接池）与 Provider/legacy 客户端
+        # （测试/集成环境反复启停时防泄漏；一次性进程由 daemon 线程兜底）
+        try:
+            from common_utils.redis_manager import RedisClientManager
+
+            await RedisClientManager.get_instance().close()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Redis client close failed (non-critical): {e}")
         try:
             import storage
 

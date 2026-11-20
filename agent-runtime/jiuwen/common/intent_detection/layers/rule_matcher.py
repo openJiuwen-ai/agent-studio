@@ -14,11 +14,11 @@ from jiuwen.common.intent_detection.layers.base import (
 )
 from jiuwen.common.intent_detection.utils.tokenizer import JiebaTokenizerPool
 from jiuwen.common.log.base import logger
-from jiuwen.common.store.async_redis import get_async_redis_instance
 from jiuwen.common.utils.utils import safe_json_loads
 from jiuwen.orchestration.common.perf_log import wf_performance_buffer
 from jiuwen.serve.controllers.execution.open_utils import cache_intent_rule_queue
 from pydantic import BaseModel, Field
+from redis_spi import accessor
 
 # adapt 结果字段
 ADAPT_INTENT_TYPE = "intent_type"
@@ -45,7 +45,6 @@ class RuleMatcher(BaseMatcher):
     """
 
     name = "rule"
-    redis_instance = None
 
     def __init__(self, config: RuleMatcherConfig):
         """
@@ -57,10 +56,10 @@ class RuleMatcher(BaseMatcher):
         self.config = config
         self.rule_retrival_config = self._get_rule_retrival_config(config)
         self.tokenizer_config = config.tokenizer_config
-        # 懒加载 Redis 客户端（只在首次创建 RuleMatcher 时初始化）
-        if RuleMatcher.redis_instance is None:
-            RuleMatcher.redis_instance = get_async_redis_instance()
-        self.redis_client = RuleMatcher.redis_instance
+        # Redis 经 redis_spi accessor（server lifespan 装配）。迁移自 jiuwen 老
+        # store（DATASOURCE_REDIS_* 独立配置面，未配置环境必失败）；accessor 单例
+        # 即连接复用，无需类级缓存。
+        self.redis_client = accessor.get_redis()
         self.tokenizer = JiebaTokenizerPool.get_instance().get_tokenizer()  # 分词器实例
         self.engine = None  # 全局引擎（不指定domain时使用）
         self._engine_initialized = False  # 全局引擎是否已初始化
@@ -221,8 +220,7 @@ class RuleMatcher(BaseMatcher):
             simple_log="no cached rule",
         )
 
-        redis_client = self.redis_client.get_redis_client()
-        raw_rules = await redis_client.hgetall(self.rules_key)
+        raw_rules = await self.redis_client.hgetall(self.rules_key)
         rules = {}
 
         for k, v in raw_rules.items():
@@ -265,7 +263,6 @@ class RuleMatcher(BaseMatcher):
             dict: 该domain下的规则
         """
         load_rule_start = time.perf_counter()
-        redis_client = self.redis_client.get_redis_client()
         domain_key = self._get_domain_rules_key(domain)
         cache_rule = await cache_intent_rule_queue.aget(domain_key)
         if cache_rule:
@@ -281,7 +278,7 @@ class RuleMatcher(BaseMatcher):
             f"no cached rule for domain key :{domain_key}", simple_log="no cached rule"
         )
         # 获取该domain下的所有规则
-        raw_rules = await redis_client.hgetall(domain_key)
+        raw_rules = await self.redis_client.hgetall(domain_key)
         rules = {}
 
         for k, v in raw_rules.items():
