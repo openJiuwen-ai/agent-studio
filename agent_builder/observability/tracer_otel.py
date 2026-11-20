@@ -39,6 +39,13 @@ def setup_otel_tracer() -> None:
 
     Idempotent. When ``OTEL_ENABLED`` is false, logs and returns without
     installing a provider.
+
+    Prefers openjiuwen handlers when available, but **always** installs a
+    global TracerProvider via the raw SDK as well: FastAPI's HTTP span
+    middleware uses ``opentelemetry.trace.get_tracer``, while openjiuwen's
+    ``init_otel_tracer`` deliberately does not call ``set_tracer_provider``.
+    Without the raw-SDK step, #1655 builder HTTP spans stay on the default
+    no-op provider and never reach Jaeger.
     """
     global _INITIALIZED
     if _INITIALIZED:
@@ -51,9 +58,9 @@ def setup_otel_tracer() -> None:
         return
 
     try:
-        if _try_setup_openjiuwen(otel):
-            _INITIALIZED = True
-            return
+        # Best-effort engine handlers (agent/workflow spans). Failure falls
+        # through; HTTP still needs the global provider below.
+        _try_setup_openjiuwen(otel)
         _setup_raw_sdk(otel)
         _INITIALIZED = True
     except Exception as exc:  # noqa: BLE001 — startup must not crash on OTel

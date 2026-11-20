@@ -32,7 +32,8 @@ class PerformanceLoggingFilterTest {
         HttpServletResponse response = mock(HttpServletResponse.class);
         FilterChain chain = mock(FilterChain.class);
         when(request.getRequestURI()).thenReturn("/v1/0/agent-manager/agents");
-        when(request.getQueryString()).thenReturn("workspace_id=ws1");
+        // Sensitive query must not be required for logging; Filter omits query string.
+        when(request.getQueryString()).thenReturn("token=secret&password=p");
         when(request.getMethod()).thenReturn("POST");
         when(response.getStatus()).thenReturn(400);
 

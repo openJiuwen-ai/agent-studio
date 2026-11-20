@@ -134,6 +134,30 @@ def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
             sys.modules.pop(name, None)
 
 
+def test_openjiuwen_success_still_installs_global_provider(monkeypatch):
+    """openjiuwen handlers ok → raw SDK still runs for HTTP get_tracer (#1655)."""
+    tracer_otel_mod.reset_otel_tracer_for_tests()
+
+    def _enabled_otel():
+        return _fake_otel(enabled=True, service_name="agent-builder")
+
+    def _openjiuwen_ok(_otel):
+        return True
+
+    raw_calls = []
+
+    def _record_raw_sdk(otel):
+        raw_calls.append(otel.service_name)
+
+    monkeypatch.setattr(tracer_otel_mod, "_otel_settings", _enabled_otel)
+    monkeypatch.setattr(tracer_otel_mod, "_try_setup_openjiuwen", _openjiuwen_ok)
+    monkeypatch.setattr(tracer_otel_mod, "_setup_raw_sdk", _record_raw_sdk)
+
+    tracer_otel_mod.setup_otel_tracer()
+    assert raw_calls == ["agent-builder"]
+    assert tracer_otel_mod.is_otel_tracer_initialized() is True
+
+
 def test_setup_raw_sdk_records_span(monkeypatch):
     tracer_otel_mod.reset_otel_tracer_for_tests()
 

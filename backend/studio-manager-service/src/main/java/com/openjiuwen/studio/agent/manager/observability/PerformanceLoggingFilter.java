@@ -22,6 +22,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * {@code http_request|METHOD|URI|status|durationMs}。须注册在
  * {@link CorrelationContextFilter} 内侧，以便带上 MDC 四 key。
  *
+ * <p>只记 {@link HttpServletRequest#getRequestURI()}，不拼接 query string：
+ * nginx access log 已对 password/token/key 等查询参数打码，原样写入会让敏感值在
+ * manager 本地 {@code perform.log} 明文落盘（Vector redact 只保护转发链路）。
+ *
  * <p>#1654 / #1723：补齐死 appender 的业务写入侧。
  */
 public class PerformanceLoggingFilter extends OncePerRequestFilter {
@@ -40,11 +44,9 @@ public class PerformanceLoggingFilter extends OncePerRequestFilter {
         } finally {
             if (shouldLog(request)) {
                 long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
-                String uri = request.getRequestURI();
-                String query = request.getQueryString();
-                String path = query == null || query.isEmpty() ? uri : uri + "?" + query;
+                // Path only — omit query string to avoid secrets in perform.log.
                 PERFORM_LOGGER.info("http_request|{}|{}|{}|{}",
-                    request.getMethod(), path, response.getStatus(), durationMs);
+                    request.getMethod(), request.getRequestURI(), response.getStatus(), durationMs);
             }
         }
     }
