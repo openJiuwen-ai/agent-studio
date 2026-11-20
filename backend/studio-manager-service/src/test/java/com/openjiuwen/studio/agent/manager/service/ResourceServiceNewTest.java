@@ -120,6 +120,27 @@ class ResourceServiceNewTest {
     }
 
     @Test
+    void testValidResourceExist_Skill_Present_NoThrow() {
+        // 契约（issue #1734）：searchBySkillIds 返回的 Skill（含未上架）视为存在，validResourceExist 不抛错。
+        // 防止在 service 层把"未上架=published_asset==0"误判为不存在（存在性校验不得混入广场可见性语义）。
+        SkillDetails skill = new SkillDetails();
+        skill.setSkillId("skill-1");
+        when(skillMapper.searchBySkillIds(List.of("skill-1"))).thenReturn(List.of(skill));
+
+        resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1");
+    }
+
+    @Test
+    void testValidResourceExist_Skill_Missing_Throws() {
+        // 契约（issue #1734）：资源确实查不到时才抛 RESOURCE_NOT_EXISTS（非"未上架"误报）。
+        when(skillMapper.searchBySkillIds(List.of("skill-1"))).thenReturn(Collections.emptyList());
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1"));
+        assertEquals(StudioError.RESOURCE_NOT_EXISTS, ex.getErrorCode());
+    }
+
+    @Test
     void testGetResourceMeta_AgentType() {
         Agent agent = new Agent();
         agent.setAgentId("agent-1");

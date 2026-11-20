@@ -215,7 +215,9 @@
         <if test="skillIds == null or skillIds.size() == 0">
             1=0
         </if>
-        AND t_skill.published_asset = '1'
+        <!-- 通用批量查询：按 skill_id 查存在性/详情，不过滤 published_asset。
+             广场可见性由 search/countSelectedSkills 负责；此处过滤会把未上架 Skill 误判为不存在，
+             致 validResourceExist 误报 RESOURCE_NOT_EXISTS（issue #1734）。请勿再加 published_asset 过滤。 -->
     </select>
     <select id="searchBySkillIdAndDomainId" resultMap="SearchResultMap">
         SELECT
