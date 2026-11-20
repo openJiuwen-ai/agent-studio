@@ -243,6 +243,7 @@ public interface AgentRuntimeClient {
         @PathVariable("short_code") String shortCode,
         @RequestParam("workspace_id") String workspaceId, @RequestHeader("stream") Boolean stream,
         @RequestParam(value = "environment_id", required = false) String environmentId,
+        @RequestParam(value = "conversation_id", required = false) String conversationId,
         @RequestBody AgentRunReq body);
 
     @DeleteMapping(value = "/v1/{project_id}/agent-runtime/resource/{resource_id}/clear")

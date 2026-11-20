@@ -798,11 +798,31 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
         assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-owner&environment_id=env-default",
+            urlCaptor.getValue());
+        verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue("proj-1");
+    }
+
+    @Test
+    void testRunWebAgent_StreamWithConversationId() {
+        when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+            eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
+        EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+        env.setId("env-default");
+        when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
+
+        AgentServiceProxyService spied = spy(proxyService);
+        doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
+
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-742", true, new AgentRunReq());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
+        assertEquals("http://runtime:8080/v1/agents/chat/code-1?workspace_id=ws-owner&conversation_id=conv-742&environment_id=env-default",
             urlCaptor.getValue());
         verify(environmentManagerMapper, never()).findByProjectIdAndIsDefaultTrue("proj-1");
     }
@@ -820,7 +840,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, null, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -842,12 +862,35 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", body))
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", null, body))
                 .thenReturn(expected);
 
-            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
+            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, false, body);
 
             assertEquals("ok", result);
+        }
+    }
+
+    @Test
+    void testRunWebAgent_NonStreamWithConversationId() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
+                eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
+            EnvironmentManagerEntity env = new EnvironmentManagerEntity();
+            env.setId("env-default");
+            when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(List.of(env));
+
+            AgentRunReq body = new AgentRunReq().setQuery("hello");
+            ResponseEntity<Object> expected = ResponseEntity.ok("ok");
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", "conv-742", body))
+                .thenReturn(expected);
+
+            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-742", false, body);
+
+            assertEquals("ok", result);
+            verify(runtimeClient).runWebAgent("token", "code-1", "ws-owner",
+                false, "env-default", "conv-742", body);
         }
     }
 
@@ -864,10 +907,10 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, body))
+            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, null, body))
                 .thenReturn(expected);
 
-            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
+            Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, false, body);
 
             assertEquals("ok", result);
         }
@@ -887,7 +930,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -911,7 +954,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -930,7 +973,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -948,7 +991,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -968,7 +1011,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
@@ -994,7 +1037,7 @@ class AgentServiceProxyServiceTest {
         AgentServiceProxyService spied = spy(proxyService);
         doReturn(new Object()).when(spied).stream(anyString(), any(HttpHeaders.class), anyString());
 
-        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", true, new AgentRunReq());
+        spied.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", null, true, new AgentRunReq());
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
         verify(spied).stream(urlCaptor.capture(), any(HttpHeaders.class), anyString());
