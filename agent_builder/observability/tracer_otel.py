@@ -184,6 +184,27 @@ def _build_exporter(otel):
     return OTLPSpanExporter(**kwargs)
 
 
+def extract_inbound_trace_context(headers):
+    """Extract W3C Trace Context from inbound HTTP headers.
+
+    When the carrier has a valid ``traceparent``, the returned context parents
+    a child span under the upstream trace; otherwise the context is empty and
+    ``start_as_current_span`` creates a new root (same as before).
+    """
+    from opentelemetry.context import Context
+    from opentelemetry.trace.propagation.tracecontext import (
+        TraceContextTextMapPropagator,
+    )
+
+    if headers is None:
+        return Context()
+    try:
+        carrier = {str(k).lower(): str(v) for k, v in headers.items()}
+    except Exception:  # noqa: BLE001 — never break request path on header parse
+        return Context()
+    return TraceContextTextMapPropagator().extract(carrier)
+
+
 def force_flush(timeout_millis: int = 5000) -> bool:
     """Flush pending spans (for tests / shutdown)."""
     try:

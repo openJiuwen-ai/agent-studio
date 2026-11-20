@@ -83,3 +83,70 @@ def test_setup_raw_sdk_records_span(monkeypatch):
     assert len(spans) == 1
     assert spans[0].name == "e2e-builder-span"
     assert spans[0].resource.attributes.get("service.name") == "agent-builder"
+
+
+def _local_memory_tracer():
+    """Isolated TracerProvider — avoids global provider override across tests."""
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+    from opentelemetry.trace import SpanKind
+
+    memory = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(memory))
+    return memory, provider.get_tracer("agent-builder"), SpanKind
+
+
+def test_extract_inbound_continues_w3c_parent():
+    """Upstream traceparent must parent the builder HTTP span (same trace_id)."""
+    from opentelemetry.trace.propagation.tracecontext import (
+        TraceContextTextMapPropagator,
+    )
+
+    memory, tracer, SpanKind = _local_memory_tracer()
+    propagator = TraceContextTextMapPropagator()
+    carrier: dict[str, str] = {}
+    with tracer.start_as_current_span("upstream-service") as parent:
+        propagator.inject(carrier)
+        parent_trace_id = parent.get_span_context().trace_id
+        parent_span_id = parent.get_span_context().span_id
+
+    assert "traceparent" in carrier
+
+    parent_context = tracer_otel_mod.extract_inbound_trace_context(carrier)
+    with tracer.start_as_current_span(
+        "GET /api/prompt",
+        context=parent_context,
+        kind=SpanKind.SERVER,
+    ) as child:
+        assert child.get_span_context().trace_id == parent_trace_id
+
+    spans = {s.name: s for s in memory.get_finished_spans()}
+    assert "upstream-service" in spans
+    assert "GET /api/prompt" in spans
+    child_span = spans["GET /api/prompt"]
+    assert child_span.context.trace_id == parent_trace_id
+    assert child_span.parent is not None
+    assert child_span.parent.span_id == parent_span_id
+
+
+def test_extract_inbound_without_traceparent_is_new_root():
+    """No W3C carrier → extract yields empty context; span remains a root."""
+    memory, tracer, SpanKind = _local_memory_tracer()
+    parent_context = tracer_otel_mod.extract_inbound_trace_context(
+        {"x-request-id": "abc"}
+    )
+    with tracer.start_as_current_span(
+        "GET /orphan",
+        context=parent_context,
+        kind=SpanKind.SERVER,
+    ):
+        pass
+
+    spans = memory.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "GET /orphan"
+    assert spans[0].parent is None

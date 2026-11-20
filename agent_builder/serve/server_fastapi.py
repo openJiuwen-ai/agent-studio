@@ -261,8 +261,9 @@ def instance_app() -> FastAPI:
 
     @app.middleware("http")
     async def otel_http_span(request: Request, call_next):
-        """Root HTTP span when OTEL_ENABLED — any builder request becomes a Jaeger span."""
+        """Server HTTP span when OTEL_ENABLED; continues upstream W3C parent if present."""
         from agent_builder.adapter.config_bridge import settings as builder_settings
+        from agent_builder.observability.tracer_otel import extract_inbound_trace_context
 
         if not builder_settings.otel.enabled:
             return await call_next(request)
@@ -273,7 +274,12 @@ def instance_app() -> FastAPI:
 
         tracer = trace.get_tracer(builder_settings.otel.service_name or "agent-builder")
         span_name = f"{request.method} {request.url.path}"
-        with tracer.start_as_current_span(span_name) as span:
+        parent_context = extract_inbound_trace_context(request.headers)
+        with tracer.start_as_current_span(
+            span_name,
+            context=parent_context,
+            kind=trace.SpanKind.SERVER,
+        ) as span:
             span.set_attribute("http.method", request.method)
             span.set_attribute("http.target", request.url.path)
             span.set_attribute("http.route", request.url.path)
