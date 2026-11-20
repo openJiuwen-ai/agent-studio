@@ -70,6 +70,8 @@ def _iter_python_files():
         for path in sorted(scan_dir.rglob("*.py")):
             if "__pycache__" in path.parts:
                 continue
+            if ".venv" in path.parts:
+                continue  # 包级 venv（uv run --project 创建）不是业务代码
             if _BUILDER_DIRNAME in path.parts:
                 continue  # builder 树（junction）：Q10 范围外
             yield path

@@ -614,6 +614,7 @@ class TestServerLifespanLogLevels:
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
+             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config") as mock_log_config, \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
