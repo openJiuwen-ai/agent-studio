@@ -3,6 +3,7 @@
 
 
 
+import json
 import uuid
 from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
 
@@ -140,6 +141,31 @@ def build_knowledge_retrieval_tool(ir_data: dict, params: List[Param]) -> Functi
     )
 
 
+class _ModelFacingRetrievalResult(dict):
+    """Preserve raw retrieval output while exposing a deduplicated model view."""
+
+    @property
+    def data(self) -> Dict[str, Any]:
+        view = dict(self)
+        payload = view.get("data")
+        if isinstance(payload, dict):
+            output_list = payload.get("output_list")
+            if isinstance(output_list, list):
+                payload = dict(payload)
+                rows = []
+                for original in output_list:
+                    if not isinstance(original, dict):
+                        rows.append(original)
+                        continue
+                    row = dict(original)
+                    if "content" in row and row.get("text") == row["content"]:
+                        row.pop("text", None)
+                    rows.append(row)
+                payload["output_list"] = rows
+                view["data"] = payload
+        return {"content": json.dumps(view, ensure_ascii=False)}
+
+
 class KnowledgeRetrievalTool(Tool):
     """openjiuwen Tool subclass that wraps knowledge retrieval for single-agent use.
 
@@ -170,13 +196,14 @@ class KnowledgeRetrievalTool(Tool):
             ) else inputs.get(_QUERY, "")
         elif isinstance(inputs, str):
             query = inputs
-        return await _run_retrieval(
+        result = await _run_retrieval(
             query=str(query or ""),
             connection_id=self._connection_id,
             knowledge_base_ids=self._knowledge_base_ids,
             retrieval_config=self._retrieval_config,
             tag_overrides=self._tag_overrides,
         )
+        return _ModelFacingRetrievalResult(result)
 
     async def stream(self, inputs: Input, **kwargs) -> AsyncIterator[Output]:
         yield await self.invoke(inputs, **kwargs)
