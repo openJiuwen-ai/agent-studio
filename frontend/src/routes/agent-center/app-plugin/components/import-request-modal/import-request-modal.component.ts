@@ -96,19 +96,33 @@ export class ImportRequestModalComponent implements OnInit {
   }
 
   onConfirm() {
-    if (
-      this.jsonData.startsWith('swagger') ||
-      this.jsonData.startsWith('openapi')
-    ) {
-      this.parseYaml();
-    } else {
-      this.parsecurl();
+    const trimmed = this.jsonData.replace(/^\uFEFF/, '').trim();
+
+    if (trimmed.toLowerCase().startsWith('curl')) {
+      this.parsecurl(trimmed);
+      this.modalRef.destroy();
+      return;
     }
+
+    const invalidDocMessage =
+      'Unable to recognize the document. Please paste a valid cURL command or OpenAPI document.';
+
+    try {
+      const doc = YAML.parse(trimmed);
+      if (doc && (doc.openapi || doc.swagger)) {
+        this.parseYaml(doc);
+      } else {
+        MessageComponent.showError(invalidDocMessage);
+      }
+    } catch (e) {
+      MessageComponent.showError(invalidDocMessage);
+    }
+
     this.modalRef.destroy();
   }
 
-  parseYaml() {
-    let json = YAML.parse(this.jsonData);
+  parseYaml(doc?: any) {
+    let json = doc || YAML.parse(this.jsonData);
     let url = json.servers?.[0]?.url || '';
     let path = Object.keys(json.paths)[0];
     let method = Object.keys(json.paths[path])[0];
@@ -131,8 +145,8 @@ export class ImportRequestModalComponent implements OnInit {
     this.confirm.emit(apiInfo);
   }
 
-  parsecurl() {
-    let data = parseCurl(this.jsonData);
+  parsecurl(command?: string) {
+    let data = parseCurl(command || this.jsonData);
     if (!data.error) {
       let parameters = this.getcurlParameters(data.node.params);
       let requestBody = this.getcurlRequestBody(data.node.body);
