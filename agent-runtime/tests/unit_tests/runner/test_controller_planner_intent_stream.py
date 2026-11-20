@@ -38,7 +38,7 @@ def _planner(
     """构造仅装 _build_intent_stream_data 依赖的 ControllerPlanner stub。
 
     Args:
-        user_fields: idm._intent_workflow_user_fields(workflow 路径输出);None → 视作 {} (falsy)
+        user_fields: idm.intent_workflow_user_fields(workflow 路径输出);None → 视作 {} (falsy)
         latest_intent: context_manager.get_latest_intent() 返回值
         wf_ctx: context_manager.get_workflow_context_by_name_and_type() 返回值
         func2cat: idm.intent_function_2_category_map
@@ -47,7 +47,7 @@ def _planner(
     p = ControllerPlanner.__new__(ControllerPlanner)
     p.task_id = task_id
     p.intention_detect_module = SimpleNamespace(
-        _intent_workflow_user_fields=user_fields if user_fields is not None else {},
+        intent_workflow_user_fields=user_fields if user_fields is not None else {},
         intent_function_2_category_map=dict(func2cat or {}),
         intent_id_to_function_map=dict(id2func or {}),
     )
@@ -146,7 +146,8 @@ def test_llm_fallback_without_detected_intent_emits_empty_payload():
 
 def test_empty_user_fields_does_not_leak_as_passthrough():
     """空 user_fields 必须落到 LLM 路径(构造 intentResponse 结构),
-    而不是把空 dict 当作 WORKFLOW 透传 data。"""
+    而不是把空 dict 当作 WORKFLOW 透传 data。
+    """
     p = _planner(
         user_fields={},
         latest_intent="wf_x",
@@ -189,7 +190,7 @@ def _stream_planner(latest_intent=None, wf_ctx=None, func2cat=None, id2func=None
     """构造可驱动 stream() 主分支(L194-200)的 ControllerPlanner stub。
 
     start_workflow=False 跳过 L171 等待块;rule_module.apply_rules 返回 None 跳过规则短路。
-    _get_next_workflow 由调用方挂载(控制 _intent_detected_this_turn / 抛异常)。
+    _get_next_workflow 由调用方挂载(控制 intent_detected_this_turn / 抛异常)。
     """
     p = ControllerPlanner.__new__(ControllerPlanner)
     p.task_id = "task-stream"
@@ -198,12 +199,17 @@ def _stream_planner(latest_intent=None, wf_ctx=None, func2cat=None, id2func=None
     p._process_user_input = MagicMock()  # 跳过用户输入预处理
     p.rule_module = MagicMock()
     p.rule_module.apply_rules.return_value = None  # 不走规则短路
-    p.intention_detect_module = SimpleNamespace(
-        _intent_detected_this_turn=False,
-        _intent_workflow_user_fields={},
+    idm = SimpleNamespace(
+        intent_detected_this_turn=False,
+        intent_workflow_user_fields={},
         intent_function_2_category_map=dict(func2cat or {}),
         intent_id_to_function_map=dict(id2func or {}),
     )
+    idm.reset_intent_state = lambda: (
+        setattr(idm, "intent_detected_this_turn", False),
+        setattr(idm, "intent_workflow_user_fields", {}),
+    )
+    p.intention_detect_module = idm
     cm = MagicMock()
     cm.get_latest_intent.return_value = latest_intent
     cm.get_workflow_context_by_name_and_type.return_value = wf_ctx
@@ -222,10 +228,10 @@ async def test_stream_resets_intent_workflow_user_fields_each_turn():
     """stream() 主分支每轮入口清空 _intent_workflow_user_fields(不残留上一轮)。"""
     p = _stream_planner(latest_intent="wf_x")
     # 模拟上一轮残留
-    p.intention_detect_module._intent_workflow_user_fields = {"intent_id": "stale"}
+    p.intention_detect_module.intent_workflow_user_fields = {"intent_id": "stale"}
 
     async def _noop_next_workflow(_message):
-        # invoke 未把 _intent_detected_this_turn 置 True(如指定意图/LATEST 分支)
+        # invoke 未把 intent_detected_this_turn 置 True(如指定意图/LATEST 分支)
         return None
 
     p._get_next_workflow = _noop_next_workflow
@@ -234,20 +240,21 @@ async def test_stream_resets_intent_workflow_user_fields_each_turn():
 
     # 无 intent 事件下发(本轮未识别)
     assert yielded == []
-    # 关键:字段已被 L196 清空,不再残留上一轮值
-    assert p.intention_detect_module._intent_workflow_user_fields == {}
+    # 关键:字段已被 reset_intent_state 清空,不再残留上一轮值
+    assert p.intention_detect_module.intent_workflow_user_fields == {}
 
 
 @pytest.mark.asyncio
 async def test_stream_does_not_yield_intent_event_when_detection_raises():
     """识别异常(经 _get_intent_based_workflow re-raise 为 JiuWenBaseException)时,
-    stream() 不下发 intent 事件;且字段已在抛出前被 L196 清空。"""
+    stream() 不下发 intent 事件;且字段已在抛出前被 L196 清空。
+    """
     p = _stream_planner(latest_intent="wf_x")
-    p.intention_detect_module._intent_workflow_user_fields = {"intent_id": "stale"}
+    p.intention_detect_module.intent_workflow_user_fields = {"intent_id": "stale"}
 
     async def _raising_next_workflow(_message):
-        # 模拟 invoke 内 L396 置 True 后识别抛异常
-        p.intention_detect_module._intent_detected_this_turn = True
+        # 模拟 invoke 内置 True 后识别抛异常
+        p.intention_detect_module.intent_detected_this_turn = True
         raise JiuWenBaseException(1000, "intent detection boom")
 
     p._get_next_workflow = _raising_next_workflow
@@ -259,8 +266,8 @@ async def test_stream_does_not_yield_intent_event_when_detection_raises():
 
     # 异常前未下发任何 intent 事件
     assert yielded == []
-    # 字段已在 L196 重置(抛出前完成)
-    assert p.intention_detect_module._intent_workflow_user_fields == {}
+    # 字段已在 reset_intent_state 重置(抛出前完成)
+    assert p.intention_detect_module.intent_workflow_user_fields == {}
 
 
 @pytest.mark.asyncio
@@ -278,11 +285,11 @@ async def test_stream_does_not_emit_stale_when_invoke_leaves_user_fields_empty()
         id2func={},
     )
     # 上一轮残留
-    p.intention_detect_module._intent_workflow_user_fields = {"intent_id": "previous"}
+    p.intention_detect_module.intent_workflow_user_fields = {"intent_id": "previous"}
 
     async def _llm_path_next_workflow(_message):
-        # invoke 跑了(置 True),但走非 WORKFLOW 路径,未碰 _intent_workflow_user_fields
-        p.intention_detect_module._intent_detected_this_turn = True
+        # invoke 跑了(置 True),但走非 WORKFLOW 路径,未碰 intent_workflow_user_fields
+        p.intention_detect_module.intent_detected_this_turn = True
         return None
 
     p._get_next_workflow = _llm_path_next_workflow
@@ -298,5 +305,5 @@ async def test_stream_does_not_emit_stale_when_invoke_leaves_user_fields_empty()
     # 落到 LLM 路径:含 intentResponse,answer 为本轮 "current"
     assert "intentResponse" in sd.data
     assert sd.data["intentResponse"]["responseData"][0]["answer"] == "current"
-    # 字段已被 L196 清空
-    assert p.intention_detect_module._intent_workflow_user_fields == {}
+    # 字段已被 reset_intent_state 清空
+    assert p.intention_detect_module.intent_workflow_user_fields == {}

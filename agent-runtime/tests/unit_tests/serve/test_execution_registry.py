@@ -55,11 +55,6 @@ def _patch_redis(client):
     return patch("redis_spi.accessor.get_redis", return_value=client)
 
 
-def _patch_pubsub_client(client):
-    """patch get_pubsub_client（subscribe_runtime_cancel 使用）。"""
-    return patch("common_utils.redis_manager.get_pubsub_client", return_value=client)
-
-
 class TestRegister:
     @pytest.mark.asyncio
     async def test_register_writes_local_and_redis(self):
@@ -346,7 +341,6 @@ class TestSubscriber:
         task = asyncio.create_task(asyncio.sleep(10))
 
         with _patch_redis(client), \
-             _patch_pubsub_client(client), \
              patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             await registry.register("conv-1", task)
             with pytest.raises(asyncio.CancelledError):
@@ -371,7 +365,6 @@ class TestSubscriber:
         registry = ExecutionRegistry()
 
         with _patch_redis(client), \
-             _patch_pubsub_client(client), \
              patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             with pytest.raises(asyncio.CancelledError):
                 await registry.subscribe_runtime_cancel()
@@ -394,7 +387,6 @@ class TestSubscriber:
         task = asyncio.create_task(asyncio.sleep(10))
 
         with _patch_redis(client), \
-             _patch_pubsub_client(client), \
              patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             await registry.register("conv-1", task)  # 广播目标是 conv-2
             with pytest.raises(asyncio.CancelledError):
@@ -434,7 +426,6 @@ class TestSubscriber:
         task = asyncio.create_task(asyncio.sleep(10))
 
         with _patch_redis(client), \
-             _patch_pubsub_client(client), \
              patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             await registry.register("conv-1", task)
             with pytest.raises(asyncio.CancelledError):
@@ -446,32 +437,29 @@ class TestSubscriber:
 
     @pytest.mark.asyncio
     async def test_subscriber_uses_pubsub_client_not_redis(self):
-        """集群模式下订阅使用 get_pubsub_client（单节点 Redis），而非 get_redis_client（RedisCluster）。"""
-        cluster_client = _make_redis()  # RedisCluster — 有 async 命令方法
-        # redis-py < 8.0.0 的异步 RedisCluster 没有 pubsub() 方法
-        type(cluster_client).pubsub = property(lambda self: (_ for _ in ()).throw(
-            AttributeError("'RedisCluster' object has no attribute 'pubsub'")
-        ))
-
-        single_client = _make_redis()
+        """订阅通过 as_capability(PubSubCapability) 获取 pubsub 句柄,
+        而非直接在 Redis 客户端上调用 pubsub()（集群模式下 RedisCluster 无 pubsub()）。"""
+        client = _make_redis()
         pubsub = self._make_pubsub(
             [
-                {"type": "subscribe", "channel": CANCEL_CHANNEL.encode()},
-                {"type": "message", "channel": CANCEL_CHANNEL.encode(), "data": b"conv-1"},
+                PubSubMessage(type="subscribe", channel=CANCEL_CHANNEL.encode(), data=1),
+                PubSubMessage(
+                    type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-1"
+                ),
             ]
         )
-        single_client.pubsub = MagicMock(return_value=pubsub)
-
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
         registry = ExecutionRegistry()
         task = asyncio.create_task(asyncio.sleep(10))
 
-        with patch("common_utils.redis_manager.get_redis_client", return_value=cluster_client), \
-             patch("common_utils.redis_manager.get_pubsub_client", return_value=single_client), \
+        with _patch_redis(client), \
              patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
             await registry.register("conv-1", task)
             with pytest.raises(asyncio.CancelledError):
                 await registry.subscribe_runtime_cancel()
 
+        # 验证通过 as_capability 获取 pubsub 能力视图,而非直接调 client.pubsub()
+        client.as_capability.assert_called()
         assert task.cancelled() or task.done()
 
 

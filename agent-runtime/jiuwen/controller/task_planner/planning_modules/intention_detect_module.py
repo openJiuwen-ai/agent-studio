@@ -139,6 +139,21 @@ class IntentionDetectModule:
                     plan_config.user_prompt
                 )
 
+    def reset_intent_state(self):
+        """重置本轮意图识别状态，由 controller_planner.stream() 在每轮调用前调用。"""
+        self._intent_detected_this_turn = False
+        self._intent_workflow_user_fields = {}
+
+    @property
+    def intent_detected_this_turn(self) -> bool:
+        """本轮 invoke() 是否实际执行了意图识别（非指定意图分支）。"""
+        return self._intent_detected_this_turn
+
+    @property
+    def intent_workflow_user_fields(self) -> dict:
+        """意图识别工作流 End 节点的完整 user_fields 输出。"""
+        return self._intent_workflow_user_fields
+
     def _handle_latest_intent(self, task_id):
         """处理LATEST意图的逻辑
 

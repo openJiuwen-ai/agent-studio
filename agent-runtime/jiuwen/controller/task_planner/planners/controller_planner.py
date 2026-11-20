@@ -179,12 +179,11 @@ class ControllerPlanner(TaskPlanner):
                     self.task_id,
                 )
             if message.message_type == MessageType.USER_INPUT:
-                self.intention_detect_module._intent_detected_this_turn = False
-                self.intention_detect_module._intent_workflow_user_fields = {}
+                self.intention_detect_module.reset_intent_state()
                 intent_workflow_task = await self._get_intent_based_workflow(
                     [], self.last_message, True
                 )
-                if self.intention_detect_module._intent_detected_this_turn:
+                if self.intention_detect_module.intent_detected_this_turn:
                     yield self._build_intent_stream_data()
                 if intent_workflow_task:
                     yield intent_workflow_task
@@ -192,10 +191,9 @@ class ControllerPlanner(TaskPlanner):
             return
 
         # 执行下一个工作流
-        self.intention_detect_module._intent_detected_this_turn = False
-        self.intention_detect_module._intent_workflow_user_fields = {}
+        self.intention_detect_module.reset_intent_state()
         task = await self._get_next_workflow(message)
-        if self.intention_detect_module._intent_detected_this_turn:
+        if self.intention_detect_module.intent_detected_this_turn:
             yield self._build_intent_stream_data()
         if task:
             yield task
@@ -211,7 +209,7 @@ class ControllerPlanner(TaskPlanner):
         idm = self.intention_detect_module
 
         # 路径1：意图识别工作流执行后，End 节点输出的完整 user_fields
-        user_fields = idm._intent_workflow_user_fields
+        user_fields = idm.intent_workflow_user_fields
         if user_fields:
             return StreamData(
                 code=StreamCode.INTENT_MSG.value,
