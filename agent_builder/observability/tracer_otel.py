@@ -61,7 +61,11 @@ def setup_otel_tracer() -> None:
 
 
 def _try_setup_openjiuwen(otel) -> bool:
-    """Return True when openjiuwen tracer-otel extension handled init."""
+    """Return True when openjiuwen tracer-otel extension handled init.
+
+    Returns False (so ``setup_otel_tracer`` can fall back to raw SDK) when the
+    extension is missing **or** present but fails (API/config mismatch, etc.).
+    """
     try:
         from openjiuwen.core.session.tracer import TracerHandlerRegistry
         from openjiuwen.extensions.tracer_otel import (
@@ -77,43 +81,51 @@ def _try_setup_openjiuwen(otel) -> bool:
         )
         return False
 
-    agent_handlers = TracerHandlerRegistry.get_agent_handlers()
-    if "otel_agent" in agent_handlers:
-        logger.info("OpenTelemetry tracer handlers already registered, skipping")
-        return True
+    try:
+        agent_handlers = TracerHandlerRegistry.get_agent_handlers()
+        if "otel_agent" in agent_handlers:
+            logger.info("OpenTelemetry tracer handlers already registered, skipping")
+            return True
 
-    config = OtelTracerConfig(
-        exporter_type=otel.exporter_type,
-        exporter_endpoint=otel.exporter_endpoint or None,
-        protocol=otel.protocol,
-        headers=otel.headers,
-        service_name=otel.service_name,
-        service_version=otel.service_version or None,
-        sample_rate=otel.sample_rate,
-        schedule_delay_millis=otel.schedule_delay_millis,
-        export_timeout_ms=otel.export_timeout_ms,
-        max_export_batch_size=otel.max_export_batch_size,
-        redaction_enabled=otel.redaction_enabled,
-        redact_prompts=otel.redact_prompts,
-        redact_completions=otel.redact_completions,
-        max_attr_length=otel.max_attr_length,
-    )
-    otel_tracer = init_otel_tracer(config)
-    TracerHandlerRegistry.register_handler(
-        "otel_agent", OtelAgentHandler(otel_tracer, config)
-    )
-    TracerHandlerRegistry.register_handler(
-        "otel_workflow", OtelWorkflowHandler(otel_tracer, config)
-    )
-    logger.info(
-        "OpenTelemetry tracer initialized via openjiuwen: "
-        "exporter_type=%s endpoint=%s service_name=%s sample_rate=%s",
-        config.exporter_type,
-        config.exporter_endpoint or "N/A",
-        config.service_name,
-        config.sample_rate,
-    )
-    return True
+        config = OtelTracerConfig(
+            exporter_type=otel.exporter_type,
+            exporter_endpoint=otel.exporter_endpoint or None,
+            protocol=otel.protocol,
+            headers=otel.headers,
+            service_name=otel.service_name,
+            service_version=otel.service_version or None,
+            sample_rate=otel.sample_rate,
+            schedule_delay_millis=otel.schedule_delay_millis,
+            export_timeout_ms=otel.export_timeout_ms,
+            max_export_batch_size=otel.max_export_batch_size,
+            redaction_enabled=otel.redaction_enabled,
+            redact_prompts=otel.redact_prompts,
+            redact_completions=otel.redact_completions,
+            max_attr_length=otel.max_attr_length,
+        )
+        otel_tracer = init_otel_tracer(config)
+        TracerHandlerRegistry.register_handler(
+            "otel_agent", OtelAgentHandler(otel_tracer, config)
+        )
+        TracerHandlerRegistry.register_handler(
+            "otel_workflow", OtelWorkflowHandler(otel_tracer, config)
+        )
+        logger.info(
+            "OpenTelemetry tracer initialized via openjiuwen: "
+            "exporter_type=%s endpoint=%s service_name=%s sample_rate=%s",
+            config.exporter_type,
+            config.exporter_endpoint or "N/A",
+            config.service_name,
+            config.sample_rate,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — fall back to raw SDK instead of silent skip
+        logger.warning(
+            "openjiuwen tracer-otel setup failed (%s); "
+            "falling back to raw OpenTelemetry SDK",
+            exc,
+        )
+        return False
 
 
 def _setup_raw_sdk(otel) -> None:

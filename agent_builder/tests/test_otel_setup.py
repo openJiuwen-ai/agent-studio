@@ -38,6 +38,98 @@ def test_setup_disabled_is_noop(monkeypatch):
     assert tracer_otel_mod.is_otel_tracer_initialized() is False
 
 
+def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
+    """TypeError after import (config API drift) → raw SDK still installs provider."""
+    import sys
+    from types import ModuleType
+
+    tracer_otel_mod.reset_otel_tracer_for_tests()
+    monkeypatch.setattr(
+        tracer_otel_mod,
+        "_otel_settings",
+        lambda: _fake_otel(enabled=True, service_name="agent-builder"),
+    )
+
+    created = []
+
+    def _ensure(name: str) -> ModuleType:
+        if name not in sys.modules:
+            sys.modules[name] = ModuleType(name)
+            created.append(name)
+        return sys.modules[name]
+
+    for pkg in (
+        "openjiuwen",
+        "openjiuwen.core",
+        "openjiuwen.core.session",
+        "openjiuwen.core.session.tracer",
+        "openjiuwen.extensions",
+        "openjiuwen.extensions.tracer_otel",
+    ):
+        _ensure(pkg)
+
+    tracer_pkg = sys.modules["openjiuwen.core.session.tracer"]
+    ext_pkg = sys.modules["openjiuwen.extensions.tracer_otel"]
+    saved_tracer = {
+        k: getattr(tracer_pkg, k, None) for k in ("TracerHandlerRegistry",)
+    }
+    saved_ext = {
+        k: getattr(ext_pkg, k, None)
+        for k in (
+            "OtelAgentHandler",
+            "OtelTracerConfig",
+            "OtelWorkflowHandler",
+            "init_otel_tracer",
+        )
+    }
+
+    class _Registry:
+        @staticmethod
+        def get_agent_handlers():
+            return {}
+
+        @staticmethod
+        def register_handler(*_a, **_k):
+            return None
+
+    def _bad_config(**_kwargs):
+        raise TypeError("OtelTracerConfig got an unexpected keyword argument")
+
+    tracer_pkg.TracerHandlerRegistry = _Registry
+    ext_pkg.OtelTracerConfig = _bad_config
+    ext_pkg.OtelAgentHandler = type("OtelAgentHandler", (), {})
+    ext_pkg.OtelWorkflowHandler = type("OtelWorkflowHandler", (), {})
+    ext_pkg.init_otel_tracer = lambda _c: object()
+
+    raw_calls = []
+    monkeypatch.setattr(
+        tracer_otel_mod,
+        "_setup_raw_sdk",
+        lambda otel: raw_calls.append(otel.service_name),
+    )
+
+    try:
+        assert (
+            tracer_otel_mod._try_setup_openjiuwen(_fake_otel(enabled=True)) is False
+        )
+        tracer_otel_mod.setup_otel_tracer()
+        assert raw_calls == ["agent-builder"]
+        assert tracer_otel_mod.is_otel_tracer_initialized() is True
+    finally:
+        for key, val in saved_tracer.items():
+            if val is None and hasattr(tracer_pkg, key):
+                delattr(tracer_pkg, key)
+            elif val is not None:
+                setattr(tracer_pkg, key, val)
+        for key, val in saved_ext.items():
+            if val is None and hasattr(ext_pkg, key):
+                delattr(ext_pkg, key)
+            elif val is not None:
+                setattr(ext_pkg, key, val)
+        for name in reversed(created):
+            sys.modules.pop(name, None)
+
+
 def test_setup_raw_sdk_records_span(monkeypatch):
     tracer_otel_mod.reset_otel_tracer_for_tests()
     monkeypatch.setattr(
@@ -92,21 +184,21 @@ def _local_memory_tracer():
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
         InMemorySpanExporter,
     )
-    from opentelemetry.trace import SpanKind
 
     memory = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(memory))
-    return memory, provider.get_tracer("agent-builder"), SpanKind
+    return memory, provider.get_tracer("agent-builder")
 
 
 def test_extract_inbound_continues_w3c_parent():
     """Upstream traceparent must parent the builder HTTP span (same trace_id)."""
+    from opentelemetry.trace import SpanKind
     from opentelemetry.trace.propagation.tracecontext import (
         TraceContextTextMapPropagator,
     )
 
-    memory, tracer, SpanKind = _local_memory_tracer()
+    memory, tracer = _local_memory_tracer()
     propagator = TraceContextTextMapPropagator()
     carrier: dict[str, str] = {}
     with tracer.start_as_current_span("upstream-service") as parent:
@@ -135,7 +227,9 @@ def test_extract_inbound_continues_w3c_parent():
 
 def test_extract_inbound_without_traceparent_is_new_root():
     """No W3C carrier → extract yields empty context; span remains a root."""
-    memory, tracer, SpanKind = _local_memory_tracer()
+    from opentelemetry.trace import SpanKind
+
+    memory, tracer = _local_memory_tracer()
     parent_context = tracer_otel_mod.extract_inbound_trace_context(
         {"x-request-id": "abc"}
     )
