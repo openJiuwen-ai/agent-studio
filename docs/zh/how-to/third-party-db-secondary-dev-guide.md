@@ -25,7 +25,8 @@ studio-db-ext/
     org.springframework.boot.autoconfigure.AutoConfiguration.imports
   mapper/                           # 可选：databaseId=sqlserver 的外部 Mapper XML
     AgentMapperSqlServer.xml        # 例：FROM_UNIXTIME → DATEADD
-    McpServerRatingMapperSqlServer.xml  # 必做：评分 upsert 用 MERGE（勿在 Interceptor 里拼 #{...}）
+    McpServerRatingMapperSqlServer.xml       # 必做：评分 upsert → MERGE
+    PeEvaluationTaskMapperSqlServer.xml      # 必做：评估结果批量 upsert → MERGE
   classes/                          # javac 输出（打 jar 前把 mapper 拷到 classes/ext-mapper/）
   ext/
     studio-db-ext.jar               # 打好的扩展包（运行时进 loader.path）
@@ -158,7 +159,14 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
 
 ### 步骤 3.3 SQL 改写：`VendorSqlRewriteInterceptor.java`
 
-创建 `VendorSqlRewriteInterceptor.java`（SQL Server 完整可跑版本；其他库改 `rewrite()` 即可）：
+创建 `VendorSqlRewriteInterceptor.java`（SQL Server 完整可跑版本；其他库改 `rewrite()` 即可）。
+
+> **SQL Server 分页注意（2012+，含 Azure SQL Edge）**：`OFFSET/FETCH` **必须**跟在 `ORDER BY` 后面。产品里大量存在性查询是裸 `LIMIT 1`（无 `ORDER BY`），不能一律改成 `OFFSET 0 FETCH`。规则：  
+> - 已有 `ORDER BY` → `OFFSET … FETCH …`  
+> - 仅 `LIMIT n`、无排序 → 改成 `SELECT TOP (n) …`（插在第一个 `SELECT`/`SELECT DISTINCT` 后）  
+> - `LIMIT … OFFSET …` 或 `LIMIT offset,count` 且无排序 → 先补 `ORDER BY (SELECT NULL)` 再 `OFFSET/FETCH`（任意行语义，与 MySQL 无序 LIMIT 接近）  
+>
+> **时间函数 / 时区策略**：产品默认 `spring.jackson.time-zone: GMT+8`。MySQL `NOW()` 一般跟**会话/库时区**的墙上时间走。文档示例把 `NOW()` 改成 **`SYSDATETIME()`**（SQL Server 实例本地时间），请把目标库时区（或容器 `TZ`）配成与应用一致的 **GMT+8**，避免创建/更新时间静默偏移。若你坚持库内存 UTC，可改用 `SYSUTCDATETIME()`，但须同步把 Jackson/业务展示也按 UTC 理解，并改外部 Mapper 里的时间函数。`FROM_UNIXTIME`/`DATEADD` 针对的是 **Unix 纪元秒**（UTC 起点），与「`NOW` 用本地还是 UTC」是另一件事，不要混改。
 
 ```java
 package com.openjiuwen.studio.ext;
@@ -194,6 +202,10 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         Pattern.compile("(?i)\\blimit\\s+(\\d+|\\?)\\s*,\\s*(\\d+|\\?)");
     private static final Pattern LIMIT_ONLY =
         Pattern.compile("(?i)\\blimit\\s+(\\d+|\\?)");
+    private static final Pattern ORDER_BY =
+        Pattern.compile("(?i)\\border\\s+by\\b");
+    private static final Pattern SELECT_HEAD =
+        Pattern.compile("(?i)\\bselect\\s+(distinct\\s+)?");
     private static final Pattern FETCH_NEXT_ZERO =
         Pattern.compile("(?i)\\boffset\\s+(\\d+|\\?)\\s+rows\\s+fetch\\s+next\\s+0\\s+rows\\s+only");
     private static final Pattern FETCH_NEXT_PARAM =
@@ -243,7 +255,8 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         String s = sql;
         s = s.replaceAll("`([^`]+)`", "[$1]");                 // 反引号 -> []
         s = s.replaceAll("(?i)\\bUUID\\s*\\(\\s*\\)", "NEWID()");
-        s = s.replaceAll("(?i)\\bNOW\\s*\\(\\s*\\)", "SYSUTCDATETIME()");
+        // 与产品 jackson GMT+8 对齐：用实例本地时间（请将 SQL Server/容器时区设为 GMT+8）。若选 UTC 策略则改为 SYSUTCDATETIME()。
+        s = s.replaceAll("(?i)\\bNOW\\s*\\(\\s*\\)", "SYSDATETIME()");
         s = s.replaceAll("(?i)\\bis\\s+not\\s+true\\b", "<> 1");
         s = s.replaceAll("(?i)\\bis\\s+not\\s+false\\b", "<> 0");
         s = s.replaceAll("(?i)\\bis\\s+true\\b", "= 1");
@@ -251,24 +264,54 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         s = s.replaceAll("(?i)=\\s*true\\b", "= 1");
         s = s.replaceAll("(?i)=\\s*false\\b", "= 0");
 
-        // 字面量 LIMIT 10 OFFSET 20 → OFFSET 20 FETCH 10（文本即可）
-        // 参数化 limit ? offset ? → OFFSET ? FETCH ?（文本看起来对，但 ? 顺序未变，见 swapLimitOffsetParameterOrder）
+        // OFFSET/FETCH 需 ORDER BY（SQL Server 2012+）。无排序时：LIMIT n → TOP；带 offset 则补 ORDER BY (SELECT NULL)。
+        // 参数化 limit ? offset ? → OFFSET ? FETCH ? 后还须 swapLimitOffsetParameterOrder。
         Matcher m = LIMIT_OFFSET.matcher(s);
         if (m.find()) {
-            return m.replaceAll("OFFSET $2 ROWS FETCH NEXT $1 ROWS ONLY");
+            String tail = hasOrderBy(s)
+                ? "OFFSET $2 ROWS FETCH NEXT $1 ROWS ONLY"
+                : "ORDER BY (SELECT NULL) OFFSET $2 ROWS FETCH NEXT $1 ROWS ONLY";
+            return m.replaceAll(tail);
         }
         // MySQL LIMIT offset,count → 参数顺序本就是 (offset,count)，与 OFFSET/FETCH 一致，不必换映射
         m = LIMIT_COMMA.matcher(s);
         if (m.find()) {
-            return m.replaceAll("OFFSET $1 ROWS FETCH NEXT $2 ROWS ONLY");
+            String tail = hasOrderBy(s)
+                ? "OFFSET $1 ROWS FETCH NEXT $2 ROWS ONLY"
+                : "ORDER BY (SELECT NULL) OFFSET $1 ROWS FETCH NEXT $2 ROWS ONLY";
+            return m.replaceAll(tail);
         }
         m = LIMIT_ONLY.matcher(s);
         if (m.find()) {
-            s = m.replaceAll("OFFSET 0 ROWS FETCH NEXT $1 ROWS ONLY");
+            if (hasOrderBy(s)) {
+                s = m.replaceAll("OFFSET 0 ROWS FETCH NEXT $1 ROWS ONLY");
+            } else {
+                String n = m.group(1);
+                s = injectTop(m.replaceFirst(""), n);
+            }
         }
-        s = FETCH_NEXT_ZERO.matcher(s)
-            .replaceAll("AND 1 = 0 OFFSET $1 ROWS FETCH NEXT 1 ROWS ONLY");
+        if (FETCH_NEXT_ZERO.matcher(s).find()) {
+            s = FETCH_NEXT_ZERO.matcher(s)
+                .replaceAll("OFFSET $1 ROWS FETCH NEXT 1 ROWS ONLY");
+            s = forceEmptyBeforeOffset(s);
+        }
         return s;
+    }
+
+    static boolean hasOrderBy(String sql) {
+        return ORDER_BY.matcher(sql).find();
+    }
+
+    /** 在第一个 SELECT / SELECT DISTINCT 后插入 TOP (n)；适用于无 ORDER BY 的裸 LIMIT。 */
+    static String injectTop(String sql, String n) {
+        Matcher sel = SELECT_HEAD.matcher(sql);
+        if (!sel.find()) {
+            return sql;
+        }
+        String distinct = sel.group(1) == null ? "" : sel.group(1);
+        return sql.substring(0, sel.start())
+            + "SELECT " + distinct + "TOP (" + n + ") "
+            + sql.substring(sel.end());
     }
 
     /**
@@ -315,10 +358,32 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return true;
     }
 
+    /**
+     * FETCH 0 时强制空结果。不要用「AND 1=0」硬插：无 WHERE 时会非法，且 replaceFirst(ORDER BY)
+     * 可能命中子查询。优先把已有 WHERE 改成 WHERE 1=0 AND …；否则在 OFFSET 前最近一个 ORDER BY
+     * （或 OFFSET 本身）前插入 WHERE 1=0。
+     */
     private static String forceEmptyBeforeOffset(String sql) {
-        String patched = sql.replaceFirst("(?i)\\bORDER\\s+BY\\b", "AND 1 = 0 ORDER BY");
-        if (!patched.equals(sql)) return patched;
-        return sql.replaceFirst("(?i)(\\s+OFFSET\\s+)", " AND 1 = 0$1");
+        Matcher where = Pattern.compile("(?i)\\bwhere\\b").matcher(sql);
+        if (where.find()) {
+            return where.replaceFirst("WHERE 1 = 0 AND");
+        }
+        Matcher offset = Pattern.compile("(?i)\\soffset\\s+").matcher(sql);
+        if (offset.find()) {
+            int offsetAt = offset.start();
+            String before = sql.substring(0, offsetAt);
+            String after = sql.substring(offsetAt);
+            Matcher ob = Pattern.compile("(?i)\\border\\s+by\\b").matcher(before);
+            int lastOb = -1;
+            while (ob.find()) {
+                lastOb = ob.start();
+            }
+            if (lastOb >= 0) {
+                return before.substring(0, lastOb) + " WHERE 1 = 0 " + before.substring(lastOb) + after;
+            }
+            return before + " WHERE 1 = 0 " + after;
+        }
+        return sql + " WHERE 1 = 0";
     }
 
     private static Object readParam(BoundSql boundSql, String prop) {
@@ -429,9 +494,14 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 
 > 上面是**形态示例**；完整条件分支请对照产品内置同名语句补齐，或先跑通主链路再按日志缺啥补啥。
 
-2. **评分 upsert（必做）**：产品内置 `McpServerRatingMapper.insertRating` **没有**语句级 `databaseId`，而是用 `_databaseId` 动态分支：`== 'postgres'` 走 `ON CONFLICT`，**否则**（含 `sqlserver`）走 `ON DUPLICATE KEY UPDATE`。因此仅把 DatabaseId 设成 `sqlserver` 不够，仍会生成 ODKU。  
-   **不要**在 Interceptor 里把整段 SQL 替换成带 `#{serverId}` 的 MERGE（此时占位符已是 `?`，再写 `#{...}` 不会重新绑定）。  
-   正确做法：在 `mapper/McpServerRatingMapperSqlServer.xml` 提供同 id、**语句属性** `databaseId="sqlserver"` 的 MERGE，让 MyBatis **在解析阶段**生成正确的 `?` 与 ParameterMapping：
+2. **`ON DUPLICATE KEY UPDATE`（必做，仓内已知全部）**：Interceptor **不要**整段改写成带 `#{...}` 的 MERGE。当前产品 mapper 里 ODKU 有且仅有两处，都要外部 `databaseId="sqlserver"` 语句：
+
+| Mapper 语句 | 场景 |
+|---|---|
+| `McpServerRatingMapper.insertRating` | MCP 评分 upsert（动态分支：非 postgres 即 ODKU） |
+| `PeEvaluationTaskMapper.batchInsertEvalResult` | 提示词工程：评估结果批量 upsert |
+
+**(a) 评分** — `mapper/McpServerRatingMapperSqlServer.xml`：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -446,16 +516,55 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
     ON (target.server_id = source.server_id AND target.tenant_id = source.tenant_id)
     WHEN MATCHED THEN
       UPDATE SET score = source.score,
-                 updated_date = SYSUTCDATETIME()
+                 updated_date = SYSDATETIME()
     WHEN NOT MATCHED THEN
       INSERT (server_id, tenant_id, score, created_date, updated_date)
       VALUES (source.server_id, source.tenant_id, source.score,
-              SYSUTCDATETIME(), SYSUTCDATETIME());
+              SYSDATETIME(), SYSDATETIME());
   </update>
 </mapper>
 ```
 
-> SQL Server 的 `MERGE` 建议以分号结尾（如上）。参数只需各出现一次（`serverId` / `tenantId` / `score`），由 MyBatis 正常绑定。
+**(b) 评估结果批量** — `mapper/PeEvaluationTaskMapperSqlServer.xml`（形态示例；字段/typeHandler 请对照产品内置补齐）：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.prompt.engineering.mapper.PeEvaluationTaskMapper">
+  <insert id="batchInsertEvalResult" databaseId="sqlserver">
+    MERGE INTO t_pe_evaluation_result AS target
+    USING (
+      SELECT * FROM (VALUES
+      <foreach collection="results" item="item" separator=",">
+        (#{item.id,jdbcType=VARCHAR},
+         #{item.evaluationTaskId,jdbcType=VARCHAR},
+         #{item.promptId,jdbcType=VARCHAR},
+         #{item.testNum,jdbcType=INTEGER},
+         #{item.generateResult,jdbcType=VARCHAR},
+         #{item.evalResult,typeHandler=com.openjiuwen.studio.prompt.engineering.mapper.handler.EvalResultHandler},
+         #{item.evalFailedReason,jdbcType=VARCHAR},
+         #{item.workspaceId,jdbcType=VARCHAR})
+      </foreach>
+      ) AS v(id, evaluation_task_id, prompt_id, test_num,
+             generate_result, eval_result, eval_failed_reason, workspace_id)
+    ) AS source
+    ON (target.id = source.id)
+    WHEN MATCHED THEN
+      UPDATE SET generate_result = source.generate_result,
+                 eval_result = source.eval_result,
+                 eval_failed_reason = source.eval_failed_reason
+    WHEN NOT MATCHED THEN
+      INSERT (id, evaluation_task_id, prompt_id, test_num,
+              generate_result, eval_result, eval_failed_reason, workspace_id)
+      VALUES (source.id, source.evaluation_task_id, source.prompt_id, source.test_num,
+              source.generate_result, source.eval_result, source.eval_failed_reason,
+              source.workspace_id);
+  </insert>
+</mapper>
+```
+
+> SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，若新增语句须同样补外部 Mapper。
 
 3. **`mapper-locations` 与加载语义**（易误解，请按此理解）：
 
@@ -702,14 +811,14 @@ services:
     environment:
       EXT_DIR: /opt/ext
       ACTIVE_PROFILES: manager,sqlserver
-      # 小写（文档默认写法）
-      spring_datasource_url: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=false;trustServerCertificate=true
-      spring_datasource_username: sa
+      # 小写（文档默认写法）。生产请启用加密，并用最小权限业务账号（不要用 sa）。
+      spring_datasource_url: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=true;trustServerCertificate=false
+      spring_datasource_username: <app-db-user>
       spring_datasource_password: "<your-password>"
       spring_datasource_driver_class_name: com.microsoft.sqlserver.jdbc.SQLServerDriver
       # 大写：若原 .env / local-dev.env 已导出 SPRING_DATASOURCE_*，必须一并覆盖，否则仍可能连旧库
-      SPRING_DATASOURCE_URL: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=false;trustServerCertificate=true
-      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_URL: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=true;trustServerCertificate=false
+      SPRING_DATASOURCE_USERNAME: <app-db-user>
       SPRING_DATASOURCE_PASSWORD: "<your-password>"
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.microsoft.sqlserver.jdbc.SQLServerDriver
       spring_sql_init_mode: never
@@ -727,6 +836,8 @@ services:
 docker compose -f docker-compose.yml -f docker-compose.db-ext.yml \
   up -d --no-deps --pull never --force-recreate studio-manager
 ```
+
+> **连接安全**：上面默认 `encrypt=true;trustServerCertificate=false`，并使用**非 sa** 的业务账号。仅本地/无 TLS 的测试环境才可临时改为 `encrypt=false;trustServerCertificate=true`，且口令不要写进可提交的仓库；生产须校验服务器证书并授予最小库权限。
 
 ### 方式 B：已有进程
 
@@ -769,7 +880,7 @@ docker logs <manager容器> 2>&1 | grep -E 'ExtJdbc|SQLServerDialect|MSSQLDelega
 ```bash
 curl -sk 'http://<host>:31111/auth/token?user_id=testUser&project_id=0'
 # 期望：{"auth_token":"testUser|0"}
-TOKEN=testUser|0
+TOKEN='testUser|0'
 ```
 
 ### 9.3 主链路列表（注意参数）
@@ -814,7 +925,7 @@ curl -sk -H "X-Auth-Token: $TOKEN" \
 
 ### 9.7 MCP 评分 upsert（`ON DUPLICATE` → MERGE）
 
-产品里带 `ON DUPLICATE KEY UPDATE` 的典型路径是 MCP 评分。库中先有一条可评分的 MCP server 记录后：
+产品 ODKU 目前两处：评分 `insertRating`（本小节）与评估 `batchInsertEvalResult`（跑评估任务时覆盖；外部 Mapper 见步骤 3.6）。库中先有一条可评分的 MCP server 记录后：
 
 ```bash
 # 第一次：插入
@@ -858,9 +969,12 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
 | `FETCH NEXT 0` | 确认 `clampZeroFetch` 生效 |
+| `Incorrect syntax near 'OFFSET'`（无 ORDER BY） | 裸 `LIMIT n` 须走 `TOP (n)`，带 offset 须补 `ORDER BY`；勿一律改成 `OFFSET 0 FETCH` |
 | 分页 limit/offset 行数错乱或像互换 | 参数化 `limit ? offset ?` 改写后是否调用了 `swapLimitOffsetParameterOrder` |
+| 401 且 TOKEN 为空 | `TOKEN='testUser|0'` 必须加引号，否则 `|` 被 shell 当成管道 |
 | `FROM_UNIXTIME` / 日期函数报错 | Interceptor 一般不改；补带 `databaseId` 的外部 Mapper（步骤 3.6）并用 `DATEADD`；确认 `ext-mapper` 已进 `mapper-locations` 且在内置前 |
-| `ON DUPLICATE KEY UPDATE` 语法错 | 不要用 Interceptor 拼 `#{...}` MERGE；补 `databaseId="sqlserver"` 的外部 MERGE；确认 Provider 返回 `sqlserver`（内置动态分支对非 postgres 仍是 ODKU） |
+| `ON DUPLICATE KEY UPDATE` 语法错 | 补齐两处外部 MERGE：`insertRating` 与 `batchInsertEvalResult`；确认 Provider 返回 `sqlserver` |
+| 创建/更新时间差约 8 小时 | 检查库/容器时区是否与 `jackson` 的 GMT+8 一致；`NOW`→`SYSDATETIME` 策略下勿混用 `SYSUTCDATETIME` |
 | `FOR UPDATE` 语法错 | 不要指望 Interceptor 自动改写裸 MySQL `FOR UPDATE`；定时任务依赖 Quartz `MSSQLDelegate`；业务 SQL 改用 `WITH (UPDLOCK)` 等目标库写法（外部 Mapper） |
 | duplicate statement id / already contains key | 同 id 的 `databaseId` 专用语句须先于无 `databaseId` 的内置默认句注册：把 `ext-mapper` 写在 `mapper-locations` 最前 |
 | 导入一直 0 成功 | `import_*=` 改成真实资源 ID |
@@ -879,7 +993,8 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 
 1. **`ExtJdbcUrlDatabaseIdProvider`**：确保 URL 返回 `dm` / `oracle`  
 2. **`VendorSqlRewriteInterceptor.rewrite()`**：  
-   - LIMIT → 达梦可保留或按文档；Oracle 常用 `FETCH FIRST` / `OFFSET…FETCH`  
+   - LIMIT → 达梦可保留或按文档；Oracle 常用 `FETCH FIRST` / `OFFSET…FETCH`；SQL Server 须区分有无 `ORDER BY`（`TOP` vs `OFFSET/FETCH`，见步骤 3.3）  
+
    - 引号、`UUID()`/`SYS_GUID()`、布尔等碎片按厂商改（仍不要在 Interceptor 里用 `#{...}` 整段替换 upsert）  
    - 若目标库开启较高 MySQL 兼容模式，改写面可能较小；**DDL 翻译仍是重头**（见 6.2）  
 3. **外部 Mapper**：`databaseId` 与上一步返回值一致；含 upsert / `FROM_UNIXTIME` 等整段方言语句  
