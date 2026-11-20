@@ -1513,6 +1513,8 @@
   "mcp_reload_failed": "Reload failed",
   "mcp_reload_in_progress": "An operation is already in progress for this service; please try again later",
   "mcp_reload_failed_preserved": "Reload failed: {{reason}}. The original tool snapshot and service configuration have been preserved; you can retry later.",
+  "mcp_confirm_import_config": "I have completed the above configuration in the target environment (auth, connection parameters, etc.)",
+  "mcp_import_pending_paths": "Pending configuration locations",
   "installFail": "Failed",
   "MCPValidateError": "Fields can not empty",
   "MCPJSONData": "JSON is error",

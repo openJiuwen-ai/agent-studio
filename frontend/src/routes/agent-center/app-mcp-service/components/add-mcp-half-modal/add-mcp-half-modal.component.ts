@@ -150,6 +150,17 @@ export class AddMcpHalfModalComponent implements OnInit {
   public isCollapseMcpConfig: boolean = false;
   public fgGrantPermissionTip = '';
   public isDisabledConfirmBtn: boolean = false;
+
+  // FEAT-134: 导入后待补配确认
+  public confirmImportConfig = false;
+  public get showImportConfigConfirm(): boolean {
+    return this.action === 'edit' && this.mcpModalSelected?.import_config_pending === true;
+  }
+  public get importConfigPathsDisplay(): string {
+    const paths = this.mcpModalSelected?.import_config_paths;
+    if (!paths) return '';
+    return paths.split(',').filter(p => p).join('\n');
+  }
   /** FEAT-093 动态鉴权头 vs 固定请求头同名冲突（冲突头名，空=无冲突；确认按钮置灰 + 红字提示） */
   public dynamicAuthHeaderConflict: string = '';
 
@@ -805,6 +816,10 @@ export class AddMcpHalfModalComponent implements OnInit {
     } else if (this.action === 'edit') {
       const _id = 'id';
       data[_id] = this.mcpModalSelected.id;
+      // FEAT-134: 编辑页展示的 import_config_pending 为 true 时，附加确认补配标记
+      if (this.mcpModalSelected?.import_config_pending && this.confirmImportConfig) {
+        data['confirm_import_config'] = true;
+      }
       try {
         this.setAuthConfig(data);
       } catch (e) {

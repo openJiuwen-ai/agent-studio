@@ -619,6 +619,11 @@ public class McpServiceManager implements IMcpServiceManagerService {
         McpServiceDetailInfoDto mcpServiceDetailInfoDto = mcpUtil.serviceEntity2McpServiceDetailInfoDto(serviceEntity);
         log.info("Converted service entity to DTO. Service ID: {}", serviceId);
 
+        // FEAT-134: 导入待补配标记透传（前端据此展示补配提示）
+        mcpServiceDetailInfoDto.setImportConfigPending(
+            Boolean.TRUE.equals(serviceEntity.getImportConfigPending()));
+        mcpServiceDetailInfoDto.setImportConfigPaths(serviceEntity.getImportConfigPaths());
+
         mcpServiceDetailInfoDto.setServerConfig(encryptionAdapter.decrypt(mcpServiceDetailInfoDto.getServerConfig()));
 
         log.info("Server config decrypted for service ID: {}", serviceId);
@@ -3272,6 +3277,14 @@ public class McpServiceManager implements IMcpServiceManagerService {
                     RequestContextUtils.remove();
                 }
             });
+        }
+
+        // ==================== FEAT-134: 导入待补配确认 ====================
+        // 用户勾选"已完成目标环境补配"并保存成功后，清除待补配标记及路径。
+        // 该字段不改变 auth scope，也不表示连接验证成功；可用性以重载结果为准。
+        if (Boolean.TRUE.equals(serviceReq.getConfirmImportConfig())) {
+            log.info("FEAT-134: clearing import_config_pending for service {}", serviceReq.getId());
+            this.serviceDao.markImportConfigured(serviceReq.getId(), tenantId, workspaceId);
         }
 
         return count > 0;

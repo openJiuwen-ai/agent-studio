@@ -93,6 +93,16 @@
 </div>
 
 <div *nzModalFooter>
+  <!-- FEAT-134: 导入后待补配确认（编辑模式且有待补配标记时显示） -->
+  <div *ngIf="showImportConfigConfirm" class="mb-3" style="padding: 8px 16px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 4px;">
+    <label nz-checkbox [(ngModel)]="confirmImportConfig" class="mr-2">
+      {{ 'mcp_confirm_import_config' | i18nextEager }}
+    </label>
+    <div *ngIf="importConfigPathsDisplay" class="mt-1" style="font-size: 12px; color: #8c8c8c; white-space: pre-line;">
+      {{ 'mcp_import_pending_paths' | i18nextEager }}:
+      {{ importConfigPathsDisplay }}
+    </div>
+  </div>
   <div class="footer" *ngIf="teamplateType === 'official-creation'">
     <button
       type="button"

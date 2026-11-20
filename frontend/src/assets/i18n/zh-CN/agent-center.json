@@ -1533,6 +1533,8 @@
   "mcp_reload_failed": "重载失败",
   "mcp_reload_in_progress": "该服务已有进行中的操作，请稍后再试",
   "mcp_reload_failed_preserved": "重载失败：{{reason}}。原工具快照和服务配置已保留，可稍后重试。",
+  "mcp_confirm_import_config": "我已在目标环境完成上述配置补齐（鉴权、连接参数等）",
+  "mcp_import_pending_paths": "待补配位置",
   "installFail": "安装失败",
   "MCPValidateError": "服务名称或者服务描述必填",
   "MCPJSONData": "MCP的JSON数据异常",
