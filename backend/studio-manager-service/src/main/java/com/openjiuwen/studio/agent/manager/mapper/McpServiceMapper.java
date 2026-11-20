@@ -126,4 +126,25 @@ public interface McpServiceMapper {
     List<McpServiceEntity> listMcpServiceByIdAndProjectId(@Param("ids") List<String> mcpIds, @Param("projectId") String projectId);
 
     List<McpServiceEntity> listMcpServiceByShareResourceEntity(List<ShareResourceEntity> shareResourceEntities);
+
+    /**
+     * FEAT-134：重载原子提交——带归属、活动操作与修订号条件；影响行数必须为 1。
+     */
+    int commitToolSnapshot(@Param("serviceId") String serviceId, @Param("tenantId") String tenantId,
+        @Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
+        @Param("operationId") String operationId, @Param("expectedRevision") long expectedRevision,
+        @Param("tools") String tools);
+
+    /**
+     * FEAT-134：导入待补配标记清除（modify 确认后）。
+     */
+    int markImportConfigured(@Param("serviceId") String serviceId, @Param("tenantId") String tenantId,
+        @Param("workspaceId") String workspaceId);
+
+    /**
+     * FEAT-134：导入待补配标记写入。
+     */
+    int markImportPending(@Param("serviceId") String serviceId, @Param("tenantId") String tenantId,
+        @Param("workspaceId") String workspaceId, @Param("pending") boolean pending,
+        @Param("paths") String paths);
 }

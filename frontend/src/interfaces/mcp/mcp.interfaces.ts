@@ -107,6 +107,10 @@ export interface McpInterfaces {
   category?: string;
   auth_info?: AuthInfo;
   fail_reason_detail?: McpDeployFailType;
+  /** FEAT-134: 导入后待补配标记（true=有配置项需在目标环境补配） */
+  import_config_pending?: boolean;
+  /** FEAT-134: 待补配的路径清单（逗号分隔） */
+  import_config_paths?: string;
 }
 
 interface McpAuthKey {

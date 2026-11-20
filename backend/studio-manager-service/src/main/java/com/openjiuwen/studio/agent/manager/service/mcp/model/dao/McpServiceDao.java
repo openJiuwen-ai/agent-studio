@@ -198,6 +198,13 @@ public class McpServiceDao {
     }
 
     /**
+     * FEAT-134：清除导入待补配标记（modify 确认后）。
+     */
+    public int markImportConfigured(String serviceId, String tenantId, String workspaceId) {
+        return mcpServiceMapper.markImportConfigured(serviceId, tenantId, workspaceId);
+    }
+
+    /**
      * 根据mcp主键、项目id、工作空间id、租户id、部门id 查询mcp服务信息
      *
      */

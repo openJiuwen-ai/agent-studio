@@ -200,4 +200,40 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     public ResponseEntity<Boolean> updateMcpAuthInfo(String projectId, String id, String workspaceId, AuthInfo body) {
         return ResponseModel.success(mcpServiceManagerService.updateMcpAuthInfo(projectId, id, workspaceId, body));
     }
+
+    @Override
+    public ResponseEntity<org.springframework.core.io.Resource> exportMcpServices(String projectId,
+        String workspaceId, com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body) {
+        String jsonl = mcpServiceManagerService.exportMcpServices(projectId, workspaceId, body);
+        byte[] bytes = jsonl.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ResponseModel.TransferResource resource =
+            new ResponseModel.TransferResource(new java.io.ByteArrayInputStream(bytes));
+        resource.setFilename("mcp-services.jsonl");
+        resource.setContentType("application/x-ndjson");
+        resource.setLength((long) bytes.length);
+        return ResponseModel.successDownload(resource);
+    }
+
+    @Override
+    public ResponseEntity<Object> importMcpServices(String projectId, String workspaceId,
+        org.springframework.web.multipart.MultipartFile file) {
+        try {
+            String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return ResponseModel.success(
+                mcpServiceManagerService.importMcpServices(projectId, workspaceId, content));
+        } catch (java.io.IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @Override
+    public ResponseEntity<Object> reloadMcpService(String projectId, String workspaceId, String id) {
+        return ResponseModel.success(mcpServiceManagerService.reloadMcpService(projectId, workspaceId, id));
+    }
+
+    @Override
+    public ResponseEntity<Object> getMcpOperationResult(String projectId, String workspaceId, String operationId) {
+        return ResponseModel.success(
+            mcpServiceManagerService.getMcpOperationResult(projectId, workspaceId, operationId));
+    }
 }

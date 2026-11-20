@@ -73,6 +73,11 @@ public class McpServiceModifyReq implements Serializable {
     @Valid
     private AuthInfo authInfo = null;
 
+    @JsonProperty("confirm_import_config")
+    @Schema(description = "FEAT-134：用户确认已完成目标环境补配时置 true，清除导入待补配标记。"
+        + "不改变 auth scope，也不表示连接验证成功；可用性以重载结果为准。", example = "false")
+    private Boolean confirmImportConfig = null;
+
     public String getId() {
         return id;
     }
@@ -154,6 +159,15 @@ public class McpServiceModifyReq implements Serializable {
         return this;
     }
 
+    public Boolean getConfirmImportConfig() {
+        return confirmImportConfig;
+    }
+
+    public McpServiceModifyReq setConfirmImportConfig(Boolean confirmImportConfig) {
+        this.confirmImportConfig = confirmImportConfig;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -186,12 +200,14 @@ public class McpServiceModifyReq implements Serializable {
             mcpServiceModifyReq.description) && Objects.equals(this.descriptionEn, mcpServiceModifyReq.descriptionEn)
             && Objects.equals(this.icon, mcpServiceModifyReq.icon) && Objects.equals(this.serverConfig,
             mcpServiceModifyReq.serverConfig) && Objects.equals(this.readme, mcpServiceModifyReq.readme)
-            && Objects.equals(this.authInfo, mcpServiceModifyReq.authInfo);
+            && Objects.equals(this.authInfo, mcpServiceModifyReq.authInfo)
+            && Objects.equals(this.confirmImportConfig, mcpServiceModifyReq.confirmImportConfig);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, name, nameEn, description, descriptionEn, icon, serverConfig, readme, authInfo);
+        return Objects.hash(id, name, nameEn, description, descriptionEn, icon, serverConfig, readme, authInfo,
+            confirmImportConfig);
     }
 
     /**
