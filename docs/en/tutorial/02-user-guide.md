@@ -1,4 +1,4 @@
-﻿# Agent Development Platform User Guide
+# Agent Development Platform User Guide
 
 ---
 
@@ -4994,7 +4994,7 @@ The platform not only supports creating individual prompts but also supports bat
 > - The imported file is limited to xls and xlsx formats, file size must not exceed 20MB.
 > - Select prompt template file for import, supports downloading templates.
 
-**Step 3** Click "Import". Successfully imported prompts will be displayed on the "Prompts" page.
+**Step 3** Click "Import". The button shows a loading indicator and cannot be clicked again while the request runs. If the request fails, you can retry from the same dialog. Successfully imported prompts appear on the "Prompts" page.
 
 ------
 

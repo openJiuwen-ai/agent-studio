@@ -12,6 +12,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzUploadModule, NzUploadFile } from 'ng-zorro-antd/upload';
 import { NzModalModule, NzModalRef } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { EMPTY, catchError, finalize } from 'rxjs';
 
 @Component({
   selector: 'meta-import-template-modal',
@@ -30,6 +31,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 export class ImportTemplateModalComponent {
   public selectedFile: NzUploadFile | null = null;
   public fileList: NzUploadFile[] = [];
+  public importing = false;
   private nativeFile: File | null = null;
   public readonly maxSize = 20 * 1024 * 1024;
   public readonly uploadType = ['.xls', '.xlsx'];
@@ -81,16 +83,27 @@ export class ImportTemplateModalComponent {
   }
 
   confirm() {
-    if (!this.nativeFile) return;
+    if (!this.nativeFile || this.importing) return;
     const formData = new FormData();
     formData.append('file', this.nativeFile);
-    this.service.importPromptTmplV2(formData).subscribe(res => {
-      if (res.length === 0) {
-        this.close();
-      } else {
-        MessageComponent.showError(res.join(','));
-      }
-    });
+    this.importing = true;
+    this.service
+      .importPromptTmplV2(formData)
+      .pipe(
+        // The shared HTTP service already displays request errors.
+        catchError(() => EMPTY),
+        finalize(() => {
+          this.importing = false;
+          this.cdr.markForCheck();
+        })
+      )
+      .subscribe(res => {
+        if (res.length === 0) {
+          this.close();
+        } else {
+          MessageComponent.showError(res.join(','));
+        }
+      });
   }
 
   downloadTemplate() {
