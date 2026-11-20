@@ -23,7 +23,7 @@ studio-db-ext/
     org.springframework.boot.autoconfigure.AutoConfiguration.imports
   mapper/                           # 可选：databaseId=sqlserver 的外部 Mapper XML
     AgentMapperSqlServer.xml        # 例：FROM_UNIXTIME → DATEADD
-    McpServerRatingMapperSqlServer.xml  # 可选：评分 upsert 用 MERGE（Interceptor 已有兜底）
+    McpServerRatingMapperSqlServer.xml  # 必做：评分 upsert 用 MERGE（勿在 Interceptor 里拼 #{...}）
   classes/                          # javac 输出（打 jar 前把 mapper 拷到 classes/ext-mapper/）
   ext/
     studio-db-ext.jar               # 打好的扩展包
@@ -59,9 +59,10 @@ studio-db-ext/
 
 业务 REST 不用改；改的是**部署与扩展包**。
 
-> Interceptor 适合改 LIMIT / 布尔 / 反引号 / `UUID()` / `NOW()` / 已知的 `ON DUPLICATE` 等碎片。  
-> `FROM_UNIXTIME` 这类整段函数更适合用**外部 Mapper** 写成 `DATEADD`（见步骤 3.6）。  
-> 裸 MySQL `SELECT ... FOR UPDATE` 不要指望 Interceptor 自动改；定时任务锁走 Quartz `MSSQLDelegate`。
+> Interceptor 适合改 **已变成 `?` 之后**仍可识别的碎片：LIMIT / 布尔 / 反引号 / `UUID()` / `NOW()` 等。  
+> **`ON DUPLICATE KEY UPDATE`、`FROM_UNIXTIME` 等整段重写必须用外部 Mapper**（步骤 3.6）。  
+> 原因：`StatementHandler.prepare` 时 `BoundSql` 里已是 `?`，ParameterMapping 已固定；若在 Interceptor 里再写回 `#{serverId}` 之类，会当字面量发出且参数个数对不上，必然失败。  
+> 裸 MySQL `SELECT ... FOR UPDATE` 也不要指望 Interceptor 自动改；定时任务锁走 Quartz `MSSQLDelegate`。
 
 ---
 
@@ -127,6 +128,10 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
                     return "sqlserver";
                 }
                 if (u.contains("postgresql")) return "postgres";
+                // 与产品内置 JdbcUrlDatabaseIdProvider 一致：
+                // jdbc:opengauss 表示 Studio 官方支持的 openGauss「MySQL 兼容模式」(DBCOMPATIBILITY='M')，
+                // 应返回 mysql，以走 MySQL DDL/Mapper 分支；不要映射成 postgres。
+                // 仅当你们明确使用 PostgreSQL 兼容库/协议（URL 通常含 postgresql）时才返回 postgres。
                 if (u.contains("mysql") || u.contains("mariadb") || u.contains("opengauss")) return "mysql";
             }
             String product = conn.getMetaData().getDatabaseProductName();
@@ -135,6 +140,8 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
                 if (p.contains("dm") || p.contains("dameng")) return "dm";
                 if (p.contains("oracle")) return "oracle";
                 if (p.contains("microsoft") || p.contains("sql server")) return "sqlserver";
+                // openGauss 驱动的 DatabaseProductName 常报告为 PostgreSQL，不能只靠产品名判断；
+                // 仍以 JDBC URL 是否含 opengauss 为准（见上方）。
             }
             return null;
         }
@@ -163,6 +170,8 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.apache.ibatis.reflection.SystemMetaObject;
 
 import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -193,11 +202,14 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         if (sql == null) {
             return invocation.proceed();
         }
+        String originalSql = sql;
         String lower = sql.toLowerCase();
         if (needsRewrite(sql, lower)) {
             String rewritten = rewrite(sql);
             if (!rewritten.equals(sql)) {
                 SystemMetaObject.forObject(boundSql).setValue("sql", rewritten);
+                // limit ? offset ? → OFFSET ? FETCH ? 时两个 ? 文本相同，必须交换 ParameterMapping
+                swapLimitOffsetParameterOrder(originalSql, boundSql);
                 sql = rewritten;
                 lower = sql.toLowerCase();
                 System.out.println("[VendorSqlRewrite] rewrote dialect fragments");
@@ -209,14 +221,16 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return invocation.proceed();
     }
 
+    // 不要在 Interceptor 里处理 ON DUPLICATE KEY UPDATE：
+    // prepare 时 BoundSql 已是 ? + ParameterMapping，整段换成带 #{...} 的 MERGE 无法重新绑定。
+    // 评分 upsert 用步骤 3.6 外部 Mapper（databaseId=sqlserver 的 MERGE）。
     private static boolean needsRewrite(String sql, String lower) {
         return lower.contains("limit")
             || lower.contains(" false") || lower.contains(" true")
             || lower.contains("=false") || lower.contains("=true")
             || lower.contains(" is true") || lower.contains(" is false")
             || sql.indexOf('`') >= 0
-            || lower.contains("uuid(") || lower.contains("now(")
-            || lower.contains("on duplicate key update");
+            || lower.contains("uuid(") || lower.contains("now(");
     }
 
     /** SQL Server 完整规则；达梦/Oracle 请按厂商语法改此方法 */
@@ -231,13 +245,14 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         s = s.replaceAll("(?i)\\bis\\s+false\\b", "= 0");
         s = s.replaceAll("(?i)=\\s*true\\b", "= 1");
         s = s.replaceAll("(?i)=\\s*false\\b", "= 0");
-        // ON DUPLICATE → MERGE（产品当前命中：ws_mcp_server_rating 评分 upsert）
-        s = rewriteOnDuplicateKeyUpdate(s);
 
+        // 字面量 LIMIT 10 OFFSET 20 → OFFSET 20 FETCH 10（文本即可）
+        // 参数化 limit ? offset ? → OFFSET ? FETCH ?（文本看起来对，但 ? 顺序未变，见 swapLimitOffsetParameterOrder）
         Matcher m = LIMIT_OFFSET.matcher(s);
         if (m.find()) {
             return m.replaceAll("OFFSET $2 ROWS FETCH NEXT $1 ROWS ONLY");
         }
+        // MySQL LIMIT offset,count → 参数顺序本就是 (offset,count)，与 OFFSET/FETCH 一致，不必换映射
         m = LIMIT_COMMA.matcher(s);
         if (m.find()) {
             return m.replaceAll("OFFSET $1 ROWS FETCH NEXT $2 ROWS ONLY");
@@ -251,18 +266,25 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return s;
     }
 
-    /** 仅覆盖产品现网 ODKU：McpServerRatingMapper.insertRating；其他表请加外部 Mapper */
-    static String rewriteOnDuplicateKeyUpdate(String sql) {
-        String lower = sql.toLowerCase();
-        if (!lower.contains("on duplicate key update") || !lower.contains("ws_mcp_server_rating")) {
-            return sql;
+    /**
+     * 将 {@code limit ? offset ?} 改写成 {@code OFFSET ? FETCH ?} 后，
+     * BoundSql 里 ? 仍按原顺序绑定 (limit, offset)，必须交换为 (offset, limit)。
+     * 对应产品如 AgentMapper.queryAgentList 的 {@code limit #{limit} offset #{offset}}。
+     */
+    static void swapLimitOffsetParameterOrder(String originalSql, BoundSql boundSql) {
+        if (originalSql == null || boundSql == null) return;
+        Matcher m = LIMIT_OFFSET.matcher(originalSql);
+        if (!m.find()) return;
+        if (!"?".equals(m.group(1)) || !"?".equals(m.group(2))) return;
+        int qBefore = 0;
+        for (int i = 0; i < m.start(); i++) {
+            if (originalSql.charAt(i) == '?') qBefore++;
         }
-        return "MERGE INTO ws_mcp_server_rating AS target "
-            + "USING (SELECT #{serverId} AS server_id, #{tenantId} AS tenant_id, #{score} AS score) AS source "
-            + "ON (target.server_id = source.server_id AND target.tenant_id = source.tenant_id) "
-            + "WHEN MATCHED THEN UPDATE SET score = source.score, updated_date = SYSUTCDATETIME() "
-            + "WHEN NOT MATCHED THEN INSERT (server_id, tenant_id, score, created_date, updated_date) "
-            + "VALUES (source.server_id, source.tenant_id, source.score, SYSUTCDATETIME(), SYSUTCDATETIME())";
+        List<ParameterMapping> mappings = boundSql.getParameterMappings();
+        if (mappings == null || mappings.size() <= qBefore + 1) return;
+        List<ParameterMapping> mutable = new ArrayList<>(mappings);
+        Collections.swap(mutable, qBefore, qBefore + 1);
+        SystemMetaObject.forObject(boundSql).setValue("parameterMappings", mutable);
     }
 
     static boolean clampZeroFetch(BoundSql boundSql) {
@@ -402,9 +424,35 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`），�
 
 > 上面是**形态示例**；完整条件分支请对照产品内置同名语句补齐，或先跑通主链路再按日志缺啥补啥。
 
-2. 评分 upsert（`ON DUPLICATE KEY UPDATE`）文档第 3.3 节 Interceptor 已对 `ws_mcp_server_rating` 做 MERGE 兜底；也可再放一份 `McpServerRatingMapperSqlServer.xml`（`insertRating` + `databaseId="sqlserver"`）双保险。
+2. **评分 upsert（必做）**：产品 `McpServerRatingMapper.insertRating` 使用 MySQL `ON DUPLICATE KEY UPDATE`。  
+   **不要**在 Interceptor 里把整段 SQL 替换成带 `#{serverId}` 的 MERGE（此时占位符已是 `?`，再写 `#{...}` 不会重新绑定）。  
+   正确做法：在 `mapper/McpServerRatingMapperSqlServer.xml` 提供同 id、`databaseId="sqlserver"` 的语句，让 MyBatis **在解析阶段**生成正确的 `?` 与 ParameterMapping：
 
-3. **加载顺序**：外部 XML 必须排在内置 `classpath*:mapper/**/*.xml` **之前**（见第 5 节 `mybatis.mapper-locations`），否则可能 duplicate statement id。
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.McpServerRatingMapper">
+  <update id="insertRating" databaseId="sqlserver">
+    MERGE INTO ws_mcp_server_rating AS target
+    USING (SELECT #{serverId} AS server_id,
+                  #{tenantId} AS tenant_id,
+                  #{score} AS score) AS source
+    ON (target.server_id = source.server_id AND target.tenant_id = source.tenant_id)
+    WHEN MATCHED THEN
+      UPDATE SET score = source.score,
+                 updated_date = SYSUTCDATETIME()
+    WHEN NOT MATCHED THEN
+      INSERT (server_id, tenant_id, score, created_date, updated_date)
+      VALUES (source.server_id, source.tenant_id, source.score,
+              SYSUTCDATETIME(), SYSUTCDATETIME());
+  </update>
+</mapper>
+```
+
+> SQL Server 的 `MERGE` 建议以分号结尾（如上）。参数只需各出现一次（`serverId` / `tenantId` / `score`），由 MyBatis 正常绑定。
+
+3. **加载顺序**：外部 XML 必须排在内置 `classpath*:mapper/**/*.xml` **之前**（见第 5 节 `mybatis.mapper-locations`），否则可能 duplicate statement id，或仍落到带 `ON DUPLICATE` 的内置语句。
 
 ---
 
@@ -738,7 +786,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 # 期望：HTTP 200；查 ws_mcp_server_rating 该 server 仅 1 行且 score=9
 ```
 
-若报 `ON DUPLICATE` 语法错误：检查 Interceptor 的 `rewriteOnDuplicateKeyUpdate` 是否进 jar，或补外部 `McpServerRatingMapperSqlServer.xml`。
+若报 `ON DUPLICATE` 语法错误：说明仍在走内置 MySQL 语句——检查 jar 内是否有 `ext-mapper/McpServerRatingMapperSqlServer.xml`、`databaseId` 是否为 `sqlserver`、以及 `mybatis.mapper-locations` 是否把外部路径排在前面。
 
 ### 9.8 回滚
 
@@ -763,8 +811,9 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
 | `FETCH NEXT 0` | 确认 `clampZeroFetch` 生效 |
+| 分页 limit/offset 行数错乱或像互换 | 参数化 `limit ? offset ?` 改写后是否调用了 `swapLimitOffsetParameterOrder` |
 | `FROM_UNIXTIME` / 日期函数报错 | Interceptor 一般不改；补外部 Mapper（步骤 3.6）并用 `DATEADD`；检查 `mapper-locations` 外部是否排在前面 |
-| `ON DUPLICATE KEY UPDATE` 语法错 | 确认 `rewriteOnDuplicateKeyUpdate` 对 `ws_mcp_server_rating` 生效，或加外部 MERGE Mapper |
+| `ON DUPLICATE KEY UPDATE` 语法错 | 不要用 Interceptor 拼 `#{...}` MERGE；补外部 `McpServerRatingMapperSqlServer.xml`，并确认外部 mapper 优先加载 |
 | `FOR UPDATE` 语法错 | 不要指望 Interceptor 自动改写裸 MySQL `FOR UPDATE`；定时任务依赖 Quartz `MSSQLDelegate`；业务 SQL 改用 `WITH (UPDLOCK)` 等目标库写法（外部 Mapper） |
 | duplicate statement id | 外部 `databaseId` Mapper 与加载顺序：外部路径必须在内置 mapper 之前 |
 | 导入一直 0 成功 | `import_*=` 改成真实资源 ID |
@@ -784,8 +833,8 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 1. **`ExtJdbcUrlDatabaseIdProvider`**：确保 URL 返回 `dm` / `oracle`  
 2. **`VendorSqlRewriteInterceptor.rewrite()`**：  
    - LIMIT → 达梦可保留或按文档；Oracle 常用 `FETCH FIRST` / `OFFSET…FETCH`  
-   - 引号、`UUID()`/`SYS_GUID()`、布尔、`ON DUPLICATE` 等按厂商改  
-3. **外部 Mapper**：`databaseId` 与上一步返回值一致  
+   - 引号、`UUID()`/`SYS_GUID()`、布尔等碎片按厂商改（仍不要在 Interceptor 里用 `#{...}` 整段替换 upsert）  
+3. **外部 Mapper**：`databaseId` 与上一步返回值一致；含 upsert / `FROM_UNIXTIME` 等整段方言语句  
 4. **profile**：驱动类、Hibernate dialect、PageHelper、Quartz delegate、DDL 翻译规则  
 
 验收 Checklist 与第 9 节相同。
