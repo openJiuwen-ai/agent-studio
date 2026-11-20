@@ -28,11 +28,13 @@ studio-db-ext/
     McpServerRatingMapperSqlServer.xml  # 必做：评分 upsert 用 MERGE（勿在 Interceptor 里拼 #{...}）
   classes/                          # javac 输出（打 jar 前把 mapper 拷到 classes/ext-mapper/）
   ext/
-    studio-db-ext.jar               # 打好的扩展包
-  lib/
-    mssql-jdbc-x.y.z.jre11.jar      # 目标库驱动（自行下载）
-    mybatis-3.5.x.jar                 # 编译 Interceptor 用（与产品 MyBatis 大版本接近即可）
-    spring-context-*.jar …          # 编译 @Configuration 用（见第 3 步）
+    studio-db-ext.jar               # 打好的扩展包（运行时进 loader.path）
+  lib/                              # 仅运行时 JDBC 驱动（进 loader.path）
+    mssql-jdbc-x.y.z.jre11.jar
+  lib-compile/                      # 仅 javac 用，禁止放进 loader.path
+    mybatis-3.5.x.jar
+    spring-context-*.jar …
+    spring-beans / spring-core / spring-jcl …
   config/
     application-sqlserver.yml
   sql/
@@ -43,7 +45,7 @@ studio-db-ext/
     start-with-ext.sh
 ```
 
-运行时把该目录挂进 manager 容器（如 `/opt/ext`），用包装脚本启动，使扩展 jar + 驱动进入应用类路径。
+运行时把该目录挂进 manager 容器（如 `/opt/ext`），用包装脚本启动，使 **扩展 jar + `lib/` 里的 JDBC 驱动**进入应用类路径。`lib-compile/` 只在本机编译时用，不要挂进 `loader.path`，以免与产品自带的 Spring/MyBatis 版本冲突。
 
 ---
 
@@ -55,7 +57,7 @@ studio-db-ext/
 |---|---|
 | 告诉 MyBatis「当前是 sqlserver/dm/…」 | 自定义 `DatabaseIdProvider`（`@Primary` Bean） |
 | 把 SQL 里的 MySQL 写法改成目标库写法 | MyBatis `Interceptor`（运行时改写） |
-| 个别语句用目标库专用 SQL | 外部 Mapper XML（`databaseId=sqlserver`，且**排在**内置 mapper 之前） |
+| 个别语句用目标库专用 SQL | 外部 Mapper XML（同 namespace/id，语句带 `databaseId=sqlserver`；`mapper-locations` 里外部路径写在内置前，见步骤 3.6） |
 | 加载你的扩展 jar 和 JDBC 驱动 | `PropertiesLauncher` + `-Dloader.path=...`（不要用 `java -jar`） |
 | 换连接串、方言、DDL 路径 | 环境变量 / 外部 `application-*.yml` |
 
@@ -73,12 +75,13 @@ studio-db-ext/
 1. JDK 17（与产品 manager 一致）  
 2. 目标库已安装，能建库（示例库名 `agentbuilder`；产品默认部署里常见 `agent-builder`，**名字自定，只要与 JDBC URL 一致**）  
 3. 已有可运行的 `studio-manager` 镜像/进程（仍连着原库也可以，稍后切换）  
-4. 下载目标库 JDBC 驱动，放到 `studio-db-ext/lib/`  
-5. 为编译准备依赖 jar（放到 `lib/`）：
+4. 下载目标库 JDBC 驱动，放到 `studio-db-ext/lib/`（**仅驱动**；此目录会进运行时 `loader.path`）  
+5. 为编译准备依赖 jar，放到 **`studio-db-ext/lib-compile/`**（与 `lib/` 分开）：
    - `mybatis-3.5.x.jar`（Interceptor API）
-   - 编译 `@Configuration`：再准备 `spring-context` / `spring-beans` / `spring-core` / `spring-jcl`（版本接近产品即可）
+   - 编译 `@Configuration`：`spring-context` / `spring-beans` / `spring-core` / `spring-jcl`（版本接近产品即可）
 
-> 驱动与依赖 jar **由你自行从厂商/Maven 中央仓库获取**，本文不附带二进制。
+> 驱动与编译依赖 jar **由你自行从厂商/Maven 中央仓库获取**，本文不附带二进制。  
+> **不要**把 `lib-compile/` 里的 Spring/MyBatis 拷进 `lib/` 或写进 `loader.path`：扩展 class 已打进 `studio-db-ext.jar`，运行时只需驱动；再注入编译期副本可能覆盖产品 classpath 上的同名库。
 
 ---
 
@@ -91,7 +94,7 @@ studio-db-ext/
 ```bash
 mkdir -p studio-db-ext/src/com/openjiuwen/studio/ext
 mkdir -p studio-db-ext/src/META-INF/spring
-mkdir -p studio-db-ext/{classes,ext,lib,config,sql,bin,mapper}
+mkdir -p studio-db-ext/{classes,ext,lib,lib-compile,config,sql,bin,mapper}
 ```
 
 ### 步骤 3.2 方言识别：`ExtJdbcUrlDatabaseIdProvider.java`
@@ -392,7 +395,7 @@ com.openjiuwen.studio.ext.ExtDbAutoConfiguration
 
 ### 步骤 3.6 外部 Mapper（处理 Interceptor 不好改的整段 SQL）
 
-Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`），用**同 namespace、同 id、带 `databaseId="sqlserver"`** 的外部 XML 覆盖。
+Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整段 upsert），用**同 namespace、同 id、带 `databaseId="sqlserver"`** 的外部语句。MyBatis 按语句的 **`databaseId` 属性**选型，不是靠「路径靠前覆盖 SQL 文本」。
 
 1. 在 `studio-db-ext/mapper/` 新建例如 `AgentMapperSqlServer.xml`（核心是把 `FROM_UNIXTIME(updated_at/1000)` 写成 `DATEADD(...)`）：
 
@@ -426,9 +429,9 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`），�
 
 > 上面是**形态示例**；完整条件分支请对照产品内置同名语句补齐，或先跑通主链路再按日志缺啥补啥。
 
-2. **评分 upsert（必做）**：产品 `McpServerRatingMapper.insertRating` 使用 MySQL `ON DUPLICATE KEY UPDATE`。  
+2. **评分 upsert（必做）**：产品内置 `McpServerRatingMapper.insertRating` **没有**语句级 `databaseId`，而是用 `_databaseId` 动态分支：`== 'postgres'` 走 `ON CONFLICT`，**否则**（含 `sqlserver`）走 `ON DUPLICATE KEY UPDATE`。因此仅把 DatabaseId 设成 `sqlserver` 不够，仍会生成 ODKU。  
    **不要**在 Interceptor 里把整段 SQL 替换成带 `#{serverId}` 的 MERGE（此时占位符已是 `?`，再写 `#{...}` 不会重新绑定）。  
-   正确做法：在 `mapper/McpServerRatingMapperSqlServer.xml` 提供同 id、`databaseId="sqlserver"` 的语句，让 MyBatis **在解析阶段**生成正确的 `?` 与 ParameterMapping：
+   正确做法：在 `mapper/McpServerRatingMapperSqlServer.xml` 提供同 id、**语句属性** `databaseId="sqlserver"` 的 MERGE，让 MyBatis **在解析阶段**生成正确的 `?` 与 ParameterMapping：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -454,7 +457,11 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`），�
 
 > SQL Server 的 `MERGE` 建议以分号结尾（如上）。参数只需各出现一次（`serverId` / `tenantId` / `score`），由 MyBatis 正常绑定。
 
-3. **加载顺序**：外部 XML 必须排在内置 `classpath*:mapper/**/*.xml` **之前**（见第 5 节 `mybatis.mapper-locations`），否则可能 duplicate statement id，或仍落到带 `ON DUPLICATE` 的内置语句。
+3. **`mapper-locations` 与加载语义**（易误解，请按此理解）：
+
+   - **选型依据**：同 namespace/id 时，由语句上的 `databaseId` 与当前 `DatabaseIdProvider` 返回值匹配决定用哪份；内置无 `databaseId` 的默认句靠动态 `_databaseId`，**不会**因为你「多写了一个外部文件路径」就自动被覆盖。
+   - **为何外部路径仍要写在内置前面**：MyBatis 会先注册匹配当前 `databaseId` 的语句，再尝试注册无 `databaseId` 的默认句；若默认句已先注册，再注册同 id 的 `databaseId=sqlserver` 语句会触发 StrictMap **already contains key**（duplicate statement id）。把 `classpath:ext-mapper/*.xml` 放在 `classpath*:mapper/...` **之前**，是为了让带 `databaseId` 的语句先注册，随后内置默认句会被跳过——**不是**「路径顺序 = SQL 覆盖优先级」。
+   - **关于 `classpath*:mapper/*.xml` 与 `**/*.xml`**：二者会匹配到同一批内置资源；已加载资源靠 `isResourceLoaded` 跳过，**不能**指望这两行之间的顺序去重或提高外部 Mapper 优先级。产品默认就有这两行，外部 profile 保留即可，关键是**额外加上**且**写在最前**的 `ext-mapper` 条目。
 
 ---
 
@@ -465,14 +472,15 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`），�
 ```bash
 cd studio-db-ext
 
-# 编译（Linux / macOS：classpath 用冒号 :）
+# 编译（依赖取自 lib-compile/，不要用 lib/）
+# Linux / macOS：classpath 用冒号 :
 javac --release 17 \
-  -cp "lib/mybatis-3.5.17.jar:lib/spring-context-6.2.8.jar:lib/spring-beans-6.2.8.jar:lib/spring-core-6.2.8.jar:lib/spring-jcl-6.2.8.jar" \
+  -cp "lib-compile/mybatis-3.5.17.jar:lib-compile/spring-context-6.2.8.jar:lib-compile/spring-beans-6.2.8.jar:lib-compile/spring-core-6.2.8.jar:lib-compile/spring-jcl-6.2.8.jar" \
   -d classes \
   src/com/openjiuwen/studio/ext/*.java
 
 # Windows（cmd）把上面 -cp 里的冒号改成分号，例如：
-# -cp "lib\mybatis-3.5.17.jar;lib\spring-context-6.2.8.jar;..."
+# -cp "lib-compile\mybatis-3.5.17.jar;lib-compile\spring-context-6.2.8.jar;..."
 
 # 拷贝 AutoConfiguration 清单进 classes
 mkdir -p classes/META-INF/spring
@@ -522,7 +530,7 @@ spring:
           jobStore:
             driverDelegateClass: org.quartz.impl.jdbcjobstore.MSSQLDelegate
 
-# 外部 Mapper 必须排在内置之前
+# ext-mapper 须在内置 mapper 之前（先注册 databaseId 专用语句，避免 StrictMap 同 id 冲突；见步骤 3.6）
 mybatis:
   mapper-locations:
     - classpath:ext-mapper/*.xml
@@ -649,11 +657,13 @@ APP_PATH=${APP_PATH:-/opt/cloud/studio-manager}
 EXT_DIR=${EXT_DIR:-/opt/ext}
 ACTIVE_PROFILES="${ACTIVE_PROFILES:-manager,sqlserver}"
 APP_JAR="${APP_PATH}/app/studio-manager.jar"
+# 只挂扩展 jar + JDBC 驱动目录。不要把 lib-compile/ 加进来。
 LOADER_PATH="${EXT_DIR}/ext,${EXT_DIR}/lib"
 
 echo "INFO: loader.path=${LOADER_PATH}"
 echo "INFO: profiles=${ACTIVE_PROFILES}"
 ls -la "${EXT_DIR}/ext" "${EXT_DIR}/lib" || true
+# 若误把 mybatis/spring 放进 lib/，启动前应挪到 lib-compile/ 或删掉运行时副本
 
 exec java -Xms512m -Xmx2048m \
   -Dfile.encoding=UTF-8 \
@@ -670,6 +680,8 @@ chmod +x studio-db-ext/bin/start-with-ext.sh
 ```
 
 **禁止**再用裸 `java -jar studio-manager.jar`，否则扩展包进不了类路径。
+
+> **`loader.path` 内容**：`${EXT_DIR}/ext`（扩展包）+ `${EXT_DIR}/lib`（**仅** JDBC 驱动）。`lib-compile/` 即使挂载进容器也不要写进 `LOADER_PATH`。
 
 > **环境变量大小写**：部分部署会同时导出 `SPRING_DATASOURCE_URL`（大写）和 `spring_datasource_url`（小写）。Spring 对二者都认；若只改小写、大写仍指向旧 MySQL/MariaDB，进程可能「驱动已是目标库、URL 仍钉在旧库」。overlay / `.env` / 启动脚本里**两套都覆盖**（URL、username、password、driver 同理）。
 
@@ -818,7 +830,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 # 期望：HTTP 200；查 ws_mcp_server_rating 该 server 仅 1 行且 score=9
 ```
 
-若报 `ON DUPLICATE` 语法错误：说明仍在走内置 MySQL 语句——检查 jar 内是否有 `ext-mapper/McpServerRatingMapperSqlServer.xml`、`databaseId` 是否为 `sqlserver`、以及 `mybatis.mapper-locations` 是否把外部路径排在前面。
+若报 `ON DUPLICATE` 语法错误：说明仍在走内置默认 `insertRating`（其 `_databaseId != 'postgres'` 分支）——检查 jar 内是否有带 **`databaseId="sqlserver"`** 的 `ext-mapper/McpServerRatingMapperSqlServer.xml`、`DatabaseIdProvider` 是否返回 `sqlserver`、以及 `mapper-locations` 是否包含且将 `ext-mapper` 写在内置路径之前（否则可能启动期 duplicate，或根本未加载外部语句）。
 
 ### 9.8 回滚
 
@@ -839,6 +851,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | 现象 | 处理 |
 |---|---|
 | 启动了但扩展没生效 | 是否仍用 `java -jar`？改为 PropertiesLauncher；检查 `loader.path`、jar 内 AutoConfiguration 清单 |
+| 启动后 Spring/MyBatis 类冲突或怪异 NoSuchMethodError | 检查 `lib/` 是否混入了编译用 `mybatis`/`spring-*`；只保留 JDBC 驱动，编译依赖留在 `lib-compile/` |
 | 驱动已是目标库但 URL 仍是 mariadb/mysql | 同时覆盖 `SPRING_DATASOURCE_URL` 与 `spring_datasource_url`（及 username/password/driver 大小写两套） |
 | 列表空 / 导出读文件 500 | 先查 §9「数据准备」：workspace 状态、种子数据、`dsl_path` 是否指向真实文件 |
 | `Invalid column name 'false'` | Interceptor 未加载或未改写布尔；查日志是否有 `[VendorSqlRewrite]` |
@@ -846,10 +859,10 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
 | `FETCH NEXT 0` | 确认 `clampZeroFetch` 生效 |
 | 分页 limit/offset 行数错乱或像互换 | 参数化 `limit ? offset ?` 改写后是否调用了 `swapLimitOffsetParameterOrder` |
-| `FROM_UNIXTIME` / 日期函数报错 | Interceptor 一般不改；补外部 Mapper（步骤 3.6）并用 `DATEADD`；检查 `mapper-locations` 外部是否排在前面 |
-| `ON DUPLICATE KEY UPDATE` 语法错 | 不要用 Interceptor 拼 `#{...}` MERGE；补外部 `McpServerRatingMapperSqlServer.xml`，并确认外部 mapper 优先加载 |
+| `FROM_UNIXTIME` / 日期函数报错 | Interceptor 一般不改；补带 `databaseId` 的外部 Mapper（步骤 3.6）并用 `DATEADD`；确认 `ext-mapper` 已进 `mapper-locations` 且在内置前 |
+| `ON DUPLICATE KEY UPDATE` 语法错 | 不要用 Interceptor 拼 `#{...}` MERGE；补 `databaseId="sqlserver"` 的外部 MERGE；确认 Provider 返回 `sqlserver`（内置动态分支对非 postgres 仍是 ODKU） |
 | `FOR UPDATE` 语法错 | 不要指望 Interceptor 自动改写裸 MySQL `FOR UPDATE`；定时任务依赖 Quartz `MSSQLDelegate`；业务 SQL 改用 `WITH (UPDLOCK)` 等目标库写法（外部 Mapper） |
-| duplicate statement id | 外部 `databaseId` Mapper 与加载顺序：外部路径必须在内置 mapper 之前 |
+| duplicate statement id / already contains key | 同 id 的 `databaseId` 专用语句须先于无 `databaseId` 的内置默认句注册：把 `ext-mapper` 写在 `mapper-locations` 最前 |
 | 导入一直 0 成功 | `import_*=` 改成真实资源 ID |
 | 知识库 400 项目 ID | 换正确带 `{project_id}` 的 URL |
 | 表缺失但进程起来了 | `continue-on-error` 吞错；改用预建表 + `init_mode=never` |
@@ -884,11 +897,13 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 做完后你应能交出：
 
 1. `ext/studio-db-ext.jar`（含 class、AutoConfiguration；若有则含 `ext-mapper/*.xml`）  
-2. `lib/<jdbc-driver>.jar`  
+2. `lib/<jdbc-driver>.jar`（**仅驱动**；不要附带 mybatis/spring 编译副本）  
 3. `config/application-<vendor>.yml`（含 `mybatis.mapper-locations`）  
 4. `sql/ddl_*.sql`（已在目标库执行成功）  
-5. `bin/start-with-ext.sh` + compose/环境变量说明  
-6. 第 9 节验收截图或请求日志（health / 列表 200 / 导入导出 / 评分 upsert） 
+5. `bin/start-with-ext.sh` + compose/环境变量说明（`loader.path` = ext + lib）  
+6. 第 9 节验收截图或请求日志（health / 列表 200 / 导入导出 / 评分 upsert）  
+
+`lib-compile/` 为本地编译便利目录，**不必**随运行包交付到生产。
 
 ---
 
@@ -907,5 +922,5 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `spring.jpa.properties.hibernate.dialect` | JPA 方言 |
 | `spring.profiles.active` | 如 `manager,sqlserver` |
 | `spring.config.additional-location` | 外部 config 目录 |
-| `-Dloader.path` | 扩展 jar + 驱动目录 |
-| `mybatis.mapper-locations` | 外部 Mapper 路径（须排在内置之前） |
+| `-Dloader.path` | `ext/`（扩展 jar）+ `lib/`（仅 JDBC 驱动）；勿含 `lib-compile/` |
+| `mybatis.mapper-locations` | 含 `classpath:ext-mapper/*.xml`（写在内置 `classpath*:mapper/...` 之前，先注册 `databaseId` 专用语句） |
