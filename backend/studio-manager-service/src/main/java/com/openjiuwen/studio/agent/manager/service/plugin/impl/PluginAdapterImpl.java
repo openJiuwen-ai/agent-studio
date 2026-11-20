@@ -388,36 +388,32 @@ public class PluginAdapterImpl implements IPlugin {
      * 解析资产广场上架锚定版本ID（#1735）。
      * 仅当插件已上架到资产广场（platform_published=1 且 published=1，口径与详情/列表接口一致）且锚定版本非空时
      * 返回 plaza_version_id；否则返回 null（调用方走原版本解析逻辑）。
-     * 锚定字段缺失（上架后 plaza_version_id 异常为空）时降级返回 null 并 warn 记日志，不阻断主流程。
-     * 注：仅捕获查询异常并降级（warn），瞬时 DB 故障按 fail-open 降级到最新版——锚定是消费侧最佳努力，
-     * 不以 DB 瞬时故障阻塞所有插件引用；若需严格 fail-closed 可去掉 try-catch 让异常上抛。
+     * 锚定字段缺失（上架后 plaza_version_id 异常为空）时返回 null 并 warn 记日志，走原逻辑。
+     * fail-closed（review #1735）：不捕获 DB 查询异常——瞬时 DB 故障时异常上抛，与悬空锚定 fail-closed
+     * 策略一致；不在故障时静默降级到未审核最新版（降级会复现本 PR 要修复的版本漂移）。
+     * 插件记录不存在（selectByPrimaryKey 返回 null）属正常业务状态（非广场/未上架），返回 null 走原逻辑。
      */
     private String resolvePlazaAnchorVersionId(String pluginId) {
         if (StringUtils.isEmpty(pluginId)) {
             return null;
         }
-        try {
-            PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, null);
-            if (pluginEntity == null) {
-                return null;
-            }
-            // 口径与 PluginService 详情/列表接口一致：platform_published=1 且 published=1 双判
-            boolean plazaPublished = pluginEntity.getPlatformPublished() != null
-                && pluginEntity.getPlatformPublished() == 1
-                && pluginEntity.getPublished() != null
-                && pluginEntity.getPublished() == 1;
-            if (!plazaPublished) {
-                return null;
-            }
-            if (StringUtils.isBlank(pluginEntity.getPlazaVersionId())) {
-                log.warn("Plaza published plugin has no anchor version, fallback to default. pluginId: {}", pluginId);
-                return null;
-            }
-            return pluginEntity.getPlazaVersionId();
-        } catch (Exception e) {
-            log.warn("Failed to resolve plaza anchor version, fallback to default. pluginId: {}", pluginId, e);
+        PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, null);
+        if (pluginEntity == null) {
             return null;
         }
+        // 口径与 PluginService 详情/列表接口一致：platform_published=1 且 published=1 双判
+        boolean plazaPublished = pluginEntity.getPlatformPublished() != null
+            && pluginEntity.getPlatformPublished() == 1
+            && pluginEntity.getPublished() != null
+            && pluginEntity.getPublished() == 1;
+        if (!plazaPublished) {
+            return null;
+        }
+        if (StringUtils.isBlank(pluginEntity.getPlazaVersionId())) {
+            log.warn("Plaza published plugin has no anchor version, fallback to default. pluginId: {}", pluginId);
+            return null;
+        }
+        return pluginEntity.getPlazaVersionId();
     }
 
     @Override
