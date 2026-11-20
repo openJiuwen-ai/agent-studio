@@ -4,6 +4,8 @@
 
 # pylint: disable=protected-access  # 白盒单测：需直接访问 _settings / _create_*_client 等内部成员
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from common_utils.common_config import RedisMode, RedisSettings
