@@ -365,9 +365,10 @@ class PluginAdapterImplTest {
     }
 
     @Test
-    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_FallsBackToVersionId() {
-        // 悬空锚定兜底（review #1735）：属主删除锚定发布版本后 plaza_version_id 仍指向已删版本，
-        // getToolEntityByVersion 抛 TOOL_VERSION_NOT_EXIST → 仅对该错误降级走原 versionId 分支，不硬失败
+    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_FailsClosed() {
+        // 悬空锚定 fail-closed（review #1735）：属主删除锚定发布版本后 plaza_version_id 仍指向已删版本，
+        // getToolEntityByVersion 抛 TOOL_VERSION_NOT_EXIST → 直接上抛，不降级到未审核最新版
+        // （降级最新版会复现本 PR 要修复的版本漂移与合规风险，故 fail-closed）
         PluginEntity plugin = new PluginEntity();
         plugin.setPluginId("plugin-1");
         plugin.setPlatformPublished(1);
@@ -377,21 +378,18 @@ class PluginAdapterImplTest {
         when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
         when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2"))
             .thenThrow(new AgentStudioException(StudioError.TOOL_VERSION_NOT_EXIST, "plugin-1", "v2"));
-        ToolEntity fallback = new ToolEntity();
-        fallback.setVersionId("v3");
-        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v3")).thenReturn(fallback);
 
-        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
-
-        assertNotNull(result);
-        assertEquals("v3", result.getVersionId());
+        // 即使调用方传入 versionId=v3，悬空锚定也 fail-closed 抛异常，不降级
+        assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3"));
         verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
-        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v3");
+        verify(pluginBase, never()).getToolEntityByVersion(eq("plugin-1#t1"), eq("v3"));
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
     }
 
     @Test
-    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_FallsBackToBuildToolByPlugin() {
-        // 悬空锚定兜底（review #1735）：锚定版本被删 + 传入 versionId 为空 → 降级走 buildToolByPlugin（最新版）
+    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_VersionIdNull_FailsClosed() {
+        // 悬空锚定 fail-closed：锚定版本被删 + 传入 versionId 为空 → 仍抛异常，不降级走 buildToolByPlugin
         PluginEntity plugin = new PluginEntity();
         plugin.setPluginId("plugin-1");
         plugin.setPlatformPublished(1);
@@ -401,14 +399,11 @@ class PluginAdapterImplTest {
         when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
         when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2"))
             .thenThrow(new AgentStudioException(StudioError.TOOL_VERSION_NOT_EXIST, "plugin-1", "v2"));
-        ToolEntity fallback = new ToolEntity();
-        when(pluginBase.buildToolByPlugin("proj-1", null, "plugin-1", "t1")).thenReturn(fallback);
 
-        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null);
-
-        assertNotNull(result);
+        assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null));
         verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
-        verify(pluginBase).buildToolByPlugin("proj-1", null, "plugin-1", "t1");
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
     }
 
     @Test

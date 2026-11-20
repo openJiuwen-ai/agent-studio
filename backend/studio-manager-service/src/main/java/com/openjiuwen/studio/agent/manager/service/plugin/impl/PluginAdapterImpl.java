@@ -364,22 +364,13 @@ public class PluginAdapterImpl implements IPlugin {
         String pluginId = ids[0];
         String plazaAnchorVersionId = resolvePlazaAnchorVersionId(pluginId);
         if (StringUtils.isNotEmpty(plazaAnchorVersionId)) {
-            // 悬空锚定兜底（review #1735）：属主删除锚定发布版本后 plaza_version_id 仍指向已删版本，
-            // getToolEntityByVersion 会抛 TOOL_VERSION_NOT_EXIST。此时降级走原版本解析逻辑（versionId 非空按
-            // versionId，空走 buildToolByPlugin 读最新版），warn 记日志，不让消费侧全链路硬失败。
-            // 仅对 TOOL_VERSION_NOT_EXIST（锚定版本不存在）降级；其他异常（OBS 内容损坏/解析失败
-            // TOOL_INFO_INCORRECT 等）继续向上抛出，不静默降级到未审核最新版（fail-closed，避免掩盖数据损坏）。
-            try {
-                toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
-                toolEntity.setVersionId(plazaAnchorVersionId);
-                return toolEntity;
-            } catch (AgentStudioException e) {
-                if (StudioError.TOOL_VERSION_NOT_EXIST != e.getErrorCode()) {
-                    throw e;
-                }
-                log.warn("Plaza anchor version not exist, fallback to default. pluginId: {}, anchorVersionId: {}",
-                    pluginId, plazaAnchorVersionId, e);
-            }
+            // 资产广场上架插件版本锚定（#1735）：一律按 plaza_version_id 解析，忽略调用方传入的 versionId。
+            // 悬空锚定（属主删除锚定发布版本后 plaza_version_id 仍指向已删版本）fail-closed：
+            // getToolEntityByVersion 抛 TOOL_VERSION_NOT_EXIST 直接上抛，不降级到未审核最新版（review #1735：
+            // 降级最新版会复现本 PR 要修复的版本漂移与合规风险，故 fail-closed 硬失败让消费侧显式报错）。
+            toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
+            toolEntity.setVersionId(plazaAnchorVersionId);
+            return toolEntity;
         }
         if (StringUtils.isNotEmpty(versionId)) {
             toolEntity = pluginBase.getToolEntityByVersion(id, versionId);
