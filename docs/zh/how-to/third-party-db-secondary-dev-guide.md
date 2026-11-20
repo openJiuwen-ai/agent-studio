@@ -4,8 +4,10 @@
 
 **边界说明**：
 
+- **范围**：本指南只覆盖 Java 侧 `studio-manager`（平台管理面元数据存储）。Python 侧 `agent_builder` / `studio-builder` 的 `STORE_DB_*` **不在本期适配范围**（影响面小，可后续按需单独立项）。  
 - 这是**部署侧外部扩展**，扩展包与方言规则需自行维护、按第 9 节验收；上游产品升级后可能要重测/微调改写规则。  
-- 本文 SQL Server 示例可按步骤落地；**达梦 / Oracle 没有整份可直接粘贴的完整改写代码**，只保证流程相同（改识别、`rewrite()`、profile、DDL）。
+- 本文 SQL Server 示例可按步骤落地；**达梦 / Oracle 没有整份可直接粘贴的完整改写代码**，只保证流程相同（改识别、`rewrite()`、profile、DDL）。  
+- **机制 ≠ 零工作量**：主工作量通常在 **DDL 全量翻译**（产品 100+ 张表；第 6.2 节对照表是起点，不是全集）。目标库若 MySQL 兼容度高，Interceptor 改写面可能很小，但 DDL 仍要打磨。
 
 ---
 
@@ -560,17 +562,28 @@ pagehelper:
 > 库名：产品默认部署常见 `agent-builder`；本文示例用 `agentbuilder`。**两者都可，只要建库名与 `spring_datasource_url` 里的库名一致。**
 ### 6.2 SQL Server 常见替换（对照改）
 
+> 下表**不是全集**。产品 DDL（含知识库）里还有一批 MySQL 写法，翻译器/手工翻译时要一并处理；以你导出的全量脚本实测为准。
+
 | MySQL | SQL Server |
 |---|---|
 | `` `name` `` | `[name]` 或去掉引号 |
 | `AUTO_INCREMENT` | `IDENTITY(1,1)` |
 | `TINYINT(1)` | `BIT` 或 `TINYINT` |
+| 整型显示宽度（如 `INT(11)`） | 去掉宽度（`INT`） |
 | `DATETIME` / `TIMESTAMP` | `DATETIME2` |
-| `TEXT` / `MEDIUMTEXT` / `LONGTEXT` | `NVARCHAR(MAX)` / `VARCHAR(MAX)` |
-| `ENGINE=InnoDB` / `ROW_FORMAT` / `COLLATE=utf8mb4_*` | 删除 |
+| `TEXT` / `MEDIUMTEXT` / `LONGTEXT` / `*BLOB` | `NVARCHAR(MAX)` / `VARBINARY(MAX)` 等 |
+| `ENUM(...)` | 改 `VARCHAR` + 约束，或目标库等价类型 |
+| `unsigned` | 去掉或改用更大有符号类型 |
+| `ENGINE=InnoDB` / `ROW_FORMAT` / 表级 `CHARSET` / `COLLATE=utf8mb4_*` | 删除 |
+| 列级 `CHARACTER SET ... COLLATE ...` | 删除（表选项文档常写了，**列级也要剥**） |
 | `ON UPDATE CURRENT_TIMESTAMP` | 删除或改触发器 |
-| `UNIQUE KEY` / `KEY ... USING BTREE` | `CREATE UNIQUE INDEX` / `CREATE INDEX` |
+| 内联 `UNIQUE KEY` / `KEY ...` / `USING BTREE` | 抽成 `CREATE UNIQUE INDEX` / `CREATE INDEX`（无名索引需自动命名，含 QRTZ） |
 | `CREATE TABLE IF NOT EXISTS` | 用 `IF OBJECT_ID(...) IS NULL CREATE TABLE` 或预执行工具 |
+| 个别表缺 `IF NOT EXISTS`（如历史映射类表） | 翻译时补幂等包裹，避免重复执行报错 |
+| 一条 `ALTER` 多个 `ADD COLUMN` | 拆成多条 `ALTER`（部分目标库不支持同句多 ADD） |
+| `ADD COLUMN ... AFTER col` | 去掉 `AFTER`（列定位子句） |
+| 重复迁移 `ADD COLUMN`（列已在建表里） | 目标侧用幂等写法（如存在则跳过）；产品靠 `continue-on-error` 容忍，预建库不要依赖吞错 |
+| 保留字作裸列名（如 `value`） | 加引号/方括号（`` `value` `` → `[value]`） |
 
 ### 6.3 翻译示例（单表对照）
 
@@ -606,7 +619,7 @@ END;
 - 删除 `ENGINE` / `CHARSET` / `COLLATE` / `ROW_FORMAT` / `USING BTREE`
 - `CREATE TABLE IF NOT EXISTS` → `IF OBJECT_ID(...) IS NULL` 再 `CREATE TABLE`
 
-> 完整 `ddl_sqlserver.sql` / `ddl_knowledge_sqlserver.sql` 需对产品全部表按同样规则翻译，本文只给形态示例，不附带整份成品脚本。有自增列时另见对照表：`AUTO_INCREMENT` → `IDENTITY(1,1)`（如 `t_sessions`）。
+> 完整 `ddl_sqlserver.sql` / `ddl_knowledge_sqlserver.sql` 需对产品全部表按同样规则翻译，本文只给形态示例，不附带整份成品脚本。有自增列时另见对照表：`AUTO_INCREMENT` → `IDENTITY(1,1)`（如 `t_sessions`）。第一次全量翻译建议预留打磨时间（经验上约 1～2 天，视目标库与自动化程度而定）。
 
 ### 6.4 执行顺序建议
 
@@ -658,6 +671,8 @@ chmod +x studio-db-ext/bin/start-with-ext.sh
 
 **禁止**再用裸 `java -jar studio-manager.jar`，否则扩展包进不了类路径。
 
+> **环境变量大小写**：部分部署会同时导出 `SPRING_DATASOURCE_URL`（大写）和 `spring_datasource_url`（小写）。Spring 对二者都认；若只改小写、大写仍指向旧 MySQL/MariaDB，进程可能「驱动已是目标库、URL 仍钉在旧库」。overlay / `.env` / 启动脚本里**两套都覆盖**（URL、username、password、driver 同理）。
+
 ---
 
 ## 8. 接到运行中的 manager
@@ -675,10 +690,16 @@ services:
     environment:
       EXT_DIR: /opt/ext
       ACTIVE_PROFILES: manager,sqlserver
+      # 小写（文档默认写法）
       spring_datasource_url: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=false;trustServerCertificate=true
       spring_datasource_username: sa
       spring_datasource_password: "<your-password>"
       spring_datasource_driver_class_name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+      # 大写：若原 .env / local-dev.env 已导出 SPRING_DATASOURCE_*，必须一并覆盖，否则仍可能连旧库
+      SPRING_DATASOURCE_URL: jdbc:sqlserver://<db-host>:1433;databaseName=agentbuilder;encrypt=false;trustServerCertificate=true
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: "<your-password>"
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.microsoft.sqlserver.jdbc.SQLServerDriver
       spring_sql_init_mode: never
       spring_sql_manager_ddl: file:/opt/ext/sql/ddl_sqlserver.sql
       spring_sql_knowledge_ddl: file:/opt/ext/sql/ddl_knowledge_sqlserver.sql
@@ -706,6 +727,17 @@ docker compose -f docker-compose.yml -f docker-compose.db-ext.yml \
 ## 9. 验收（按顺序勾）
 
 把 `<host>`、`<token>`、`<workspace_id>` 换成你的环境。
+
+### 数据准备（空库必做，与方言无关）
+
+全新目标库只有表、没有业务数据时，列表/导出可能「看起来失败」，容易误判成适配问题：
+
+1. **Workspace**：至少一条可用工作空间；`status` 须为产品枚举合法值（常见为 `ENABLE`，写 `ACTIVE` 会被校验拒绝——以 mapper/校验代码为准）。  
+2. **成员关系**：对应 `workspace_member`（或产品等价表），保证当前用户能访问该空间。  
+3. **列表用种子数据**：若干 agent / workflow 等，便于验 9.3 / 9.4。  
+4. **导出**：被导出资源的 `dsl_path`（或等价字段）须指向存储里真实存在的文件；种子写成 `NULL` 会导致读文件 500，与 SQL 方言无关。
+
+从已有 MySQL 环境迁数据、或手工 INSERT 均可；本指南不附种子脚本。
 
 ### 9.1 启动与方言
 
@@ -807,6 +839,8 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | 现象 | 处理 |
 |---|---|
 | 启动了但扩展没生效 | 是否仍用 `java -jar`？改为 PropertiesLauncher；检查 `loader.path`、jar 内 AutoConfiguration 清单 |
+| 驱动已是目标库但 URL 仍是 mariadb/mysql | 同时覆盖 `SPRING_DATASOURCE_URL` 与 `spring_datasource_url`（及 username/password/driver 大小写两套） |
+| 列表空 / 导出读文件 500 | 先查 §9「数据准备」：workspace 状态、种子数据、`dsl_path` 是否指向真实文件 |
 | `Invalid column name 'false'` | Interceptor 未加载或未改写布尔；查日志是否有 `[VendorSqlRewrite]` |
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
@@ -834,10 +868,14 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 2. **`VendorSqlRewriteInterceptor.rewrite()`**：  
    - LIMIT → 达梦可保留或按文档；Oracle 常用 `FETCH FIRST` / `OFFSET…FETCH`  
    - 引号、`UUID()`/`SYS_GUID()`、布尔等碎片按厂商改（仍不要在 Interceptor 里用 `#{...}` 整段替换 upsert）  
+   - 若目标库开启较高 MySQL 兼容模式，改写面可能较小；**DDL 翻译仍是重头**（见 6.2）  
 3. **外部 Mapper**：`databaseId` 与上一步返回值一致；含 upsert / `FROM_UNIXTIME` 等整段方言语句  
 4. **profile**：驱动类、Hibernate dialect、PageHelper、Quartz delegate、DDL 翻译规则  
+   - **PageHelper**：无现成 `dm` 枚举时，达梦若支持 `LIMIT`，可先试 `helper-dialect: mysql`  
+   - **Quartz**：达梦常用默认 `StdJDBCDelegate`；SQL Server 才需要 `MSSQLDelegate`  
+   - **Hibernate**：达梦可用 community `DamengDialect` 或在 profile 显式指定  
 
-验收 Checklist 与第 9 节相同。
+验收 Checklist 与第 9 节相同。`agent_builder`（Python）仍不在本指南范围（见文首边界说明）。
 
 ---
 
@@ -858,9 +896,9 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 
 | 配置项 | 作用 |
 |---|---|
-| `spring_datasource_url` | JDBC URL |
-| `spring_datasource_username` / `password` | 账号密码 |
-| `spring_datasource_driver_class_name` | 驱动类 |
+| `spring_datasource_url` | JDBC URL（若环境存在 `SPRING_DATASOURCE_URL`，**大小写两套都改**） |
+| `spring_datasource_username` / `password` | 账号密码（同上，注意 `SPRING_DATASOURCE_USERNAME` / `PASSWORD`） |
+| `spring_datasource_driver_class_name` | 驱动类（同上，注意 `SPRING_DATASOURCE_DRIVER_CLASS_NAME`） |
 | `spring_sql_manager_ddl` / `knowledge_ddl` | DDL 文件 |
 | `spring_sql_manager_dml` / `knowledge_dml` | DML 文件 |
 | `spring_sql_init_mode` | `always` / `never` |
