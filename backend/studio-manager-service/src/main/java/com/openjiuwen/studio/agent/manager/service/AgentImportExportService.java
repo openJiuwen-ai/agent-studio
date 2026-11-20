@@ -620,7 +620,7 @@ public class AgentImportExportService {
         List<MappingEntity> mappingAgentSkills = mappingMapper.selectByAppIdAndResourceType(agentId,
             CommonConstant.SKILL_TYPE);
         List<String> mappingAgentSkillsIds = mappingAgentSkills.stream().map(MappingEntity::getResourceId).toList();
-        List<SkillDetails> skills = skillMapper.searchBySkillIds(mappingAgentSkillsIds, workspaceId);
+        List<SkillDetails> skills = skillMapper.searchBySkillIds(mappingAgentSkillsIds, RequestContextUtils.getRequestUserDomainId());
         skills.forEach(skill -> {
             skill.setObsPath(null);
         });

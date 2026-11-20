@@ -2208,7 +2208,7 @@ public class RelationManagementService implements IRelationManagementService {
                 }
             });
             // 2. 更新skill类型资源的最新版本
-            searchSkillResourceLatestVersion(relations, mappingEntities, listAppRelationsQo.getWorkspaceId());
+            searchSkillResourceLatestVersion(relations, mappingEntities);
         }
 
         RelationList relationList = new RelationList();
@@ -2261,14 +2261,13 @@ public class RelationManagementService implements IRelationManagementService {
         return result;
     }
 
-    private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities,
-                                                    String workspaceId) {
+    private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities) {
         List<String> resourceIdsSKill = mappingEntities.stream()
             .filter(mappingEntity ->
                 ResourceTypeEnum.SKILL.toString().equals(mappingEntity.getResourceType()))
             .map(MappingEntity::getResourceId)
             .toList();
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill, workspaceId);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill, RequestContextUtils.getRequestUserDomainId());
         Map<String, SkillDetails> latestSkillVersionMap = skillDetailsList.stream()
             .collect(Collectors.toMap(SkillDetails::getSkillId, skillDetails -> skillDetails));
         relations.forEach(relation -> {
@@ -2530,7 +2529,7 @@ public class RelationManagementService implements IRelationManagementService {
             .map(MappingEntity::getResourceId)
             .collect(Collectors.toList());
         List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds,
-            RequestContextUtils.getRequestWorkspaceId());
+            RequestContextUtils.getRequestUserDomainId());
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return Collections.emptyList();
         }

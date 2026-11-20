@@ -143,7 +143,7 @@ public class ResourceService {
                 return CommonMeta.fromMemoryRepos((memoryRepoMapper.selectByCondition(projectId, workspaceId, null, ids, null)));
             }
             case SKILL -> {
-                return CommonMeta.fromSkills(skillMapper.searchBySkillIds(ids, workspaceId));
+                return CommonMeta.fromSkills(skillMapper.searchBySkillIds(ids, RequestContextUtils.getRequestUserDomainId()));
             }
         }
         return null;

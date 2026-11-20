@@ -123,23 +123,29 @@ class ResourceServiceNewTest {
     void testValidResourceExist_Skill_Present_NoThrow() {
         // 契约（issue #1734）：searchBySkillIds 返回的 Skill（含未上架）视为存在，validResourceExist 不抛错。
         // 防止在 service 层把"未上架=published_asset==0"误判为不存在（存在性校验不得混入广场可见性语义）。
-        SkillDetails skill = new SkillDetails();
-        skill.setSkillId("skill-1");
-        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), any())).thenReturn(List.of(skill));
+        // getResourceMeta(SKILL) 内部 RequestContextUtils.getRequestUserDomainId() 取 domain 隔离
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("d1");
+            SkillDetails skill = new SkillDetails();
+            skill.setSkillId("skill-1");
+            when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), eq("d1"))).thenReturn(List.of(skill));
 
-        resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1");
+            resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1");
+        }
     }
 
     @Test
     void testValidResourceExist_Skill_Missing_Throws() {
         // 契约（issue #1734）：资源确实查不到时才抛 RESOURCE_NOT_EXISTS（非"未上架"误报）。
-        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), any())).thenReturn(Collections.emptyList());
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("d1");
+            when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), eq("d1"))).thenReturn(Collections.emptyList());
 
-        AgentStudioException ex = assertThrows(AgentStudioException.class,
-            () -> resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1"));
-        assertEquals(StudioError.RESOURCE_NOT_EXISTS, ex.getErrorCode());
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1"));
+            assertEquals(StudioError.RESOURCE_NOT_EXISTS, ex.getErrorCode());
+        }
     }
-
     @Test
     void testGetResourceMeta_AgentType() {
         Agent agent = new Agent();
@@ -333,19 +339,23 @@ class ResourceServiceNewTest {
 
     @Test
     void testGetResourceMeta_SkillType() {
-        SkillDetails skill = new SkillDetails();
-        skill.setSkillId("skill-1");
-        skill.setName("Test Skill");
-        // 隔离契约（issue #1734）：getResourceMeta 透传 workspaceId 给 searchBySkillIds（本 workspace 全部 + 跨空间已上架）
-        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), eq("w1")))
-            .thenReturn(List.of(skill));
+        // 隔离契约（issue #1734 巡检问题3）：getResourceMeta 内部用 RequestContextUtils.getRequestUserDomainId()
+        // 传给 searchBySkillIds（本 domain 全部 + 跨 domain 已上架；粒度与 getSkillPackageContent 对齐）
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("d1");
+            SkillDetails skill = new SkillDetails();
+            skill.setSkillId("skill-1");
+            skill.setName("Test Skill");
+            when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), eq("d1")))
+                .thenReturn(List.of(skill));
 
-        Map<String, CommonMeta> result = resourceService.getResourceMeta(List.of("skill-1"), "skill", "p1", "w1");
+            Map<String, CommonMeta> result = resourceService.getResourceMeta(List.of("skill-1"), "skill", "p1", "w1");
 
-        assertNotNull(result);
-        assertTrue(result.containsKey("skill-1"));
-        assertEquals("Test Skill", result.get("skill-1").getName());
-        verify(skillMapper).searchBySkillIds(eq(List.of("skill-1")), eq("w1"));
+            assertNotNull(result);
+            assertTrue(result.containsKey("skill-1"));
+            assertEquals("Test Skill", result.get("skill-1").getName());
+            verify(skillMapper).searchBySkillIds(eq(List.of("skill-1")), eq("d1"));
+        }
     }
 
     @Test

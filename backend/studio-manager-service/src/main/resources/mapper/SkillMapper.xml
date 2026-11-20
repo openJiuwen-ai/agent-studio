@@ -215,12 +215,14 @@
         <if test="skillIds == null or skillIds.size() == 0">
             1=0
         </if>
-        <!-- 隔离语义（issue #1734）：workspaceId 非空时仅返回"本 workspace 全部 + 跨空间已上架
-             (published_asset='1')"的 Skill——本 workspace 未上架草稿可见（修删除前引用确认误报不存在），
-             跨空间仅可见已上架（广场可见语义，堵跨空间未上架草稿的存在性/元数据泄露）。
+        <!-- 隔离语义（issue #1734）：domainId 非空时仅返回"本 domain 全部 + 跨 domain 已上架
+             (published_asset='1')"的 Skill——本 domain 未上架草稿可见（修删除前引用确认误报不存在），
+             跨 domain 仅可见已上架（广场可见语义，堵跨 domain 未上架草稿的存在性/元数据泄露）。
+             粒度与 getSkillPackageContent / deleteStudioSkill / searchBySkillIdAndDomainId 对齐
+             （同 domain 内跨 workspace/project 预览属于既有契约，不阻断）。
              广场列表展示的可见性仍由 search/countSelectedSkills 的 publishedAsset 参数负责。 -->
-        <if test="workspaceId != null and workspaceId != ''">
-            AND (t_skill.workspace_id = #{workspaceId,jdbcType=VARCHAR} OR t_skill.published_asset = '1')
+        <if test="domainId != null and domainId != ''">
+            AND (t_skill.domain_id = #{domainId,jdbcType=VARCHAR} OR t_skill.published_asset = '1')
         </if>
     </select>
     <select id="searchBySkillIdAndDomainId" resultMap="SearchResultMap">

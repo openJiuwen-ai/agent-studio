@@ -52,9 +52,10 @@ public class SkillAdapter extends ResourceAdapter {
         }
         Map<String, List<String>> parentIdMap = getParentIdMap(exportResources);
         List<String> skillIds = exportResources.stream().map(ExportResourceUnit::getResourceId).toList();
-        // 导出请求由当前 workspace 发起，按"本 workspace 全部 + 跨空间已上架"过滤（issue #1734 隔离语义）
-        String workspaceId = RequestContextUtils.getRequestWorkspaceId();
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, workspaceId);
+        // 导出请求由当前 domain 发起，按"本 domain 全部 + 跨 domain 已上架"过滤（issue #1734 隔离语义，
+        // 粒度与 getSkillPackageContent / deleteStudioSkill 对齐：同 domain 内跨 workspace/project 可见）
+        String domainId = RequestContextUtils.getRequestUserDomainId();
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, domainId);
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return null;
         }

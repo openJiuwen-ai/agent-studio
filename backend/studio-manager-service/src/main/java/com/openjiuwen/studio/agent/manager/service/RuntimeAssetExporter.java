@@ -1208,7 +1208,7 @@ public class RuntimeAssetExporter {
             return false; // 无法校验归属 → fail-closed
         }
         try {
-            List<SkillDetails> skills = skillMapper.searchBySkillIds(List.of(skillId), workspaceId);
+            List<SkillDetails> skills = skillMapper.searchBySkillIds(List.of(skillId), RequestContextUtils.getRequestUserDomainId());
             if (skills == null || skills.isEmpty()) {
                 return false; // skill 不存在或不归属 → fail-closed
             }
