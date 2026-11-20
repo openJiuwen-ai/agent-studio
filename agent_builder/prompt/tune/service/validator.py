@@ -142,7 +142,16 @@ class OptimizeInfoValidator:
             raise TaskParamsValidationException(
                 "'early_stop_score' must be float-type"
             )
-        early_stop_score = float(early_stop_score)
+        # 超出 float 表示范围的超大 int 会让 float() 抛 OverflowError，
+        # 使非法参数以 500 而非参数校验错误暴露——捕获后归一到越界分支
+        try:
+            early_stop_score = float(early_stop_score)
+        except OverflowError:
+            raise TaskParamsValidationException(
+                f"early_stop_score must be in range "
+                f"[{TuneConstant.MIN_EARLY_STOPPING_SCORE},"
+                f"{TuneConstant.MAX_EARLY_STOPPING_SCORE}]"
+            )
         if (
             early_stop_score < TuneConstant.MIN_EARLY_STOPPING_SCORE
             or early_stop_score > TuneConstant.MAX_EARLY_STOPPING_SCORE
