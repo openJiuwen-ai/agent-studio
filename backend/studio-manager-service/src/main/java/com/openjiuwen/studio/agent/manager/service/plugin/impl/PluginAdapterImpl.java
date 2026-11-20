@@ -356,7 +356,7 @@ public class PluginAdapterImpl implements IPlugin {
     @Override
     public ToolEntity getToolEntity(String id, String projectId, String opProjectId, String versionId) {
         ToolEntity toolEntity;
-        // 资产广场上架插件（platform_published=1）版本锚定（#1735）：消费侧（引用/运行/导入/校验/搜索）
+        // 资产广场上架插件（platform_published=1 且 published=1）版本锚定（#1735）：消费侧（引用/运行/导入/校验/搜索）
         // 一律按上架锚定的 plaza_version_id 解析，忽略调用方传入的 versionId（可能是最新版 last_version_id，
         // 也可能为空）。避免"上架锚定 v2、发 v3 后消费侧漂移到 v3"。
         // 非广场插件或锚定版本缺失时保持原逻辑（versionId 非空按 versionId，空走最新版）。
@@ -364,9 +364,24 @@ public class PluginAdapterImpl implements IPlugin {
         String pluginId = ids[0];
         String plazaAnchorVersionId = resolvePlazaAnchorVersionId(pluginId);
         if (StringUtils.isNotEmpty(plazaAnchorVersionId)) {
-            toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
-            toolEntity.setVersionId(plazaAnchorVersionId);
-        } else if (StringUtils.isNotEmpty(versionId)) {
+            // 悬空锚定兜底（review #1735）：属主删除锚定发布版本后 plaza_version_id 仍指向已删版本，
+            // getToolEntityByVersion 会抛 TOOL_VERSION_NOT_EXIST。此时降级走原版本解析逻辑（versionId 非空按
+            // versionId，空走 buildToolByPlugin 读最新版），warn 记日志，不让消费侧全链路硬失败。
+            // 仅对 TOOL_VERSION_NOT_EXIST（锚定版本不存在）降级；其他异常（OBS 内容损坏/解析失败
+            // TOOL_INFO_INCORRECT 等）继续向上抛出，不静默降级到未审核最新版（fail-closed，避免掩盖数据损坏）。
+            try {
+                toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
+                toolEntity.setVersionId(plazaAnchorVersionId);
+                return toolEntity;
+            } catch (AgentStudioException e) {
+                if (StudioError.TOOL_VERSION_NOT_EXIST != e.getErrorCode()) {
+                    throw e;
+                }
+                log.warn("Plaza anchor version not exist, fallback to default. pluginId: {}, anchorVersionId: {}",
+                    pluginId, plazaAnchorVersionId, e);
+            }
+        }
+        if (StringUtils.isNotEmpty(versionId)) {
             toolEntity = pluginBase.getToolEntityByVersion(id, versionId);
             toolEntity.setVersionId(versionId);
         } else {
@@ -380,9 +395,11 @@ public class PluginAdapterImpl implements IPlugin {
 
     /**
      * 解析资产广场上架锚定版本ID（#1735）。
-     * 仅当插件已上架到资产广场（platform_published=1）且锚定版本非空时返回 plaza_version_id；
-     * 否则返回 null（调用方走原版本解析逻辑）。
+     * 仅当插件已上架到资产广场（platform_published=1 且 published=1，口径与详情/列表接口一致）且锚定版本非空时
+     * 返回 plaza_version_id；否则返回 null（调用方走原版本解析逻辑）。
      * 锚定字段缺失（上架后 plaza_version_id 异常为空）时降级返回 null 并 warn 记日志，不阻断主流程。
+     * 注：仅捕获查询异常并降级（warn），瞬时 DB 故障按 fail-open 降级到最新版——锚定是消费侧最佳努力，
+     * 不以 DB 瞬时故障阻塞所有插件引用；若需严格 fail-closed 可去掉 try-catch 让异常上抛。
      */
     private String resolvePlazaAnchorVersionId(String pluginId) {
         if (StringUtils.isEmpty(pluginId)) {
@@ -393,8 +410,11 @@ public class PluginAdapterImpl implements IPlugin {
             if (pluginEntity == null) {
                 return null;
             }
+            // 口径与 PluginService 详情/列表接口一致：platform_published=1 且 published=1 双判
             boolean plazaPublished = pluginEntity.getPlatformPublished() != null
-                && pluginEntity.getPlatformPublished() == 1;
+                && pluginEntity.getPlatformPublished() == 1
+                && pluginEntity.getPublished() != null
+                && pluginEntity.getPublished() == 1;
             if (!plazaPublished) {
                 return null;
             }
