@@ -156,7 +156,7 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
 }
 ```
 
-达梦 / Oracle：保证 URL 能命中上面的分支即可。
+达梦 / Oracle：保证 URL 能命中上面的分支即可。若按**附录 A 推荐路径**（DM8 + `COMPATIBLE_MODE=4` + 走 MySQL Mapper 分支），请**不要**让本 Provider 对 `jdbc:dm://` 返回 `dm`（可删掉/注释 `dm` 分支，或达梦场景不用该 Provider），否则须另备 `databaseId=dm` 的外部 Mapper。
 
 ### 步骤 3.3 SQL 改写：`VendorSqlRewriteInterceptor.java`
 
@@ -167,13 +167,16 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
 > - 仅 `LIMIT n`、无排序 → 改成 `SELECT TOP (n) …`（插在第一个 `SELECT`/`SELECT DISTINCT` 后）  
 > - `LIMIT … OFFSET …` 或 `LIMIT offset,count` 且无排序 → 先补 `ORDER BY (SELECT NULL)` 再 `OFFSET/FETCH`（任意行语义，与 MySQL 无序 LIMIT 接近）  
 >
-> **时间函数 / 时区策略**：产品默认 `spring.jackson.time-zone: GMT+8`。MySQL `NOW()` 一般跟**会话/库时区**的墙上时间走。文档示例把 `NOW()` 改成 **`SYSDATETIME()`**（SQL Server 实例本地时间），请把目标库时区（或容器 `TZ`）配成与应用一致的 **GMT+8**，避免创建/更新时间静默偏移。若你坚持库内存 UTC，可改用 `SYSUTCDATETIME()`，但须同步把 Jackson/业务展示也按 UTC 理解，并改外部 Mapper 里的时间函数。`FROM_UNIXTIME`/`DATEADD` 针对的是 **Unix 纪元秒**（UTC 起点），与「`NOW` 用本地还是 UTC」是另一件事，不要混改。
+> **时间函数 / 时区策略**：产品默认 `spring.jackson.time-zone: GMT+8`。MySQL `NOW()` 一般跟**会话/库时区**的墙上时间走。文档示例把 `NOW()` 改成 **`SYSDATETIME()`**（SQL Server 实例本地时间），请把目标库时区（或容器 `TZ`）配成与应用一致的 **GMT+8**，避免创建/更新时间静默偏移。若你坚持库内存 UTC，可改用 `SYSUTCDATETIME()`，但须同步把 Jackson/业务展示也按 UTC 理解，并改外部 Mapper 里的时间函数。`FROM_UNIXTIME`/`DATEADD` 针对的是 **Unix 纪元秒**（UTC 起点），与「`NOW` 用本地还是 UTC」是另一件事，不要混改。  
+>
+> **硬约束**：本 Interceptor 示例只服务 SQL Server。启动脚本 / `loader.path` **仅允许**在切到目标库时加载扩展 jar；回滚 MySQL 时必须换回原 `entrypoint` 并不再挂扩展（即便拦截器内已按 `databaseId` 短路，也不要把扩展留在默认启动路径上）。
 
 ```java
 package com.openjiuwen.studio.ext;
 
 import org.apache.ibatis.executor.statement.StatementHandler;
 import org.apache.ibatis.mapping.BoundSql;
+import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.mapping.ParameterMapping;
 import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.plugin.Intercepts;
@@ -215,6 +218,10 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
         StatementHandler handler = (StatementHandler) invocation.getTarget();
+        // 仅当当前 DatabaseId 为 sqlserver 时改写，避免回滚后仍加载扩展 jar 时误改 MySQL SQL
+        if (!"sqlserver".equalsIgnoreCase(currentDatabaseId(handler))) {
+            return invocation.proceed();
+        }
         BoundSql boundSql = handler.getBoundSql();
         String sql = boundSql.getSql();
         if (sql == null) {
@@ -239,6 +246,34 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return invocation.proceed();
     }
 
+    /** 从 Plugin 包装链上取出 MappedStatement → Configuration.databaseId */
+    static String currentDatabaseId(StatementHandler handler) {
+        try {
+            MetaObject meta = SystemMetaObject.forObject(handler);
+            while (meta.hasGetter("h")) {
+                Object h = meta.getValue("h");
+                if (h == null) {
+                    break;
+                }
+                meta = SystemMetaObject.forObject(h);
+            }
+            while (meta.hasGetter("target")) {
+                Object t = meta.getValue("target");
+                if (t == null) {
+                    break;
+                }
+                meta = SystemMetaObject.forObject(t);
+            }
+            MappedStatement ms = (MappedStatement) meta.getValue("delegate.mappedStatement");
+            if (ms == null || ms.getConfiguration() == null) {
+                return null;
+            }
+            return ms.getConfiguration().getDatabaseId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // 不要在 Interceptor 里处理 ON DUPLICATE KEY UPDATE：
     // prepare 时 BoundSql 已是 ? + ParameterMapping，整段换成带 #{...} 的 MERGE 无法重新绑定。
     // 评分 upsert 用步骤 3.6 外部 Mapper（databaseId=sqlserver 的 MERGE）。
@@ -258,10 +293,14 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         s = s.replaceAll("(?i)\\bUUID\\s*\\(\\s*\\)", "NEWID()");
         // 与产品 jackson GMT+8 对齐：用实例本地时间（请将 SQL Server/容器时区设为 GMT+8）。若选 UTC 策略则改为 SYSUTCDATETIME()。
         s = s.replaceAll("(?i)\\bNOW\\s*\\(\\s*\\)", "SYSDATETIME()");
-        s = s.replaceAll("(?i)\\bis\\s+not\\s+true\\b", "<> 1");
-        s = s.replaceAll("(?i)\\bis\\s+not\\s+false\\b", "<> 0");
-        s = s.replaceAll("(?i)\\bis\\s+true\\b", "= 1");
-        s = s.replaceAll("(?i)\\bis\\s+false\\b", "= 0");
+        // 可空列：MySQL「NULL IS NOT true」为真；SQL Server「NULL <> 1」为 UNKNOWN。
+        // 仓内如 t_agent_workflow.deleted（AgentMapper 使用 deleted IS NOT true）必须 NULL-safe。
+        // ISNULL(col,0)<>1 ≈ IS NOT true；ISNULL(col,0)=1 ≈ IS true；
+        // ISNULL(col,1)<>0 ≈ IS NOT false；ISNULL(col,1)=0 ≈ IS false。
+        s = s.replaceAll("(?i)([\\w.\\[\\]`]+)\\s+is\\s+not\\s+true\\b", "ISNULL($1, 0) <> 1");
+        s = s.replaceAll("(?i)([\\w.\\[\\]`]+)\\s+is\\s+not\\s+false\\b", "ISNULL($1, 1) <> 0");
+        s = s.replaceAll("(?i)([\\w.\\[\\]`]+)\\s+is\\s+true\\b", "ISNULL($1, 0) = 1");
+        s = s.replaceAll("(?i)([\\w.\\[\\]`]+)\\s+is\\s+false\\b", "ISNULL($1, 1) = 0");
         s = s.replaceAll("(?i)=\\s*true\\b", "= 1");
         s = s.replaceAll("(?i)=\\s*false\\b", "= 0");
 
@@ -488,12 +527,11 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
         AND (deleted IS NULL OR deleted = 0)
     ) t
     ORDER BY updated_at DESC
-    OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY
   </select>
 </mapper>
 ```
 
-> 上面是**形态示例**；完整条件分支请对照产品内置同名语句补齐，或先跑通主链路再按日志缺啥补啥。
+> 上面是**形态示例**：对照产品内置同名语句补齐 `<if>` 条件；**不要**擅自加 `OFFSET/FETCH`——原语句无分页，硬编码 `FETCH NEXT 100` 会静默截断。可空 `deleted` 请用 `(deleted IS NULL OR deleted = 0)`，勿写成 `deleted <> 1`。
 
 2. **`ON DUPLICATE KEY UPDATE`（必做，仓内已知全部）**：Interceptor **不要**整段改写成带 `#{...}` 的 MERGE。当前产品 mapper 里 ODKU 有且仅有两处，都要外部 `databaseId="sqlserver"` 语句：
 
@@ -565,7 +603,9 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 </mapper>
 ```
 
-> SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，若新增语句须同样补外部 Mapper。
+> SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，若新增语句须同样补外部 Mapper。  
+>
+> **批量上限**：`USING (VALUES …)` 单语句最多 **1000** 行（错误 10738）。产品 `batchInsertEvalResult` 调用方未分批；提示词/结果很多时，请在业务侧分批调用、改为临时表+`MERGE`，或在外部 Mapper 文档中写明「单次 ≤1000，超出必失败」。
 
 3. **`mapper-locations` 与加载语义**（易误解，请按此理解）：
 
@@ -827,6 +867,10 @@ services:
       spring_sql_knowledge_ddl: file:/opt/ext/sql/ddl_knowledge_sqlserver.sql
       spring_sql_manager_dml: file:/opt/ext/sql/dml_empty.sql
       spring_sql_knowledge_dml: file:/opt/ext/sql/dml_empty.sql
+      # 产品 application-manager.yml 使用占位符
+      #   driverDelegateClass: ${org_quartz_jobStore_driverDelegateClass:...}
+      # 因此该环境变量名可以生效；不是靠 Boot 把同名键自动映射进 spring.quartz.properties.*。
+      # 若 application-sqlserver.yml 已写死 MSSQLDelegate，本行可省略（与 profile 二选一即可）。
       org_quartz_jobStore_driverDelegateClass: org.quartz.impl.jdbcjobstore.MSSQLDelegate
       SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING: "true"
 ```
@@ -838,7 +882,9 @@ docker compose -f docker-compose.yml -f docker-compose.db-ext.yml \
   up -d --no-deps --pull never --force-recreate studio-manager
 ```
 
-> **连接安全**：上面默认 `encrypt=true;trustServerCertificate=false`，并使用**非 sa** 的业务账号。仅本地/无 TLS 的测试环境才可临时改为 `encrypt=false;trustServerCertificate=true`，且口令不要写进可提交的仓库；生产须校验服务器证书并授予最小库权限。
+> **连接安全**：上面默认 `encrypt=true;trustServerCertificate=false`，并使用**非 sa** 的业务账号。仅本地/无 TLS 的测试环境才可临时改为 `encrypt=false;trustServerCertificate=true`，且口令不要写进可提交的仓库；生产须校验服务器证书并授予最小库权限。  
+>
+> **回滚**：去掉 overlay / 恢复原 `entrypoint` 后，确认扩展目录不再进入 `loader.path`，避免误加载 SQL Server 改写逻辑。
 
 ### 方式 B：已有进程
 
@@ -967,6 +1013,8 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | 驱动已是目标库但 URL 仍是 mariadb/mysql | 同时覆盖 `SPRING_DATASOURCE_URL` 与 `spring_datasource_url`（及 username/password/driver 大小写两套） |
 | 列表空 / 导出读文件 500 | 先查 §9「数据准备」：workspace 状态、种子数据、`dsl_path` 是否指向真实文件 |
 | `Invalid column name 'false'` | Interceptor 未加载或未改写布尔；查日志是否有 `[VendorSqlRewrite]` |
+| 可空 `deleted` 行丢失 | 勿用 `<> 1` 替代 `IS NOT true`；确认 `ISNULL(col,0)<>1` 或外部 Mapper 的 `(col IS NULL OR col=0)` |
+| 评估批量 MERGE 报 10738 | VALUES 单批 >1000；业务分批或改临时表方案 |
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
 | `FETCH NEXT 0` | 确认 `clampZeroFetch` 生效 |
@@ -1028,6 +1076,11 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 
 以下仅作为“非兼容方言”的落地示例；其他方言可参照同样的方法论，把 DDL、方言 id、驱动和方言组件替换为目标库对应的内容。
 
+> **口径统一**：相对 Studio 默认 MySQL 栈，达梦仍属需二开/外部扩展的库（故称「非兼容方言」）。本附录推荐在 DM8 上开启 **`COMPATIBLE_MODE=4`（MySQL 兼容）** 以降低 SQL 差异——「非兼容」指产品开箱不支持，「兼容模式」指达梦库侧配置。  
+> **`databaseId` 二选一，勿混用**：  
+> 1. **推荐（与本附录一致）**：开 `COMPATIBLE_MODE=4`，**不要**让外部 `DatabaseIdProvider` 把 `jdbc:dm://` 映射成 `dm`（保持 `null` / 走 MySQL Mapper 分支）；扩展重点在驱动、DDL、必要时少量改写。  
+> 2. **若使用正文 `ExtJdbcUrlDatabaseIdProvider` 且返回 `dm`**：必须提供 `databaseId="dm"` 的外部 Mapper，**不能**再假定「返回 null、走 MySQL 分支」。此时附录 A.3 中「返回 null」的说法不适用，应改 Provider 或改 Mapper。
+
 ### A.1 兼容模式
 
 DM8 的 `COMPATIBLE_MODE` 取值：
@@ -1075,9 +1128,9 @@ spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
 
 说明：
 
-- 不激活 `postgres` profile；DM URL 让 `JdbcUrlDatabaseIdProvider` 返回 null，Mapper 走 MySQL 分支。
+- 不激活 `postgres` profile。在本附录**推荐路径**下：不开返回 `dm` 的外部 Provider（或 Provider 对 DM URL 返回 null），内置 `JdbcUrlDatabaseIdProvider` 对未识别 URL 亦为 null，Mapper 走 **MySQL 分支**（配合 `COMPATIBLE_MODE=4`）。若已启用正文会返回 `dm` 的 `ExtJdbcUrlDatabaseIdProvider`，见附录开头「二选一」说明。
 - `spring_sql_init_mode=never` 时，`dml.sql` 也不会自动执行，需要手工灌一次种子数据。
-- 达梦驱动 jar（如 `DmJdbcDriver18.jar`，以厂商交付为准）需挂载并通过 `-cp` 加载。
+- 达梦驱动 jar（如 `DmJdbcDriver18.jar`，以厂商交付为准）需挂载并通过 `-cp` / `loader.path` 加载（与正文扩展包方式一致时用 `loader.path`）。
 - Hibernate 6.6.8 没有内置 DM 方言；优先用达梦官方 Hibernate 6.x 方言 jar，否则用 `MySQLDialect` 配合 DM4。
 - PageHelper 6.1.0 会把 `jdbc:dm://` 识别为 `dm`（Oracle 方言分页）；使用 MySQL 兼容模式时建议强制 `pagehelper.helper-dialect=mysql`。
 
