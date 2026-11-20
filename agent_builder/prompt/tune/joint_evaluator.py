@@ -272,7 +272,7 @@ class JointEvaluatorWithRef:
             r"\{\{(question|answer_match|actual_answer)\}\}"
         )
         prompt_template = pattern.sub(
-            lambda m: mapping["{{" + m.group(1) + "}}"],
+            lambda m: mapping.get("{{" + m.group(1) + "}}", ""),
             self.access_answer_prompt,
         )
 
