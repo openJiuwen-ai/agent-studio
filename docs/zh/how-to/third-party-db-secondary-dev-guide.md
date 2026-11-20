@@ -186,6 +186,8 @@ import org.apache.ibatis.plugin.Signature;
 import org.apache.ibatis.reflection.MetaObject;
 import org.apache.ibatis.reflection.SystemMetaObject;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -219,7 +221,11 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
     public Object intercept(Invocation invocation) throws Throwable {
         StatementHandler handler = (StatementHandler) invocation.getTarget();
         // 仅当当前 DatabaseId 为 sqlserver 时改写，避免回滚后仍加载扩展 jar 时误改 MySQL SQL
-        if (!"sqlserver".equalsIgnoreCase(currentDatabaseId(handler))) {
+        String databaseId = currentDatabaseId(handler);
+        if (!"sqlserver".equalsIgnoreCase(databaseId)) {
+            if (databaseId == null) {
+                System.out.println("[VendorSqlRewrite] WARN: databaseId unresolved; skip rewrite");
+            }
             return invocation.proceed();
         }
         BoundSql boundSql = handler.getBoundSql();
@@ -246,32 +252,44 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return invocation.proceed();
     }
 
-    /** 从 Plugin 包装链上取出 MappedStatement → Configuration.databaseId */
-    static String currentDatabaseId(StatementHandler handler) {
+    /**
+     * 读取 Configuration.databaseId。多层 Plugin 时 {@code invocation.getTarget()} 可能是 JDK 动态代理；
+     * Java 17 下不可反射 {@code Proxy.h}，必须用 {@link Proxy#getInvocationHandler(Object)} 解链。
+     */
+    static String currentDatabaseId(Object handler) {
         try {
-            MetaObject meta = SystemMetaObject.forObject(handler);
-            while (meta.hasGetter("h")) {
-                Object h = meta.getValue("h");
-                if (h == null) {
-                    break;
-                }
-                meta = SystemMetaObject.forObject(h);
-            }
-            while (meta.hasGetter("target")) {
-                Object t = meta.getValue("target");
-                if (t == null) {
-                    break;
-                }
-                meta = SystemMetaObject.forObject(t);
-            }
+            Object raw = unwrapMybatisTarget(handler);
+            MetaObject meta = SystemMetaObject.forObject(raw);
             MappedStatement ms = (MappedStatement) meta.getValue("delegate.mappedStatement");
             if (ms == null || ms.getConfiguration() == null) {
                 return null;
             }
             return ms.getConfiguration().getDatabaseId();
         } catch (Exception e) {
+            System.out.println("[VendorSqlRewrite] WARN: resolve databaseId failed: " + e);
             return null;
         }
+    }
+
+    /** 递归解开 MyBatis {@link Plugin} 包装，得到原始 StatementHandler（如 RoutingStatementHandler）。 */
+    static Object unwrapMybatisTarget(Object handler) {
+        Object current = handler;
+        for (int i = 0; i < 16 && current != null; i++) {
+            if (!Proxy.isProxyClass(current.getClass())) {
+                return current;
+            }
+            InvocationHandler ih = Proxy.getInvocationHandler(current);
+            if (!(ih instanceof Plugin)) {
+                return current;
+            }
+            // Plugin.target 为 private，用 MetaObject 读；不要反射 Proxy.h（Java 17 会 InaccessibleObjectException）
+            Object next = SystemMetaObject.forObject(ih).getValue("target");
+            if (next == null) {
+                return current;
+            }
+            current = next;
+        }
+        return current;
     }
 
     // 不要在 Interceptor 里处理 ON DUPLICATE KEY UPDATE：
@@ -462,6 +480,15 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
     public void setProperties(Properties properties) { }
 }
 ```
+
+> **最小自检（Java 17）**：`Plugin.wrap` 之后仍须能读到 `sqlserver`。可用下面骨架在单测/小 main 里验证（`rawHandler` 需带 `delegate.mappedStatement.configuration.databaseId=sqlserver` 的 stub 或真实 RoutingStatementHandler）：
+>
+> ```java
+> StatementHandler wrapped = (StatementHandler) Plugin.wrap(rawHandler, new VendorSqlRewriteInterceptor());
+> // 错误写法：反射 Proxy.h → Java 17 下常得到 null
+> // 正确：currentDatabaseId(wrapped) 必须仍为 "sqlserver"
+> assert "sqlserver".equalsIgnoreCase(VendorSqlRewriteInterceptor.currentDatabaseId(wrapped));
+> ```
 
 ### 步骤 3.4 注册 Bean：`ExtDbAutoConfiguration.java`
 
