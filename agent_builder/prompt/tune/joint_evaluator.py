@@ -256,9 +256,14 @@ class JointEvaluatorWithRef:
         return accuracy, res_eval, res_evaluation
 
     def _format_prompt_template(self, question, predict, label):
-        """format_prompt_template"""
-        prompt_template = self.access_answer_prompt.replace("{{question}}", question)
-        prompt_template = prompt_template.replace("{{answer_match}}", predict)
-        prompt_template = prompt_template.replace("{{actual_answer}}", label)
-
-        return prompt_template
+        """Render template fields without reinterpreting inserted evaluation data."""
+        values = {
+            "question": question,
+            "answer_match": predict,
+            "actual_answer": label,
+        }
+        return re.sub(
+            r"\{\{(question|answer_match|actual_answer)\}\}",
+            lambda match: values.get(match.group(1), match.group(0)),
+            self.access_answer_prompt,
+        )
