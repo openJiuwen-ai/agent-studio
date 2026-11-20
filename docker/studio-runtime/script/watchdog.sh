@@ -39,10 +39,10 @@ function server_health_check(){
   local CHECK_RSP=$1
   local HEALTH_CHECK_TIMEOUT=$2
   local SERVER_PORT=$3
-  if [[ "${HTTPS}" == "false" ]]; then
-    health_check=$(curl -k --location --request GET "http://127.0.0.1:${SERVER_PORT}/v1/health" --max-time ${HEALTH_CHECK_TIMEOUT})
-  else
+  if [[ "${HTTPS,,}" == "true" ]]; then
     health_check=$(curl -k --location --request GET "https://127.0.0.1:${SERVER_PORT}/v1/health" --max-time ${HEALTH_CHECK_TIMEOUT})
+  else
+    health_check=$(curl -k --location --request GET "http://127.0.0.1:${SERVER_PORT}/v1/health" --max-time ${HEALTH_CHECK_TIMEOUT})
   fi
   if [ $? -eq 0 ]; then
         echo health_check success
@@ -86,7 +86,7 @@ function watchdog() {
   PERIOD_SECONDS=${HEALTH_CHECK_PERIOD_SECONDS:-30}
   SERVER_PORT=${PORT:-8000}
 
-  if [[ "${NGINX_LOAD_BALANCING}" == "true" ]]; then
+  if [[ "${NGINX_LOAD_BALANCING,,}" == "true" ]]; then
     # Multi-port mode: monitor all worker ports.
     # LB_WORKER_NUM is exported by start_nginx_lb.sh (the real nginx-upstream
     # worker count). GUNICORN_WORK_NUM is overridden to 1 there to force
