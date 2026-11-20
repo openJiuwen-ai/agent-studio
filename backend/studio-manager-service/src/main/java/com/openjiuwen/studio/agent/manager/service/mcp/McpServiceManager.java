@@ -3475,11 +3475,16 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
     // ==================== FEAT-134: MCP 服务导入导出与重载 ====================
 
-    @org.springframework.beans.factory.annotation.Autowired
-    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService mcpTransferService;
+        @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationContext feApplicationContext;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService mcpFeOperationService;
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService getMcpTransferService() {
+        return feApplicationContext.getBean(com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService.class);
+    }
+
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService getMcpFeOperationService() {
+        return feApplicationContext.getBean(com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService.class);
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationDao mcpFeOperationDao;
@@ -3488,7 +3493,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
     public String exportMcpServices(String projectId, String workspaceId,
         com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq req) {
         log.info("operation log {}:export mcp services, selection={}", projectId, req.getSelection());
-        return mcpTransferService.exportServices(projectId, workspaceId, req);
+        return getMcpTransferService().exportServices(projectId, workspaceId, req);
     }
 
     @Override
@@ -3496,9 +3501,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
         String workspaceId, String fileContent) {
         log.info("operation log {}:import mcp services", projectId);
         com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp accepted =
-            mcpTransferService.importServices(projectId, workspaceId, fileContent);
+            getMcpTransferService().importServices(projectId, workspaceId, fileContent);
         // 事务提交后投递异步刷新
-        mcpTransferService.submitImportRefresh(accepted.getOperationId());
+        getMcpTransferService().submitImportRefresh(accepted.getOperationId());
         return accepted;
     }
 
@@ -3562,7 +3567,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
                 "another operation is active on this service");
         }
 
-        mcpFeOperationService.submitReload(operation.getId());
+        getMcpFeOperationService().submitReload(operation.getId());
 
         com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp resp =
             new com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp();
@@ -3577,6 +3582,6 @@ public class McpServiceManager implements IMcpServiceManagerService {
     @Override
     public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp getMcpOperationResult(String projectId,
         String workspaceId, String operationId) {
-        return mcpFeOperationService.getOperationResult(projectId, workspaceId, operationId);
+        return getMcpFeOperationService().getOperationResult(projectId, workspaceId, operationId);
     }
 }

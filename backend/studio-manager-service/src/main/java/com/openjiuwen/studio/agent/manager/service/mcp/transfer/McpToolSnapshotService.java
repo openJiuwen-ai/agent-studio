@@ -40,8 +40,13 @@ public class McpToolSnapshotService {
     private static final Logger log = LoggerFactory.getLogger(McpToolSnapshotService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** 通过 ApplicationContext 延迟获取，规避 Spring DI 循环（McpServiceManager ↔ transfer 包） */
     @Autowired
-    private McpServiceManager mcpServiceManager;
+    private org.springframework.context.ApplicationContext applicationContext;
+
+    private McpServiceManager getMcpServiceManager() {
+        return applicationContext.getBean(McpServiceManager.class);
+    }
 
     @Autowired
     private McpServiceDao serviceDao;
@@ -60,7 +65,7 @@ public class McpToolSnapshotService {
      */
     public McpToolFetchResult fetchTools(McpServiceEntity entity) {
         try {
-            String toolsJson = mcpServiceManager.getMcpServiceToolList(entity);
+            String toolsJson = getMcpServiceManager().getMcpServiceToolList(entity);
             if (toolsJson == null || toolsJson.isBlank()) {
                 // 旧链路空串=零工具（安装时折成空串）；新链路视为合法空列表（L2 §5.4）
                 return McpToolFetchResult.ok(List.of());

@@ -55,8 +55,9 @@ public class McpOperationService {
     @Autowired
     private McpToolSnapshotService snapshotService;
 
+    /** 通过 ApplicationContext 延迟获取，规避 Spring DI 循环 */
     @Autowired
-    private McpServiceManager mcpServiceManager;
+    private org.springframework.context.ApplicationContext applicationContext;
 
     @Autowired
     private ThreadPoolTaskExecutor mcpTaskExecutor;
