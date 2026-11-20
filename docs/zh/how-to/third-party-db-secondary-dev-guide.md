@@ -6,7 +6,8 @@
 
 - **范围**：本指南只覆盖 Java 侧 `studio-manager`（平台管理面元数据存储）。Python 侧 `agent_builder` / `studio-builder` 的 `STORE_DB_*` **不在本期适配范围**（影响面小，可后续按需单独立项）。  
 - 这是**部署侧外部扩展**，扩展包与方言规则需自行维护、按第 9 节验收；上游产品升级后可能要重测/微调改写规则。  
-- 本文 SQL Server 示例可按步骤落地；**达梦 / Oracle 没有整份可直接粘贴的完整改写代码**，只保证流程相同（改识别、`rewrite()`、profile、DDL）。  
+- 本文 SQL Server 示例可按步骤落地；**达梦 / Oracle 没有整份可直接粘贴的完整改写代码**，只保证流程相同（改识别、`rewrite()`、profile、DDL）。达梦 DM8 示例见 **附录 A**（摘自内部《Studio 数据库类型切换指导》）。  
+
 - **机制 ≠ 零工作量**：主工作量通常在 **DDL 全量翻译**（产品 100+ 张表；第 6.2 节对照表是起点，不是全集）。目标库若 MySQL 兼容度高，Interceptor 改写面可能很小，但 DDL 仍要打磨。
 
 ---
@@ -994,7 +995,6 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 1. **`ExtJdbcUrlDatabaseIdProvider`**：确保 URL 返回 `dm` / `oracle`  
 2. **`VendorSqlRewriteInterceptor.rewrite()`**：  
    - LIMIT → 达梦可保留或按文档；Oracle 常用 `FETCH FIRST` / `OFFSET…FETCH`；SQL Server 须区分有无 `ORDER BY`（`TOP` vs `OFFSET/FETCH`，见步骤 3.3）  
-
    - 引号、`UUID()`/`SYS_GUID()`、布尔等碎片按厂商改（仍不要在 Interceptor 里用 `#{...}` 整段替换 upsert）  
    - 若目标库开启较高 MySQL 兼容模式，改写面可能较小；**DDL 翻译仍是重头**（见 6.2）  
 3. **外部 Mapper**：`databaseId` 与上一步返回值一致；含 upsert / `FROM_UNIXTIME` 等整段方言语句  
@@ -1004,6 +1004,8 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
    - **Hibernate**：达梦可用 community `DamengDialect` 或在 profile 显式指定  
 
 验收 Checklist 与第 9 节相同。`agent_builder`（Python）仍不在本指南范围（见文首边界说明）。
+
+达梦 DM8 示例见 **附录 A**（兼容模式参数、建库、连接、DDL 转换与验证重点；仍须自备驱动与全量 DDL）。
 
 ---
 
@@ -1022,7 +1024,103 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 
 ---
 
-## 附录：开放配置项速查
+## 附录 A：达梦 DM8 示例（非兼容方言）
+
+以下仅作为“非兼容方言”的落地示例；其他方言可参照同样的方法论，把 DDL、方言 id、驱动和方言组件替换为目标库对应的内容。
+
+### A.1 兼容模式
+
+DM8 的 `COMPATIBLE_MODE` 取值：
+
+| 值 | 含义 |
+|---|---|
+| 0 | 不兼容（默认） |
+| 1 | SQL92 |
+| 2 | Oracle |
+| 3 | MS SQL Server |
+| 4 | MySQL |
+| 5 | DM6 |
+| 6 | Teradata |
+| 7 | PostgreSQL（部分版本） |
+| 8 | DB2（部分版本） |
+
+开启 MySQL 兼容使用 **`COMPATIBLE_MODE=4`**。该参数是静态参数，修改 `dm.ini` 或执行 `SP_SET_PARA_VALUE(2, 'COMPATIBLE_MODE', 4)` 后需要重启数据库。建议在建库阶段就确定。
+
+### A.2 建库参数
+
+```text
+COMPATIBLE_MODE=4     # MySQL 兼容
+LENGTH_IN_CHAR=1      # VARCHAR 按字符计长，避免中文按字节截断
+CHARSET=UTF-8         # 具体取值以达梦 dminit 文档为准
+```
+
+`LENGTH_IN_CHAR` 影响 `VARCHAR(n)` 的长度语义：MySQL 按字符，达梦默认按字节。manager 的 DDL 里有大量 `varchar(255)` 存中文名称，若按字节计会截断；DM4 的“超长字符串截断而不报错”会静默丢数据。
+
+### A.3 连接与配置
+
+```properties
+spring_datasource_url=jdbc:dm://10.0.0.10:5236
+spring_datasource_username=AGENT_BUILDER
+spring_datasource_password=******
+spring_datasource_driver_class_name=dm.jdbc.driver.DmDriver
+
+spring_sql_manager_ddl=file:/opt/studio/sql/ddl_dm.sql
+spring_sql_knowledge_ddl=file:/opt/studio/sql/knowledge-base/ddl_dm.sql
+spring_sql_init_mode=never
+
+org_quartz_jobStore_driverDelegateClass=org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+pagehelper.helper-dialect=mysql
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+```
+
+说明：
+
+- 不激活 `postgres` profile；DM URL 让 `JdbcUrlDatabaseIdProvider` 返回 null，Mapper 走 MySQL 分支。
+- `spring_sql_init_mode=never` 时，`dml.sql` 也不会自动执行，需要手工灌一次种子数据。
+- 达梦驱动 jar（如 `DmJdbcDriver18.jar`，以厂商交付为准）需挂载并通过 `-cp` 加载。
+- Hibernate 6.6.8 没有内置 DM 方言；优先用达梦官方 Hibernate 6.x 方言 jar，否则用 `MySQLDialect` 配合 DM4。
+- PageHelper 6.1.0 会把 `jdbc:dm://` 识别为 `dm`（Oracle 方言分页）；使用 MySQL 兼容模式时建议强制 `pagehelper.helper-dialect=mysql`。
+
+### A.4 DDL 转换重点
+
+对 `sql/ddl.sql` 和 `sql/knowledge-base/ddl.sql`：
+
+| MySQL 语法 | 处理方式 |
+|---|---|
+| `ENGINE=InnoDB` | 删除 |
+| `DEFAULT CHARSET` / `COLLATE=utf8mb4_*` | 删除 |
+| `ROW_FORMAT=Dynamic` | 删除 |
+| `USING BTREE` | 删除，索引改为达梦语法 |
+| `AUTO_INCREMENT` | `IDENTITY(1,1)` |
+| `TINYINT(1)` | `BIT` / `TINYINT` |
+| `DATETIME` | `TIMESTAMP` |
+| `MEDIUMTEXT` / `LONGTEXT` / `TEXT` | `CLOB` / `TEXT` |
+| `JSON` | `CLOB` / `TEXT`（manager 未使用 JSON 函数） |
+| 内联 `COMMENT '...'` | `COMMENT ON COLUMN ...`，或验证 DM4 是否接受内联 |
+| `UNSIGNED` | 去掉或放大类型 |
+| `ENUM(...)` | `VARCHAR + CHECK` |
+| `UNIQUE KEY` / `KEY ... USING BTREE` | `CREATE UNIQUE INDEX` / `CREATE INDEX` |
+| `ON UPDATE CURRENT_TIMESTAMP` | DM4 若不支持，去掉并用触发器补 |
+
+粗略规模：manager 约 100 张表 + 知识库 15 张 + QRTZ 11 张。建议脚本完成 80%~90% 的机械替换，再人工复核索引、自增、注释、默认值和字段长度。
+
+### A.5 达梦验证重点
+
+- `LIMIT n`、`LIMIT offset,count`；
+- `ON DUPLICATE KEY UPDATE` + `VALUES(col)`；
+- 反引号标识符；
+- `FROM_UNIXTIME`、`UUID()`、`NOW()`；
+- 多参数 `CONCAT`、布尔字面量、`LIKE ... ESCAPE '/'`；
+- JPA `t_sessions` 自增 + `getGeneratedKeys`；
+- Quartz `SELECT ... FOR UPDATE`；
+- CLOB 写入 base64 种子数据；
+- `ON UPDATE CURRENT_TIMESTAMP` 是否生效。
+
+上述任一项不通过，按正文步骤 3.3（`rewrite`）/ 3.6（外部 Mapper）与第 6 节 DDL 处理。
+
+---
+
+## 附录 B：开放配置项速查
 
 | 配置项 | 作用 |
 |---|---|
@@ -1035,7 +1133,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `org_quartz_jobStore_driverDelegateClass` | Quartz 方言 |
 | `pagehelper.helper-dialect` | 分页方言 |
 | `spring.jpa.properties.hibernate.dialect` | JPA 方言 |
-| `spring.profiles.active` | 如 `manager,sqlserver` |
+| `spring.profiles.active` | 如 `manager,sqlserver` 或 `manager,dm` |
 | `spring.config.additional-location` | 外部 config 目录 |
 | `-Dloader.path` | `ext/`（扩展 jar）+ `lib/`（仅 JDBC 驱动）；勿含 `lib-compile/` |
 | `mybatis.mapper-locations` | 含 `classpath:ext-mapper/*.xml`（写在内置 `classpath*:mapper/...` 之前，先注册 `databaseId` 专用语句） |
