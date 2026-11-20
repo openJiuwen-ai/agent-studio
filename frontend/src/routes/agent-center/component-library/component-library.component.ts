@@ -750,4 +750,142 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       return '600px';
     }
   }
+
+  // ==================== FEAT-134: MCP 导入导出与重载 ====================
+
+  /** MCP 导出弹窗引用 */
+  private mcpExportDrawerRef: NzDrawerRef | null = null;
+  /** MCP 导出异步进行中 */
+  private mcpExporting = false;
+
+  /**
+   * MCP 导出（FEAT-134）：复用 ExportHalfModalComponent 选择模式，confirm 后
+   * 调用导出接口 → Blob 下载。
+   */
+  public exportMcp() {
+    if (this.mcpExportDrawerRef || this.mcpExporting) {
+      return;
+    }
+    const drawerRef = this.nzDrawerService.create({
+      nzContent: ExportHalfModalComponent,
+      nzWidth: this.halfModalWidth,
+      nzData: {
+        exportType: 'MCP',
+        exportTypeOptions: [
+          {
+            id: 'MCP',
+            text: this.i18n.transform('mcp_export'),
+            desc: '',
+            colName: this.i18n.transform('mcp'),
+            rowKey: 'id',
+          },
+        ],
+        confirm: ({ rows }) => {
+          this.mcpExporting = true;
+          this.mcpService
+            .exportMcpServices({
+              selection: 'IDS',
+              service_ids: rows.map(row => row.id),
+            })
+            .then(res => {
+              if (!res) {
+                return;
+              }
+              CommonUtils.downloadFile(
+                new Blob([res], { type: 'application/json' }),
+                `mcp-services-${this.commonLogic.getFormattedDateTime()}.json`,
+                true,
+              );
+            })
+            .catch(() => {
+              // 导出异常静默处理，避免阻断后续重试
+            })
+            .finally(() => {
+              this.mcpExporting = false;
+            });
+        },
+      },
+    });
+    this.mcpExportDrawerRef = drawerRef;
+    drawerRef.afterClose.subscribe(() => {
+      this.mcpExportDrawerRef = null;
+    });
+  }
+
+  /**
+   * MCP 导入（FEAT-134）：文件上传 → 202 受理 → 2 秒轮询操作结果 → 刷新列表。
+   * 使用 NzModal 简单弹窗（后端异步任务，不同于插件的同步导入）。
+   */
+  public importMcp() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        return;
+      }
+      try {
+        const accepted = await this.mcpService.importMcpServices(file);
+        if (!accepted || !accepted.operation_id) {
+          MessageComponent.showError(this.i18n.transform('mcp_import_failed'));
+          return;
+        }
+        MessageComponent.showSuccess(
+          this.i18n.transform('mcp_import_accepted', { count: accepted.total || 0 }),
+        );
+        // 异步轮询操作结果（2 秒间隔，终态停止）
+        this.pollMcpOperation(accepted.operation_id);
+      } catch (err) {
+        // 校验失败给出具体原因（后端返回 400 + detail）
+        const reason = (err as any)?.error?.error_reason || (err as any)?.message || '';
+        MessageComponent.showError(
+          reason ? this.i18n.transform('mcp_import_rejected', { reason }) : this.i18n.transform('mcp_import_failed'),
+        );
+      }
+    };
+    input.click();
+  }
+
+  /** 轮询 MCP 操作结果（终态停止 + 刷新列表） */
+  private mcpOperationTimers: Map<string, any> = new Map();
+
+  private pollMcpOperation(operationId: string, maxAttempts = 150) {
+    if (this.mcpOperationTimers.has(operationId)) {
+      return;
+    }
+    let attempts = 0;
+    const timer = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        clearInterval(timer);
+        this.mcpOperationTimers.delete(operationId);
+        return;
+      }
+      try {
+        const result = await this.mcpService.getMcpOperation(operationId);
+        if (result && result.status && result.status !== 'RUNNING') {
+          clearInterval(timer);
+          this.mcpOperationTimers.delete(operationId);
+          // 终态：展示结果并刷新列表
+          const total = result.total || 0;
+          const success = result.success_count || 0;
+          const failed = result.failed_count || 0;
+          if (failed === 0) {
+            MessageComponent.showSuccess(
+              this.i18n.transform('mcp_import_completed', { total, success }),
+            );
+          } else {
+            MessageComponent.showWarn(
+              this.i18n.transform('mcp_import_partial', { total, success, failed }),
+            );
+          }
+          this.getCardData();
+        }
+      } catch {
+        // 轮询异常不中断（可能瞬时网络问题），继续下一轮
+      }
+    }, 2000);
+    this.mcpOperationTimers.set(operationId, timer);
+  }
 }
