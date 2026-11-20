@@ -74,20 +74,33 @@ class SkillMapperXmlRegressionTest {
     }
 
     @Test
-    void searchBySkillIds_domainIsolation_noHardcodedFilter() throws Exception {
+    void searchBySkillIds_domainIsolation_failClosedOnEmptyDomain() throws Exception {
         String text = selectText(loadMapperXml(), "searchBySkillIds");
         assertThat(text).as("searchBySkillIds select 须存在").isNotNull();
         // 查询结构完整：仍按 skill_id IN 批量查（未误删查询主体）
         assertThat(text).contains("skill_id IN");
-        // 隔离条件（issue #1734 巡检问题3）：WHERE 含 (domain_id=? OR published_asset='1')
+        // 隔离条件（issue #1734 巡检问题3）：domainId 非空分支含 (domain_id=? OR published_asset='1')
         //   ——本 domain 全部（含未上架草稿）+ 跨 domain 仅已上架（广场可见语义，与 getSkillPackageContent 对齐）
         assertThat(text).contains("domain_id");
-        assertThat(text).contains("published_asset");
         assertThat(text).contains("OR");
-        // 防回退（issue #1734）：不得有独立硬编码 AND published_asset='1' 过滤
-        //   （旧根因：误判未上架为不存在 + 跨域泄露；OR 条件内的 published_asset 是 'OR' 前缀，不含 'AND t_skill.published_asset'）
-        assertThat(text).as("searchBySkillIds 不得有独立 AND published_asset 过滤（issue #1734）")
-            .doesNotContain("AND t_skill.published_asset");
+        // 巡检问题1（fail-closed）：choose/when/otherwise 双分支——getTextContent 只留文本节点（标签被去），
+        //   故验证两个分支的文本都在：when 的 "domain_id = #{domainId} ... OR ... published_asset='1'"
+        //   + otherwise 的兜底 "published_asset='1'"（domainId 空时仅已上架可见，未上架草稿不跨 domain 泄露）。
+        //   出现 2 次 published_asset = '1' 即证明 choose 双分支结构存在（when 内 OR + otherwise 兜底），
+        //   避免退化为无 otherwise 的单 <if>（domainId 空时无过滤全量泄露）。
+        int publishedAssetCount = countOccurrences(text, "published_asset = '1'");
+        assertThat(publishedAssetCount)
+            .as("searchBySkillIds 须 choose 双分支：when(domainId非空,OR内) + otherwise(domainId空兜底) 各含 published_asset='1'（issue #1734 巡检问题1 fail-closed）")
+            .isGreaterThanOrEqualTo(2);
+    }
+
+    private static int countOccurrences(String text, String sub) {
+        int count = 0, idx = 0;
+        while ((idx = text.indexOf(sub, idx)) != -1) {
+            count++;
+            idx += sub.length();
+        }
+        return count;
     }
 
     @Test

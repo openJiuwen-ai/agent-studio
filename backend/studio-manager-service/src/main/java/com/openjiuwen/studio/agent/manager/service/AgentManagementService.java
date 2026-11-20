@@ -1833,7 +1833,7 @@ public class AgentManagementService implements IAgentManagementService {
                 agentSkillDetails.add(agentSkillDetail);
             });
             // 1. 校验
-            Map<String, SkillDetails> validSkillsMap = validateSkills(agentSkillDetails, workspaceId);
+            Map<String, SkillDetails> validSkillsMap = validateSkills(agentSkillDetails);
             // 2. 生成技能引用实体
             List<MappingEntity> skillReferences = generateSkillReferences(agentId, agentSkillDetails, validSkillsMap);
             // 3. 处理agent和skill的关联信息入库
@@ -1842,7 +1842,7 @@ public class AgentManagementService implements IAgentManagementService {
         if (body.getSkillDetails() != null) {
             List<AgentSkillDetail> skillDetails = body.getSkillDetails();
             // 1. 校验
-            Map<String, SkillDetails> validSkillsMap = validateSkills(skillDetails, workspaceId);
+            Map<String, SkillDetails> validSkillsMap = validateSkills(skillDetails);
             // 2. 生成技能引用实体（仅包含有效skill）
             List<MappingEntity> skillReferences = generateSkillReferences(agentId, skillDetails, validSkillsMap);
             // 3. 处理agent和skill的关联信息入库
@@ -2006,7 +2006,7 @@ public class AgentManagementService implements IAgentManagementService {
      * @param skillDetails 前端传入body
      * @return 有效的Map<String, SkillEntity>
      */
-    private Map<String, SkillDetails> validateSkills(List<AgentSkillDetail> skillDetails, String workspaceId) {
+    private Map<String, SkillDetails> validateSkills(List<AgentSkillDetail> skillDetails) {
         // 1. 空值校验
         if (CollectionUtils.isEmpty(skillDetails)) {
             return new HashMap<>();

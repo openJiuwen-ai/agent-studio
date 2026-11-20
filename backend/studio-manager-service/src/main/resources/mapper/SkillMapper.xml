@@ -220,10 +220,17 @@
              跨 domain 仅可见已上架（广场可见语义，堵跨 domain 未上架草稿的存在性/元数据泄露）。
              粒度与 getSkillPackageContent / deleteStudioSkill / searchBySkillIdAndDomainId 对齐
              （同 domain 内跨 workspace/project 预览属于既有契约，不阻断）。
-             广场列表展示的可见性仍由 search/countSelectedSkills 的 publishedAsset 参数负责。 -->
-        <if test="domainId != null and domainId != ''">
-            AND (t_skill.domain_id = #{domainId,jdbcType=VARCHAR} OR t_skill.published_asset = '1')
-        </if>
+             巡检问题1（fail-closed）：domainId 为空/null 时 RequestContextUtils.getRequestUserDomainId()
+             在无 domain 上下文中返回空，此时 fail-closed 到 published_asset='1'（仅已上架可见，未上架草稿
+             不跨 domain 泄露），而非退化为无过滤的全量查询。广场列表展示仍由 search/countSelectedSkills 负责。 -->
+        <choose>
+            <when test="domainId != null and domainId != ''">
+                AND (t_skill.domain_id = #{domainId,jdbcType=VARCHAR} OR t_skill.published_asset = '1')
+            </when>
+            <otherwise>
+                AND t_skill.published_asset = '1'
+            </otherwise>
+        </choose>
     </select>
     <select id="searchBySkillIdAndDomainId" resultMap="SearchResultMap">
         SELECT
