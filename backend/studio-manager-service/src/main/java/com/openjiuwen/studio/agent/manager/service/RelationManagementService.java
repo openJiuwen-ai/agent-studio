@@ -2267,7 +2267,7 @@ public class RelationManagementService implements IRelationManagementService {
                 ResourceTypeEnum.SKILL.toString().equals(mappingEntity.getResourceType()))
             .map(MappingEntity::getResourceId)
             .toList();
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill, RequestContextUtils.getRequestUserDomainId());
         Map<String, SkillDetails> latestSkillVersionMap = skillDetailsList.stream()
             .collect(Collectors.toMap(SkillDetails::getSkillId, skillDetails -> skillDetails));
         relations.forEach(relation -> {
@@ -2528,7 +2528,8 @@ public class RelationManagementService implements IRelationManagementService {
         final List<String> skillIds = agentSkillList.stream()
             .map(MappingEntity::getResourceId)
             .collect(Collectors.toList());
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds,
+            RequestContextUtils.getRequestUserDomainId());
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return Collections.emptyList();
         }
