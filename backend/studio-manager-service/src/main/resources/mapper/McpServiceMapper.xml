@@ -40,6 +40,10 @@
         <result property="authInfo" column="auth_info" jdbcType="VARCHAR"/>
         <result property="isShare" column="is_share" jdbcType="TINYINT"/>
         <result property="traceId" column="trace_id" jdbcType="VARCHAR"/>
+        <result property="snapshotRevision" column="snapshot_revision" jdbcType="BIGINT"/>
+        <result property="activeMcpOperationId" column="active_mcp_operation_id" jdbcType="VARCHAR"/>
+        <result property="importConfigPending" column="import_config_pending" jdbcType="TINYINT"/>
+        <result property="importConfigPaths" column="import_config_paths" jdbcType="LONGVARCHAR"/>
     </resultMap>
 
     <select id="selectByTenant" resultMap="mcpServerEntity">
@@ -224,7 +228,10 @@
             third_id,
             third_version_id,
             fail_reason,
-            auth_info
+            auth_info,
+            snapshot_revision,
+            import_config_pending,
+            import_config_paths
         ) VALUES (
                      #{id},
                      #{name},
@@ -266,7 +273,10 @@
                      #{thirdId},
                      #{thirdVersionId},
                      #{failReason},
-                     #{authInfo}
+                     #{authInfo},
+                     #{snapshotRevision},
+                     #{importConfigPending},
+                     #{importConfigPaths}
                  )
     </insert>
 
@@ -781,4 +791,43 @@
                 (#{item.workspaceId},#{item.projectId},#{item.resourceId})
             </foreach>
     </select>
+
+    <!-- FEAT-134：重载原子提交（L2 §5.5）——影响行数必须为 1，0 表示操作所有权丢失/任务过期 -->
+    <update id="commitToolSnapshot">
+        UPDATE ws_mcp_service_def
+        SET tools = #{tools},
+            fc_instance_status = 'success',
+            fail_reason = '',
+            last_updated_date = NOW(),
+            snapshot_revision = snapshot_revision + 1,
+            active_mcp_operation_id = NULL
+        WHERE id = #{serviceId}
+          AND tenant_id = #{tenantId}
+          AND project_id = #{projectId}
+          AND workspace_id = #{workspaceId}
+          AND deleted = 0
+          AND active_mcp_operation_id = #{operationId}
+          AND snapshot_revision = #{expectedRevision}
+    </update>
+
+    <!-- FEAT-134：导入待补配标记（modify 确认后清除） -->
+    <update id="markImportConfigured">
+        UPDATE ws_mcp_service_def
+        SET import_config_pending = 0,
+            import_config_paths = NULL,
+            snapshot_revision = snapshot_revision + 1
+        WHERE id = #{serviceId}
+          AND tenant_id = #{tenantId}
+          AND workspace_id = #{workspaceId}
+          AND deleted = 0
+    </update>
+
+    <update id="markImportPending">
+        UPDATE ws_mcp_service_def
+        SET import_config_pending = #{pending},
+            import_config_paths = #{paths}
+        WHERE id = #{serviceId}
+          AND tenant_id = #{tenantId}
+          AND workspace_id = #{workspaceId}
+    </update>
 </mapper>

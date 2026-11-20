@@ -3459,4 +3459,111 @@ public class McpServiceManager implements IMcpServiceManagerService {
             log.warn("Host is not a valid IP address, skip subnet check: {}", host);
         }
     }
+
+    // ==================== FEAT-134: MCP 服务导入导出与重载 ====================
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService mcpTransferService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService mcpFeOperationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationDao mcpFeOperationDao;
+
+    @Override
+    public String exportMcpServices(String projectId, String workspaceId,
+        com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq req) {
+        log.info("operation log {}:export mcp services, selection={}", projectId, req.getSelection());
+        return mcpTransferService.exportServices(projectId, workspaceId, req);
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp importMcpServices(String projectId,
+        String workspaceId, String fileContent) {
+        log.info("operation log {}:import mcp services", projectId);
+        com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp accepted =
+            mcpTransferService.importServices(projectId, workspaceId, fileContent);
+        // 事务提交后投递异步刷新
+        mcpTransferService.submitImportRefresh(accepted.getOperationId());
+        return accepted;
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp reloadMcpService(String projectId,
+        String workspaceId, String serviceId) {
+        log.info("operation log {}:reload mcp service {}", projectId, serviceId);
+        String tenantId = RequestContextUtils.getRequestUserDomainId();
+        McpServiceEntity entity = serviceDao.getMcpServiceById(serviceId, tenantId, CommonUtil.getDeptCode(),
+            projectId, workspaceId);
+        if (entity == null) {
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
+        }
+        // 可重载状态校验：creatingStack/deleting/deleted/notInstalled 拒绝
+        if (EnumMcpStatus.CREATING_STACK.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETING.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETED.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.NOT_INSTALLED.getValue().equals(entity.getFcInstanceStatus())) {
+            throw new AgentStudioException(StudioError.MCP_OPERATION_IN_PROGRESS,
+                "service status " + entity.getFcInstanceStatus() + " is not reloadable");
+        }
+        // 共享源/全局对象不能从消费空间重载
+        if (entity.getIsShare() == 1 || "global".equals(entity.getVisibility())) {
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST,
+                "shared source instances cannot be reloaded from consumer workspace");
+        }
+
+        com.openjiuwen.studio.agent.manager.entity.McpOperationEntity operation =
+            new com.openjiuwen.studio.agent.manager.entity.McpOperationEntity();
+        operation.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
+        operation.setOperationType(com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp.TYPE_RELOAD);
+        operation.setTenantId(tenantId);
+        operation.setProjectId(projectId);
+        operation.setWorkspaceId(workspaceId);
+        operation.setCreatorId(String.valueOf(RequestContextUtils.getRequestUserId()));
+        operation.setStatus(com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp.STATUS_RUNNING);
+        operation.setTotal(1);
+        operation.setCreatedCount(0);
+        operation.setSuccessCount(0);
+        operation.setFailedCount(0);
+        operation.setCreatedDate(new Timestamp(System.currentTimeMillis()));
+        operation.setDeadlineDate(new Timestamp(System.currentTimeMillis()
+            + com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService.OPERATION_DEADLINE_MILLIS));
+        mcpFeOperationDao.insertOperation(operation);
+
+        com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity item =
+            new com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity();
+        item.setOperationId(operation.getId());
+        item.setItemIndex(0);
+        item.setServiceId(serviceId);
+        item.setOriginalName(entity.getName());
+        item.setActualName(entity.getName());
+        item.setStatus("PENDING");
+        item.setStartedDate(new Timestamp(System.currentTimeMillis()));
+        mcpFeOperationDao.insertOperationItem(item);
+
+        if (!mcpFeOperationDao.claimOperationOnService(serviceId, tenantId, projectId, workspaceId,
+            operation.getId())) {
+            mcpFeOperationDao.markOperationInterrupted(operation.getId());
+            throw new AgentStudioException(StudioError.MCP_OPERATION_IN_PROGRESS,
+                "another operation is active on this service");
+        }
+
+        mcpFeOperationService.submitReload(operation.getId());
+
+        com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp resp =
+            new com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp();
+        resp.setOperationId(operation.getId());
+        resp.setOperationType(operation.getOperationType());
+        resp.setStatus(operation.getStatus());
+        resp.setTotal(1);
+        resp.setServiceId(serviceId);
+        return resp;
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp getMcpOperationResult(String projectId,
+        String workspaceId, String operationId) {
+        return mcpFeOperationService.getOperationResult(projectId, workspaceId, operationId);
+    }
 }

@@ -200,4 +200,37 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     public ResponseEntity<Boolean> updateMcpAuthInfo(String projectId, String id, String workspaceId, AuthInfo body) {
         return ResponseModel.success(mcpServiceManagerService.updateMcpAuthInfo(projectId, id, workspaceId, body));
     }
+
+    @Override
+    public ResponseEntity<String> exportMcpServices(String projectId, String workspaceId,
+        com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body) {
+        String json = mcpServiceManagerService.exportMcpServices(projectId, workspaceId, body);
+        return ResponseEntity.ok()
+            .header("Content-Type", "application/json; charset=UTF-8")
+            .header("Content-Disposition", "attachment; filename=mcp-services-transfer.json")
+            .body(json);
+    }
+
+    @Override
+    public ResponseEntity<Object> importMcpServices(String projectId, String workspaceId,
+        org.springframework.web.multipart.MultipartFile file) {
+        try {
+            String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return ResponseModel.success(
+                mcpServiceManagerService.importMcpServices(projectId, workspaceId, content));
+        } catch (java.io.IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @Override
+    public ResponseEntity<Object> reloadMcpService(String projectId, String workspaceId, String id) {
+        return ResponseModel.success(mcpServiceManagerService.reloadMcpService(projectId, workspaceId, id));
+    }
+
+    @Override
+    public ResponseEntity<Object> getMcpOperationResult(String projectId, String workspaceId, String operationId) {
+        return ResponseModel.success(
+            mcpServiceManagerService.getMcpOperationResult(projectId, workspaceId, operationId));
+    }
 }

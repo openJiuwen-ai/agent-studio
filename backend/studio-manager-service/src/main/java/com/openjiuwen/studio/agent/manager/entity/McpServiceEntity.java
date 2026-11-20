@@ -169,6 +169,26 @@ public class McpServiceEntity extends BaseProperties {
     private String tempToken;
 
     /**
+     * FEAT-134：快照与配置相关写入的并发修订号（新实例默认 0）
+     */
+    private Long snapshotRevision;
+
+    /**
+     * FEAT-134：同服务活动操作声明（与 ws_mcp_operation.id 对应；NULL=无活动操作）
+     */
+    private String activeMcpOperationId;
+
+    /**
+     * FEAT-134：导入后待补配提示标记（不改变鉴权 scope）
+     */
+    private Boolean importConfigPending;
+
+    /**
+     * FEAT-134：待补配的 JSON Pointer 路径清单（仅路径不含值）
+     */
+    private String importConfigPaths;
+
+    /**
      * 服务来源
      */
     private String thirdResource;

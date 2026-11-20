@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.McpOperationMapper">
+
+    <resultMap id="mcpOperationEntity" type="com.openjiuwen.studio.agent.manager.entity.McpOperationEntity">
+        <result property="id" column="id" jdbcType="VARCHAR"/>
+        <result property="operationType" column="operation_type" jdbcType="VARCHAR"/>
+        <result property="tenantId" column="tenant_id" jdbcType="VARCHAR"/>
+        <result property="projectId" column="project_id" jdbcType="VARCHAR"/>
+        <result property="workspaceId" column="workspace_id" jdbcType="VARCHAR"/>
+        <result property="creatorId" column="creator_id" jdbcType="VARCHAR"/>
+        <result property="status" column="status" jdbcType="VARCHAR"/>
+        <result property="total" column="total" jdbcType="INTEGER"/>
+        <result property="createdCount" column="created_count" jdbcType="INTEGER"/>
+        <result property="successCount" column="success_count" jdbcType="INTEGER"/>
+        <result property="failedCount" column="failed_count" jdbcType="INTEGER"/>
+        <result property="createdDate" column="created_date" jdbcType="TIMESTAMP"/>
+        <result property="finishedDate" column="finished_date" jdbcType="TIMESTAMP"/>
+        <result property="deadlineDate" column="deadline_date" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <resultMap id="mcpOperationItemEntity" type="com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity">
+        <result property="operationId" column="operation_id" jdbcType="VARCHAR"/>
+        <result property="itemIndex" column="item_index" jdbcType="INTEGER"/>
+        <result property="serviceId" column="service_id" jdbcType="VARCHAR"/>
+        <result property="originalName" column="original_name" jdbcType="VARCHAR"/>
+        <result property="actualName" column="actual_name" jdbcType="VARCHAR"/>
+        <result property="status" column="status" jdbcType="VARCHAR"/>
+        <result property="refreshStatus" column="refresh_status" jdbcType="VARCHAR"/>
+        <result property="sourceSnapshot" column="source_snapshot" jdbcType="LONGVARCHAR"/>
+        <result property="resultJson" column="result_json" jdbcType="VARCHAR"/>
+        <result property="errorCode" column="error_code" jdbcType="VARCHAR"/>
+        <result property="safeReason" column="safe_reason" jdbcType="VARCHAR"/>
+        <result property="startedDate" column="started_date" jdbcType="TIMESTAMP"/>
+        <result property="finishedDate" column="finished_date" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <insert id="insertOperation">
+        INSERT INTO ws_mcp_operation
+            (id, operation_type, tenant_id, project_id, workspace_id, creator_id, status,
+             total, created_count, success_count, failed_count, created_date, deadline_date)
+        VALUES
+            (#{id}, #{operationType}, #{tenantId}, #{projectId}, #{workspaceId}, #{creatorId}, #{status},
+             #{total}, #{createdCount}, #{successCount}, #{failedCount}, #{createdDate}, #{deadlineDate})
+    </insert>
+
+    <insert id="insertOperationItem">
+        INSERT INTO ws_mcp_operation_item
+            (operation_id, item_index, service_id, original_name, actual_name, status,
+             refresh_status, source_snapshot, error_code, safe_reason, started_date)
+        VALUES
+            (#{operationId}, #{itemIndex}, #{serviceId}, #{originalName}, #{actualName}, #{status},
+             #{refreshStatus}, #{sourceSnapshot}, #{errorCode}, #{safeReason}, #{startedDate})
+    </insert>
+
+    <select id="selectOperationById" resultMap="mcpOperationEntity">
+        SELECT * FROM ws_mcp_operation WHERE id = #{id}
+    </select>
+
+    <select id="selectOperationByIdAndScope" resultMap="mcpOperationEntity">
+        SELECT * FROM ws_mcp_operation
+        WHERE id = #{id}
+          AND tenant_id = #{tenantId}
+          AND project_id = #{projectId}
+          AND workspace_id = #{workspaceId}
+    </select>
+
+    <select id="selectOperationItems" resultMap="mcpOperationItemEntity">
+        SELECT * FROM ws_mcp_operation_item WHERE operation_id = #{operationId} ORDER BY item_index
+    </select>
+
+    <update id="claimOperationOnService">
+        UPDATE ws_mcp_service_def
+        SET active_mcp_operation_id = #{operationId},
+            last_updated_date = NOW()
+        WHERE id = #{serviceId}
+          AND tenant_id = #{tenantId}
+          AND project_id = #{projectId}
+          AND workspace_id = #{workspaceId}
+          AND deleted = 0
+          AND active_mcp_operation_id IS NULL
+    </update>
+
+    <update id="releaseOperationOnService">
+        UPDATE ws_mcp_service_def
+        SET active_mcp_operation_id = NULL
+        WHERE id = #{serviceId}
+          AND active_mcp_operation_id = #{operationId}
+    </update>
+
+    <update id="finishOperation">
+        UPDATE ws_mcp_operation
+        SET status = #{status},
+            created_count = #{createdCount},
+            success_count = #{successCount},
+            failed_count = #{failedCount},
+            finished_date = #{finishedDate}
+        WHERE id = #{id} AND status = 'RUNNING'
+    </update>
+
+    <update id="updateOperationStatus">
+        UPDATE ws_mcp_operation SET status = #{status} WHERE id = #{id} AND status = 'RUNNING'
+    </update>
+
+    <update id="finishOperationItem">
+        UPDATE ws_mcp_operation_item
+        SET service_id = #{serviceId},
+            actual_name = #{actualName},
+            status = #{status},
+            refresh_status = #{refreshStatus},
+            result_json = #{resultJson},
+            error_code = #{errorCode},
+            safe_reason = #{safeReason},
+            finished_date = #{finishedDate}
+        WHERE operation_id = #{operationId} AND item_index = #{itemIndex}
+    </update>
+
+    <select id="selectTimedOutRunningOperations" resultType="java.lang.String">
+        SELECT id FROM ws_mcp_operation
+        WHERE status = 'RUNNING' AND deadline_date &lt; #{now}
+        ORDER BY deadline_date LIMIT #{limitCount}
+    </select>
+
+</mapper>
