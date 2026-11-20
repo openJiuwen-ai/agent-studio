@@ -31,9 +31,10 @@ public class McpTransferSanitizer {
     /** 标准配置节点允许的键（mcpServers 外壳内每个服务节点）。 */
     private static final Set<String> ALLOWED_NODE_KEYS = Set.of("url", "command", "args", "headers", "env");
 
-    /** 迁移安全契约禁止出现在文件中的顶层鉴权字段。 */
+    /** 迁移安全契约禁止出现在文件中的顶层鉴权字段（统一小写匹配）。 */
     private static final Set<String> FORBIDDEN_CREDENTIAL_KEYS =
-        Set.of("auth", "authInfo", "auth_info", "customOauth", "iam", "credentials", "token", "tempToken");
+        Set.of("auth", "authinfo", "auth_info", "customoauth", "custom_oauth", "iam", "credentials", "token",
+            "temptoken", "temp_token", "secret", "password", "apikey", "api_key");
 
     /** 工具 schema 中移除的可携带样例值的字段。 */
     private static final Set<String> TOOL_SCHEMA_REMOVED_KEYS = Set.of("default", "example", "examples");
@@ -68,7 +69,7 @@ public class McpTransferSanitizer {
     public void validateImportSafety(McpTransferServiceDefinition definition) {
         Map<String, Object> serverConfig = definition.getServerConfig();
         if (serverConfig != null) {
-            rejectCredentialKeys(serverConfig, "");
+            rejectCredentialKeys(serverConfig, "", false);
         }
         String url = definition.getUrl();
         if (StringUtils.isNotBlank(url) && !url.contains(PLACEHOLDER_PREFIX)) {
@@ -129,16 +130,27 @@ public class McpTransferSanitizer {
         }
     }
 
-    private void rejectCredentialKeys(Map<String, Object> map, String path) {
+    /**
+     * 递归拒绝凭据键——但跳过标准配置节点的值区域（env/headers/args 的键名是
+     * 合法变量名如 API_KEY，值已由 validateNodeSafety 单独校验为空/非空）。
+     */
+    private void rejectCredentialKeys(Map<String, Object> map, String path, boolean insideStandardNode) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
-            String key = StringUtils.lowerCase(entry.getKey());
-            if (FORBIDDEN_CREDENTIAL_KEYS.contains(key) || key.contains("oauth") || key.contains("secret")
-                || key.contains("password")) {
-                throw unsafe("credential field rejected in file: " + (path.isEmpty() ? "/" : path) + "/"
-                    + entry.getKey());
+            String lowerKey = StringUtils.lowerCase(entry.getKey());
+            // 标准节点内的键名（env 变量名/headers 头名/args 参数名）不按凭据字段名拒绝
+            if (!insideStandardNode) {
+                String normalizedKey = lowerKey.replace("-", "").replace("_", "");
+                if (FORBIDDEN_CREDENTIAL_KEYS.contains(lowerKey)
+                    || FORBIDDEN_CREDENTIAL_KEYS.contains(normalizedKey)
+                    || normalizedKey.contains("oauth") || normalizedKey.contains("credential")) {
+                    throw unsafe("credential field rejected in file: " + (path.isEmpty() ? "/" : path) + "/"
+                        + entry.getKey());
+                }
             }
+            // 递归时：进入 mcpServers 节点标记为标准区域
+            boolean childIsNode = "mcpServers".equals(lowerKey) || ALLOWED_NODE_KEYS.contains(lowerKey);
             if (entry.getValue() instanceof Map<?, ?> child) {
-                rejectCredentialKeys((Map<String, Object>) child, path + "/" + entry.getKey());
+                rejectCredentialKeys((Map<String, Object>) child, path + "/" + entry.getKey(), childIsNode);
             }
         }
     }
