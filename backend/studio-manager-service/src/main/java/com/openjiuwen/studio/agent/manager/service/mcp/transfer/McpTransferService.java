@@ -347,12 +347,14 @@ public class McpTransferService {
         entity.setDescription(def.getDescription());
         entity.setDescriptionEn(def.getDescriptionEn());
         entity.setOrgType(normalizeOrgType(def.getOrgType()));
+        entity.setNodeType("Mcp"); // NOT NULL 列：普通 MCP 服务统一为 Mcp
         entity.setDeployType(def.getDeployType());
         entity.setFcInstanceUrl(def.getUrl());
         entity.setTenantId(tenantId);
         entity.setProjectId(projectId);
         entity.setWorkspaceId(workspaceId);
         entity.setDeptCode(CommonUtil.getDeptCode());
+        entity.setNodeType("Mcp");
         entity.setCreatedDate(new Timestamp(System.currentTimeMillis()));
         entity.setLastUpdatedDate(new Timestamp(System.currentTimeMillis()));
         entity.setDeleted(false);
