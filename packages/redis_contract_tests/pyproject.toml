@@ -1,0 +1,31 @@
+[project]
+name = "redis-contract-tests"
+version = "0.1.0"
+description = "Redis Provider 无关契约/一致性测试套件（仅测试环境安装，不进生产镜像）"
+requires-python = ">=3.11"
+dependencies = [
+    "redis-spi",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+# 后端按 REDIS_CONTRACT_TARGET 目标注入安装：
+#   委托层替身 / native 真实实例 → 需要 redis-native（含 redis-py）
+#   demo（fakeredis 形态 / Wrapper 形态）→ 需要 redis-demo-provider
+stub = ["redis-native"]
+native = ["redis-native"]
+demo = ["redis-demo-provider"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+redis-spi = { path = "../redis_spi", editable = true }
+redis-native = { path = "../redis_native", editable = true }
+redis-demo-provider = { path = "../redis_demo_provider", editable = true }
+
+[tool.setuptools.packages.find]
+include = ["redis_contract_tests*"]

@@ -78,16 +78,14 @@ class TestPublishVersionCacheGetMetadata:
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=raw)
-        mock_manager = MagicMock()
-        mock_manager.is_initialized = True
 
         mock_provider = _mock_storage_provider(None)
 
         with patch(
-            "common_utils.redis_manager.RedisClientManager.get_instance",
-            return_value=mock_manager,
+            "redis_spi.accessor.is_initialized",
+            return_value=True,
         ), patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "storage.get_storage_provider",
@@ -104,14 +102,11 @@ class TestPublishVersionCacheGetMetadata:
         meta_data = {"agentId": "wf-123", "versionId": "v2"}
         content = json.dumps(meta_data)
 
-        mock_manager = MagicMock()
-        mock_manager.is_initialized = False
-
         mock_provider = _mock_storage_provider(content)
 
         with patch(
-            "common_utils.redis_manager.RedisClientManager.get_instance",
-            return_value=mock_manager,
+            "redis_spi.accessor.is_initialized",
+            return_value=False,
         ), patch(
             "storage.get_storage_provider",
             return_value=mock_provider,
@@ -127,16 +122,14 @@ class TestPublishVersionCacheGetMetadata:
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=None)
-        mock_manager = MagicMock()
-        mock_manager.is_initialized = True
 
         mock_provider = _mock_storage_provider(content)
 
         with patch(
-            "common_utils.redis_manager.RedisClientManager.get_instance",
-            return_value=mock_manager,
+            "redis_spi.accessor.is_initialized",
+            return_value=True,
         ), patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "storage.get_storage_provider",
@@ -154,16 +147,14 @@ class TestPublishVersionCacheGetMetadata:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=None)
         mock_client.set = AsyncMock()
-        mock_manager = MagicMock()
-        mock_manager.is_initialized = True
 
         mock_provider = _mock_storage_provider(content)
 
         with patch(
-            "common_utils.redis_manager.RedisClientManager.get_instance",
-            return_value=mock_manager,
+            "redis_spi.accessor.is_initialized",
+            return_value=True,
         ), patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "storage.get_storage_provider",
@@ -175,21 +166,22 @@ class TestPublishVersionCacheGetMetadata:
             mock_client.set.assert_awaited_once()
             set_args = mock_client.set.call_args[0]
             assert "agent-builder:agent:metadata:wf-123:latest" in set_args[0]
+            # SPI 形态：TTL 走 duration 值对象
+            set_kwargs = mock_client.set.call_args[1]
+            assert set_kwargs["duration"].total_seconds == 10 * 24 * 3600
 
     @pytest.mark.asyncio
     async def test_both_miss(self):
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=None)
-        mock_manager = MagicMock()
-        mock_manager.is_initialized = True
 
         mock_provider = _mock_storage_provider(None)
 
         with patch(
-            "common_utils.redis_manager.RedisClientManager.get_instance",
-            return_value=mock_manager,
+            "redis_spi.accessor.is_initialized",
+            return_value=True,
         ), patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_client,
         ), patch(
             "storage.get_storage_provider",

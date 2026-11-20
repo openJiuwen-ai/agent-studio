@@ -21,9 +21,15 @@ business_error 标记（组件正常返回但该次调用失败，如 HTTP 4xx/5
 版本绑定与升级核对（重要）：本文件与 openjiuwen 版本强绑定——
 1. on_call_done 为整段覆写（上游无扩展点），方法体复制自
    openjiuwen handler.on_call_done；
-2. 依赖上游私有符号：_extract_retrieval_documents、_is_retrieval_component_span、
-   _span_manager / _refresh_inputs_attribute / _flush_buffered_data /
-   _set_workflow_end_attrs / _detach_state / _layer_root_spans / _component_spans。
+2. 依赖上游私有符号：_build_error_summary、_extract_retrieval_documents、
+   _is_retrieval_component_span、_span_manager / _refresh_inputs_attribute /
+   _flush_buffered_data / _set_workflow_end_attrs / _detach_state /
+   _layer_root_spans / _component_spans；
+3. 覆写点新增 on_invoke（异常挂起 + business_error）、on_post_invoke（降级清除
+   未处理异常）与 on_call_done（层根终态判定），上游调整这些钩子的签名或调用
+   顺序时须同步；
+4. 终态语义：层根 Span 仅在“本层存在未处理异常且 outputs 为空”时写
+   ERROR/description + openjiuwen.status=error，其余路径保持 OK/finish。
 升级 openjiuwen 时须按清单核对：①上述私有符号是否存在/改名；②on_call_done 上游
 是否新增收尾逻辑（清理/属性写入）需同步；③以 tests/unit_tests/observability/
 test_tracer_otel_studio.py 全量回归兜底；符号缺失时 tracer_otel.setup_otel_tracer
@@ -34,15 +40,18 @@ import json
 import re
 
 from openjiuwen.core.common.logging import session_logger
+from openjiuwen.core.graph.pregel import GraphInterrupt
 from openjiuwen.core.session.tracer.data import NodeStatus
 from openjiuwen.extensions.tracer_otel.handler import (
     OtelWorkflowHandler,
+    _build_error_summary,
     _extract_retrieval_documents,
     _is_retrieval_component_span,
 )
 from openjiuwen.extensions.tracer_otel.redaction import redact
 from openjiuwen.extensions.tracer_otel.semconv import (
     GEN_AI_RETRIEVAL_DOCUMENTS,
+    OJ_PARENT_NODE_ID,
     OJ_STATUS,
     OJ_WORKFLOW_ERROR_MESSAGE,
     OJ_WORKFLOW_OUTPUTS,
@@ -74,6 +83,12 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
         exception: Exception = None,
         **kwargs,
     ):
+        if exception is not None and not isinstance(exception, GraphInterrupt):
+            scope = self._unhandled_error_scope(invoke_id)
+            pending = getattr(self, "_unhandled_errors", None)
+            if pending is None:
+                pending = self._unhandled_errors = {}
+            pending.setdefault(scope, {})[invoke_id] = _build_error_summary(exception)
         await super().on_invoke(
             invoke_id,
             on_invoke_data=on_invoke_data,
@@ -87,6 +102,12 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
         ):
             self._mark_business_error(invoke_id, on_invoke_data["business_error"])
 
+    async def on_post_invoke(self, invoke_id: str, outputs=None, inputs=None, **kwargs):
+        # 组件在异常被处理后继续正常返回（defaultOutputs / errorBranch /
+        # 重试成功）：清除该组件在各层的未处理异常标记，避免根 Span 被误标为终止失败。
+        self._clear_unhandled_error(invoke_id)
+        await super().on_post_invoke(invoke_id, outputs, inputs=inputs, **kwargs)
+
     async def on_call_done(self, invoke_id: str, outputs=None, **kwargs):
         try:
             state = self._span_manager.get(invoke_id)
@@ -97,6 +118,17 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
             state = self._span_manager.pop(invoke_id)
             if state is None:
                 return
+
+            is_layer_root = self._layer_root_spans.get(invoke_id) is state
+            pending = {}
+            if is_layer_root:
+                # 只取/清本层作用域的待定异常，避免并发或嵌套层收尾时误标/漏标。
+                pending = (getattr(self, "_unhandled_errors", None) or {}).pop(
+                    invoke_id, {}
+                )
+            terminal_summary = (
+                next(iter(pending.values())) if outputs is None and pending else None
+            )
 
             if state.recorded:
                 if outputs is not None:
@@ -112,12 +144,19 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
                             )
 
                 self._set_workflow_end_attrs(state)
-                state.span.set_attribute(OJ_STATUS, NodeStatus.FINISH.value)
-                # 故障事实轴：span 已处于 ERROR（business_error 标记或 trace_error
-                # 异常路径）时保留标红，不覆盖；仅在正常完成（UNSET）时置 OK。
-                # 业务状态属性仍为 finish（业务结果轴），两轴并存互不覆盖。
-                if state.span.status.status_code != StatusCode.ERROR:
-                    state.span.set_status(Status(StatusCode.OK))
+                if terminal_summary is not None:
+                    # 组件异常导致本层工作流终止（issue #1749）：根 Span 的
+                    # 故障事实轴与业务终态轴同为 error，避免前端失败而 Trace 成功。
+                    state.span.set_status(
+                        Status(StatusCode.ERROR, description=terminal_summary)
+                    )
+                    state.span.set_attribute(OJ_STATUS, NodeStatus.ERROR.value)
+                else:
+                    state.span.set_attribute(OJ_STATUS, NodeStatus.FINISH.value)
+                    # 故障事实轴：span 已处于 ERROR（business_error 标记或已降级
+                    # 处理的 trace_error 路径）时保留标红；正常完成才置 OK。
+                    if state.span.status.status_code != StatusCode.ERROR:
+                        state.span.set_status(Status(StatusCode.OK))
             state.span.end()
             self._detach_state(state)
 
@@ -129,6 +168,37 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
                 self._layer_root_spans.pop("", None)
         except Exception as exc:
             session_logger.warning("otel workflow handler: on_call_done failed: %s", exc)
+
+    def _unhandled_error_scope(self, invoke_id: str) -> str:
+        """未处理异常归属的 layer root invoke_id。
+
+        进程级 handler 单例被所有工作流共享，未处理异常必须按层作用域隔离：
+        优先取组件 Span 的 openjiuwen.parent_node_id（即所属层根 invoke_id），
+        取不到时按父 SpanContext 反查 layer root，最后才回落到 invoke_id 自身。
+        """
+        state = self._span_manager.get(invoke_id)
+        if state is not None:
+            attrs = getattr(state.span, "attributes", None) or {}
+            parent_node_id = attrs.get(OJ_PARENT_NODE_ID)
+            if parent_node_id:
+                return parent_node_id
+            parent = getattr(state.span, "parent", None)
+            if parent is not None:
+                for root_state in list(self._layer_root_spans.values()):
+                    root_ctx = root_state.span.get_span_context()
+                    if root_ctx is not None and root_ctx.span_id == parent.span_id:
+                        return root_state.invoke_id
+        return invoke_id
+
+    def _clear_unhandled_error(self, invoke_id: str) -> None:
+        """清除指定组件在所有层作用域中的待定异常（invoke_id 全局唯一）。"""
+        pending = getattr(self, "_unhandled_errors", None)
+        if not pending:
+            return
+        for scope in list(pending.keys()):
+            pending[scope].pop(invoke_id, None)
+            if not pending[scope]:
+                pending.pop(scope, None)
 
     def _mark_business_error(self, invoke_id: str, business_error: dict) -> None:
         """组件正常返回但该次调用失败（如 HTTP 4xx/5xx）：span 标红并保留错误信息。

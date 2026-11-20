@@ -9,6 +9,9 @@
   openjiuwen.status 仍为 finish（业务结果不变，流程 COMPLETED）。
 """
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import pytest
 from openjiuwen.core.session.tracer import TracerHandlerRegistry
 from openjiuwen.core.session.workflow import create_workflow_session
@@ -450,7 +453,7 @@ async def test_mark_business_error_ignores_unknown_invoke_id():
     TracerHandlerRegistry.clear()
     handler = StudioOtelWorkflowHandler(tracer, _make_config())
 
-    getattr(handler, "_mark_business_error")(
+    getattr(handler, "_mark_business_error")(  # noqa: B009
         "not-registered", {"status_code": 500, "body": BODY_500}
     )
 
@@ -459,7 +462,7 @@ async def test_mark_business_error_ignores_unknown_invoke_id():
 
 def test_safe_code_whitelist():
     """_safe_code：None/bool/空串/超长/非法字符一律丢弃，仅保留短码。"""
-    safe = getattr(StudioOtelWorkflowHandler, "_safe_code")
+    safe = getattr(StudioOtelWorkflowHandler, "_safe_code")  # noqa: B009
 
     assert safe(None) is None
     assert safe(True) is None
@@ -481,7 +484,7 @@ def test_safe_code_whitelist():
 
 def test_safe_reason_whitelist():
     """_safe_reason：仅接受短英文短语；中文/换行/花括号/超长/非字符串丢弃。"""
-    safe = getattr(StudioOtelWorkflowHandler, "_safe_reason")
+    safe = getattr(StudioOtelWorkflowHandler, "_safe_reason")  # noqa: B009
 
     assert safe(None) is None
     assert safe(123) is None
@@ -496,3 +499,454 @@ def test_safe_reason_whitelist():
     assert safe("timeout\n") == "timeout"
     assert safe("evil{inject}") is None
     assert safe("bad;rm -rf /") is None
+
+
+# ---------------------------------------------------------------------------
+# issue #1749：组件异常导致本层工作流终止时，根 Span 的错误终态归属
+# （_build_error_summary / on_invoke 挂起 / on_post_invoke 清除 / on_call_done 根判定）
+# ---------------------------------------------------------------------------
+
+from openjiuwen.core.common.exception.codes import StatusCode
+from openjiuwen.core.common.exception.errors import BaseError
+from openjiuwen.core.graph.pregel import GraphInterrupt
+from openjiuwen.core.session.tracer.data import NodeStatus
+from openjiuwen.extensions.tracer_otel.handler import (
+    _build_error_summary,
+)
+from openjiuwen.extensions.tracer_otel.semconv import (
+    OJ_WORKFLOW_ERROR_MESSAGE,
+    OJ_WORKFLOW_OUTPUTS,
+)
+
+import agent_runtime.observability.tracer_otel_studio as studio_module
+
+ROOT_ID = "wf_root"
+ROOT_SPAN_NAME = "wf-root"
+COMP_ID = "node_comp"
+
+
+class _CodedError(Exception):
+    """最小可控异常：模拟携带 error_code 的业务异常（非 BaseError）。"""
+
+    def __init__(self, code=None, msg="boom"):
+        super().__init__(msg)
+        if code is not None:
+            self.error_code = code
+
+
+def _new_handler():
+    tracer, exporter = _make_tracer()
+    TracerHandlerRegistry.clear()
+    handler = StudioOtelWorkflowHandler(tracer, _make_config())
+    TracerHandlerRegistry.register_handler("otel_workflow", handler)
+    return handler, exporter
+
+
+async def _open_root(handler, invoke_id=ROOT_ID):
+    await handler.on_call_start(
+        invoke_id,
+        metadata={"workflow_id": "wf", "workflow_name": ROOT_SPAN_NAME},
+        inputs={"query": "hi"},
+        parent_node_id="",
+    )
+
+
+async def _open_component(handler, invoke_id=COMP_ID, parent_node_id=ROOT_ID):
+    await handler.on_call_start(
+        invoke_id,
+        metadata={"workflow_id": "wf", "component_id": invoke_id, "node_id": invoke_id},
+        inputs={"query": "hi"},
+        parent_node_id=parent_node_id,
+    )
+
+
+def _finished_span(exporter, name, expected_count=1):
+    spans = [s for s in exporter.get_finished_spans() if s.name == name]
+    assert len(spans) == expected_count, (
+        f"expected {expected_count} span(s) named {name!r}, "
+        f"got {[s.name for s in exporter.get_finished_spans()]}"
+    )
+    return spans[0]
+
+
+def _root_span_by_invoke_id(exporter, invoke_id):
+    for span in exporter.get_finished_spans():
+        if span.name != ROOT_SPAN_NAME:
+            continue
+        if (span.attributes or {}).get("openjiuwen.invoke_id") == invoke_id:
+            return span
+    raise AssertionError(f"root span not found: {invoke_id}")
+
+
+def _description(span):
+    return span.status.description or ""
+
+
+# --- 1. _build_error_summary ------------------------------------------------
+
+
+def test_build_error_summary_base_error_uses_status_code():
+    """BaseError：摘要为 "<status.code> <类名>"，业务 message 不进入不脱敏字段。"""
+    err = BaseError(StatusCode.ERROR, msg="boom with secret=CUSTOMER_TOKEN")
+    summary = _build_error_summary(err)
+
+    assert summary == f"{StatusCode.ERROR.code} BaseError"
+    assert "CUSTOMER_TOKEN" not in summary
+    assert "boom" not in summary
+
+
+def test_build_error_summary_plain_exception_class_name_only():
+    """普通 Exception：只输出类名，异常消息（可能含入参/凭据）不得进入摘要。"""
+    summary = _build_error_summary(ValueError("token=abc123 /payload"))
+
+    assert summary == "ValueError"
+    assert "abc123" not in summary
+    assert "/payload" not in summary
+
+
+def test_build_error_summary_uses_error_code_when_no_status():
+    """无 status 但有 error_code：输出 "<error_code> <类名>"。"""
+    assert _build_error_summary(_CodedError("E_TIMEOUT")) == "E_TIMEOUT _CodedError"
+    assert _build_error_summary(_CodedError(100010)) == "100010 _CodedError"
+
+
+def test_build_error_summary_ignores_bool_error_code():
+    """bool 不是合法错误码（isinstance(True, int) 为真），必须回落为纯类名。"""
+    assert _build_error_summary(_CodedError(True)) == "_CodedError"
+
+
+def test_build_error_summary_truncates_to_256():
+    """超长错误码截断到 256 字符：硬上限，避免撑爆 status.description。"""
+    summary = _build_error_summary(_CodedError("E" * 300))
+
+    assert len(summary) == 256
+    assert summary == "E" * 256
+    assert "_CodedError" not in summary
+
+
+# --- 2. on_invoke：挂起未处理异常 -------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_on_invoke_regular_exception_records_pending():
+    """普通异常：既由上游 handler 标红组件 span，又挂起 pending 供根 Span 判定。"""
+    handler, exporter = _new_handler()
+    await _open_component(handler)
+
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("component blew up"))
+
+    assert getattr(handler, "_unhandled_errors") == {  # noqa: B009
+        ROOT_ID: {COMP_ID: "RuntimeError"}
+    }
+    span = _finished_span(exporter, f"component.{COMP_ID}")
+    assert span.status.status_code == otel_trace.StatusCode.ERROR
+    assert span.attributes[OJ_STATUS] == NodeStatus.ERROR.value
+    # 摘要不含异常消息内容
+    assert span.status.description == "RuntimeError"
+    assert "component blew up" not in _description(span)
+
+
+@pytest.mark.asyncio
+async def test_on_invoke_graph_interrupt_not_recorded_as_pending():
+    """GraphInterrupt 是控制流信号而非失败：不挂起 pending、组件 span 不标 ERROR。"""
+    handler, exporter = _new_handler()
+    await _open_component(handler)
+
+    await handler.on_invoke(COMP_ID, exception=GraphInterrupt())
+
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+    span = _finished_span(exporter, f"component.{COMP_ID}")
+    assert span.status.status_code != otel_trace.StatusCode.ERROR
+    assert span.attributes[OJ_STATUS] == NodeStatus.INTERRUPTED.value
+
+
+# --- 3. on_post_invoke：降级后清除 pending ----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_on_post_invoke_clears_pending_after_degrade():
+    """defaultOutputs/errorBranch 降级后组件正常返回：on_post_invoke 清除 pending。"""
+    handler, exporter = _new_handler()
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("boom"))
+    assert COMP_ID in getattr(handler, "_unhandled_errors")[ROOT_ID]  # noqa: B009
+
+    await handler.on_post_invoke(COMP_ID, outputs={"degraded": True})
+
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+    # 组件 span 已在异常路径收尾，不会被 on_post_invoke 重复创建
+    assert len(exporter.get_finished_spans()) == 1
+
+
+@pytest.mark.asyncio
+async def test_on_post_invoke_without_pending_keeps_state_clean():
+    """从未挂起 pending（_unhandled_errors 不存在）：不抛错、不产生脏数据。"""
+    handler, exporter = _new_handler()
+    await _open_component(handler)
+
+    await handler.on_post_invoke(COMP_ID, outputs={"ok": True})
+
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+    assert exporter.get_finished_spans() == ()
+
+
+# --- 4a. 根 Span：pending + outputs=None → ERROR ----------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_with_pending_and_no_outputs_marks_error():
+    """组件异常导致本层终止：根 Span 同时写 ERROR/description 与 openjiuwen.status=error。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("component blew up"))
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    attrs = root.attributes or {}
+    assert root.status.status_code == otel_trace.StatusCode.ERROR
+    assert root.status.description == "RuntimeError"
+    assert _description(root) != ""
+    assert attrs[OJ_STATUS] == NodeStatus.ERROR.value
+    # 失败终态不写入 outputs
+    assert OJ_WORKFLOW_OUTPUTS not in attrs
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_with_pending_base_error_description_has_code():
+    """根 Span 摘要沿用 _build_error_summary：BaseError 带错误码，便于按码筛选。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=BaseError(StatusCode.ERROR, msg="ignored"))
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    assert root.status.status_code == otel_trace.StatusCode.ERROR
+    assert root.status.description == f"{StatusCode.ERROR.code} BaseError"
+    assert (root.attributes or {})[OJ_STATUS] == NodeStatus.ERROR.value
+
+
+# --- 4b. 根 Span：无 pending → OK/finish -----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_without_pending_is_ok_finish():
+    """正常完成：根 Span 置 OK、openjiuwen.status=finish、无错误描述。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    assert root.status.status_code == otel_trace.StatusCode.OK
+    assert _description(root) == ""
+    assert (root.attributes or {})[OJ_STATUS] == NodeStatus.FINISH.value
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_keeps_existing_error_status_but_marks_finish():
+    """根 Span 已有 ERROR（business_error）且无 pending：保留标红、业务轴 finish。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await handler.on_invoke(
+        ROOT_ID,
+        on_invoke_data={"business_error": {"status_code": 503, "reason": "unavailable"}},
+    )
+
+    await handler.on_call_done(ROOT_ID, outputs={"ok": False})
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    attrs = root.attributes or {}
+    assert root.status.status_code == otel_trace.StatusCode.ERROR
+    assert root.status.description == "HTTP request failed: status code 503, unavailable"
+    assert attrs[OJ_STATUS] == NodeStatus.FINISH.value
+    assert OJ_WORKFLOW_OUTPUTS in attrs
+
+
+# --- 4c. 降级：pending 存在但正常返回 → 根 OK/finish 且 pending 清空 --------
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_after_degrade_via_post_invoke_is_ok_finish():
+    """降级链路（on_post_invoke 已清 pending）→ 根 outputs=None 也是 OK/finish。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("boom"))
+    await handler.on_post_invoke(COMP_ID, outputs={"fallback": "default"})
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    assert root.status.status_code == otel_trace.StatusCode.OK
+    assert _description(root) == ""
+    assert (root.attributes or {})[OJ_STATUS] == NodeStatus.FINISH.value
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_with_outputs_clears_pending_and_is_ok_finish():
+    """pending 残留但本层产出非空：不标终止失败，根 OK/finish，且 pending 被清空。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("boom"))
+    assert getattr(handler, "_unhandled_errors") == {  # noqa: B009
+        ROOT_ID: {COMP_ID: "RuntimeError"}
+    }
+
+    await handler.on_call_done(ROOT_ID, outputs={"answer": "degraded"})
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    attrs = root.attributes or {}
+    assert root.status.status_code == otel_trace.StatusCode.OK
+    assert _description(root) == ""
+    assert attrs[OJ_STATUS] == NodeStatus.FINISH.value
+    assert "degraded" in attrs[OJ_WORKFLOW_OUTPUTS]
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+
+# --- 4d. 组件 Span（非 layer root）：pending 不得触发根终止语义 -------------
+
+
+@pytest.mark.asyncio
+async def test_call_done_component_with_pending_is_not_root_terminal():
+    """组件 span 命中 pending 但非 layer root：不写 ERROR/description，也不清空 pending。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    # 直接注入 pending（真实异常路径会在 on_invoke 中提前收尾组件 span）
+    setattr(handler, "_unhandled_errors", {ROOT_ID: {COMP_ID: "RuntimeError"}})  # noqa: B010
+
+    await handler.on_call_done(COMP_ID, outputs=None)
+
+    comp = _finished_span(exporter, f"component.{COMP_ID}")
+    assert comp.status.status_code == otel_trace.StatusCode.OK
+    assert _description(comp) == ""
+    assert (comp.attributes or {})[OJ_STATUS] == NodeStatus.FINISH.value
+    # 非 layer root 不清空 pending（清理责任归属根 span）
+    assert getattr(handler, "_unhandled_errors") == {  # noqa: B009
+        ROOT_ID: {COMP_ID: "RuntimeError"}
+    }
+    # 根 span 仍处于未收尾状态
+    assert getattr(handler, "_layer_root_spans").get(ROOT_ID) is not None  # noqa: B009
+
+
+# --- 4e. 跨层/并发隔离：收尾只清本层 pending（检视 P2 回归） -----------------
+
+
+@pytest.mark.asyncio
+async def test_pending_is_isolated_between_layer_roots():
+    """一个层根收尾只清本层 pending：不挂他层摘要、不抹掉他层失败标记。"""
+    handler, exporter = _new_handler()
+    other_root = "wf-root-other"
+    other_comp = "node_other"
+
+    await _open_root(handler)
+    await _open_component(handler)
+    await _open_root(handler, invoke_id=other_root)
+    await _open_component(handler, invoke_id=other_comp, parent_node_id=other_root)
+
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("root-a-boom"))
+    await handler.on_invoke(other_comp, exception=RuntimeError("root-b-boom"))
+    pending = getattr(handler, "_unhandled_errors")  # noqa: B009
+    assert set(pending) == {ROOT_ID, other_root}
+
+    # B 层先收尾：只清 B 层，A 层 pending 必须保留
+    await handler.on_call_done(other_root, outputs=None)
+    assert ROOT_ID in getattr(handler, "_unhandled_errors")  # noqa: B009
+    root_b = _root_span_by_invoke_id(exporter, other_root)
+    assert root_b.status.status_code == otel_trace.StatusCode.ERROR
+    assert root_b.status.description == "RuntimeError"
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+    root_a = _root_span_by_invoke_id(exporter, ROOT_ID)
+    assert root_a.status.status_code == otel_trace.StatusCode.ERROR
+    assert root_a.status.description == "RuntimeError"
+    assert getattr(handler, "_unhandled_errors") == {}  # noqa: B009
+
+
+@pytest.mark.asyncio
+async def test_unhandled_error_scope_falls_back_to_parent_span_context():
+    """无 openjiuwen.parent_node_id 时按父 SpanContext 反查层根（不可哈希回归）。"""
+    handler, exporter = _new_handler()  # noqa: RUF059
+    await _open_root(handler)
+    await _open_component(handler)
+    root_span_id = getattr(handler, "_layer_root_spans")[ROOT_ID].span.get_span_context().span_id  # noqa: B009
+    fake_state = SimpleNamespace(
+        span=SimpleNamespace(parent=SimpleNamespace(span_id=root_span_id))
+    )
+    with patch.object(getattr(handler, "_span_manager"), "get", return_value=fake_state):  # noqa: B009
+        assert getattr(handler, "_unhandled_error_scope")(COMP_ID) == ROOT_ID  # noqa: B009
+
+
+# --- 5. 回归：正常组件 on_call_done 行为不变 --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_done_component_normal_regression():
+    """回归：普通组件正常完成仍写 outputs、OK、finish，不被根判定逻辑影响。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+
+    await handler.on_call_done(COMP_ID, outputs={"result": 42})
+
+    comp = _finished_span(exporter, f"component.{COMP_ID}")
+    attrs = comp.attributes or {}
+    assert comp.status.status_code == otel_trace.StatusCode.OK
+    assert _description(comp) == ""
+    assert attrs[OJ_STATUS] == NodeStatus.FINISH.value
+    assert "42" in attrs[OJ_WORKFLOW_OUTPUTS]
+    assert OJ_WORKFLOW_ERROR_MESSAGE not in attrs
+    assert (getattr(handler, "_component_spans") or {}) == {}  # noqa: B009
+
+
+@pytest.mark.asyncio
+async def test_call_done_root_normal_with_outputs_regression():
+    """回归：根 Span 正常完成（有产出）仍写 outputs、OK、finish。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+
+    await handler.on_call_done(ROOT_ID, outputs={"answer": "ok"})
+
+    root = _finished_span(exporter, ROOT_SPAN_NAME)
+    attrs = root.attributes or {}
+    assert root.status.status_code == otel_trace.StatusCode.OK
+    assert attrs[OJ_STATUS] == NodeStatus.FINISH.value
+    assert "ok" in attrs[OJ_WORKFLOW_OUTPUTS]
+    assert getattr(handler, "_layer_root_spans").get(ROOT_ID) is None  # noqa: B009
+
+
+# --- 收尾健壮性 -------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_call_done_unknown_invoke_id_is_noop():
+    """未登记的 invoke_id：静默返回，不抛错、不产生 span。"""
+    handler, exporter = _new_handler()
+
+    await handler.on_call_done("not-registered", outputs={"x": 1})
+
+    assert exporter.get_finished_spans() == ()
+
+
+@pytest.mark.asyncio
+async def test_call_done_internal_error_is_swallowed_with_warning():
+    """收尾内部异常（如属性刷新失败）：吞掉并告警，不向调用方抛出。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+
+    with patch.object(
+        handler, "_refresh_inputs_attribute", side_effect=RuntimeError("attr broken")
+    ), patch.object(studio_module.session_logger, "warning") as warn:
+        await handler.on_call_done(ROOT_ID, outputs=None)
+
+    assert warn.call_count == 1
+    assert "on_call_done failed" in warn.call_args[0][0]
+    assert "attr broken" in str(warn.call_args[0][1])
+    assert exporter.get_finished_spans() == ()

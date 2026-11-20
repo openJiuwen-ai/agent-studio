@@ -528,7 +528,7 @@ delegate:
 
 jackson:
   # Jackson 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制。
-  # 用于 Spring 容器全局 ObjectMapper，影响 RedisTemplate 等使用容器 ObjectMapper 的组件。默认 50MB。
+  # 用于 Spring 容器全局 ObjectMapper，影响所有使用容器 ObjectMapper 的组件。默认 50MB。
   max-string-length: ${jackson_max_string_length:50000000}
   # Jackson 反序列化允许的最大 token 数，防止超大 JSON 解析时 token 数爆炸。默认 10M。
   max-token-limit: ${jackson_max_token_limit:10000000}
