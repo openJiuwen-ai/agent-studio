@@ -702,7 +702,9 @@ export class PromptOptimizeTaskConfigComponent {
     this.basicSettingsForm.controls.model.setValue(draft.exec_object_config.model);
 
     this.basicSettingsForm.controls.executionTime.setValue(draft.exec_time ? new Date(draft.exec_time) : null);
-    if (this.basicSettingsForm.value.executionTime.getTime() < Date.now()) {
+    // exec_time 为空（后端创建时允许为 null）时上面刚置入 null，此处必须判空，
+    // 否则 null.getTime() 抛 TypeError 打断 initDraft，编辑页加载卡死（isSpinning 不复位）
+    if (this.basicSettingsForm.value.executionTime && this.basicSettingsForm.value.executionTime.getTime() < Date.now()) {
       this.basicSettingsForm.controls.executionTimeMode.setValue(false);
     }
     this.basicSettingsForm.controls.maximumRound.setValue(draft.max_iter_num);
