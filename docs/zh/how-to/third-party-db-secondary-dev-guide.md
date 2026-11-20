@@ -600,16 +600,39 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 ```
 
 **(b) 评估任务** — `mapper/PeEvaluationTaskMapperSqlServer.xml`（形态示例；字段/typeHandler 请对照产品内置补齐）。  
-同一文件须覆盖两处：批量 upsert（MERGE）**以及** `queryByTaskIdAndStatus`（内置用双引号字符串，SQL Server 会当标识符）：
+同一文件须覆盖两处：批量 upsert（MERGE）**以及** `queryByTaskIdAndStatus`（内置用双引号字符串，SQL Server 会当标识符）。  
+**不要**引用内置 `resultMap`（见下方「自包含 resultMap」说明）：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.openjiuwen.studio.prompt.engineering.mapper.PeEvaluationTaskMapper">
+  <!-- 自包含：ext-mapper 先于内置加载时，内置 EvaluationTaskBaseMap 尚不存在；
+       若仍引用会进 incomplete/pending，随后与默认句冲突。独立 id，勿与内置同名。 -->
+  <resultMap id="SqlServerEvaluationTaskBaseMap"
+             type="com.openjiuwen.studio.prompt.engineering.entity.PeEvaluationTask">
+    <id property="id" column="id" jdbcType="VARCHAR"/>
+    <result property="name" column="name" jdbcType="VARCHAR"/>
+    <result property="method" column="method" jdbcType="VARCHAR"/>
+    <result property="taskId" column="task_id" jdbcType="VARCHAR"/>
+    <result property="testSetId" column="test_set_id" jdbcType="VARCHAR"/>
+    <result property="description" column="description" jdbcType="VARCHAR"/>
+    <result property="regularExpression" column="regular_expression" jdbcType="VARCHAR"/>
+    <result property="evalModelConfig" column="eval_model_config" jdbcType="OTHER"
+            typeHandler="com.openjiuwen.studio.prompt.engineering.mapper.handler.ModelConfigHandler"/>
+    <result property="createdOn" column="created_on" jdbcType="TIMESTAMP"/>
+    <result property="updatedOn" column="updated_on" jdbcType="TIMESTAMP"/>
+    <result property="status" column="status" jdbcType="VARCHAR"/>
+    <result property="creator" column="creator" jdbcType="VARCHAR"/>
+    <result property="prompts" column="prompts" jdbcType="OTHER"
+            typeHandler="com.openjiuwen.studio.prompt.engineering.mapper.handler.JsonArrayPromptHandler"/>
+    <result property="workspaceId" column="workspace_id" jdbcType="VARCHAR"/>
+  </resultMap>
+
   <!-- 内置：status in ("pending", …)；QUOTED_IDENTIFIER=ON 下会 Invalid column name -->
   <select id="queryByTaskIdAndStatus" databaseId="sqlserver"
-          resultMap="EvaluationTaskBaseMap">
+          resultMap="SqlServerEvaluationTaskBaseMap">
     SELECT *
     FROM t_pe_evaluation_task
     WHERE task_id = #{taskId}
@@ -662,12 +685,15 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 > **批量上限**：`USING (VALUES …)` 单语句最多 **1000** 行（错误 10738）。产品 `batchInsertEvalResult` 调用方未分批；提示词/结果很多时，请在业务侧分批调用、改为临时表+`MERGE`，或在外部 Mapper 文档中写明「单次 ≤1000，超出必失败」。  
 >
 > **双引号字符串**：不要在 `rewrite()` 里全局替换。SQL Server JDBC 默认 `QUOTED_IDENTIFIER=ON`，双引号是标识符；仓内已知必炸点是 `PeEvaluationTaskMapper.queryByTaskIdAndStatus`（见上）。升级后可用  
-> `rg 'in\s*\(\s*"|=\s*"[a-zA-Z]' --glob '*Mapper*.xml'` 再扫一遍。
+> `rg 'in\s*\(\s*"|=\s*"[a-zA-Z]' --glob '*Mapper*.xml'` 再扫一遍。  
+>
+> **自包含 resultMap（必读）**：`ext-mapper` 必须写在内置前面时，外部语句**不要**引用只在内置 XML 里定义的 `resultMap`。否则专用句会因 resultMap 尚未注册而进入 incomplete/pending（此时 `mappedStatements` 里还没有该 id），随后内置默认句被正常注册，pending 专用句再注册时就会 `already contains key`。做法：在外部 XML **复制一份映射并换独立 id**（如上 `SqlServerEvaluationTaskBaseMap`），或改用 `resultType`（须自行确认自动映射能否覆盖内置 typeHandler，如 `ModelConfigHandler` / `JsonArrayPromptHandler`）。
 
 3. **`mapper-locations` 与加载语义**（易误解，请按此理解）：
 
    - **选型依据**：同 namespace/id 时，由语句上的 `databaseId` 与当前 `DatabaseIdProvider` 返回值匹配决定用哪份；内置无 `databaseId` 的默认句靠动态 `_databaseId`，**不会**因为你「多写了一个外部文件路径」就自动被覆盖。
-   - **为何外部路径仍要写在内置前面**：MyBatis 会先注册匹配当前 `databaseId` 的语句，再尝试注册无 `databaseId` 的默认句；若默认句已先注册，再注册同 id 的 `databaseId=sqlserver` 语句会触发 StrictMap **already contains key**（duplicate statement id）。把 `classpath:ext-mapper/*.xml` 放在 `classpath*:mapper/...` **之前**，是为了让带 `databaseId` 的语句先注册，随后内置默认句会被跳过——**不是**「路径顺序 = SQL 覆盖优先级」。
+   - **为何外部路径仍要写在内置前面**：每个 Mapper 资源内部会先注册匹配当前 `databaseId` 的语句，再尝试注册无 `databaseId` 的默认句；若同 id 已存在且已有语句带非空 `databaseId`，默认句会被跳过。跨文件时：若内置默认句已先注册，再注册同 id 的 `databaseId=sqlserver` 语句会触发 StrictMap **already contains key**。把 `classpath:ext-mapper/*.xml` 放在 `classpath*:mapper/...` **之前**，是为了让带 `databaseId` 的语句**先成功注册**，随后内置默认句被跳过——**不是**「路径顺序 = SQL 覆盖优先级」。
+   - **外部语句必须自包含**：专用句若引用内置才有的 `resultMap`/`parameterMap`，会进 pending 而**未能先注册**，路径靠前的保护失效（见上「自包含 resultMap」）。
    - **关于 `classpath*:mapper/*.xml` 与 `**/*.xml`**：二者会匹配到同一批内置资源；已加载资源靠 `isResourceLoaded` 跳过，**不能**指望这两行之间的顺序去重或提高外部 Mapper 优先级。产品默认就有这两行，外部 profile 保留即可，关键是**额外加上**且**写在最前**的 `ext-mapper` 条目。
 
 ---
@@ -1084,7 +1110,7 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `ON DUPLICATE KEY UPDATE` 语法错 | 补齐两处外部 MERGE：`insertRating` 与 `batchInsertEvalResult`；确认 Provider 返回 `sqlserver` |
 | 创建/更新时间差约 8 小时 | 检查库/容器时区是否与 `jackson` 的 GMT+8 一致；`NOW`→`SYSDATETIME` 策略下勿混用 `SYSUTCDATETIME` |
 | `FOR UPDATE` 语法错 | 不要指望 Interceptor 自动改写裸 MySQL `FOR UPDATE`；定时任务依赖 Quartz `MSSQLDelegate`；业务 SQL 改用 `WITH (UPDLOCK)` 等目标库写法（外部 Mapper） |
-| duplicate statement id / already contains key | 同 id 的 `databaseId` 专用语句须先于无 `databaseId` 的内置默认句注册：把 `ext-mapper` 写在 `mapper-locations` 最前 |
+| duplicate statement id / already contains key | ① `ext-mapper` 须写在 `mapper-locations` 最前，让 `databaseId` 专用句先注册；② 外部语句勿引用仅内置才有的 `resultMap`（否则专用句进 pending，默认句先占坑，pending 再注册必冲突）——在外部 XML 复制独立 id 的 resultMap，见步骤 3.6 |
 | 导入一直 0 成功 | `import_*=` 改成真实资源 ID |
 | 知识库 400 项目 ID | 换正确带 `{project_id}` 的 URL |
 | 表缺失但进程起来了 | `continue-on-error` 吞错；改用预建表 + `init_mode=never` |
