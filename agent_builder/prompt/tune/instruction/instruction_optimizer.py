@@ -169,7 +169,7 @@ class GreedyOptimizer(BasicOptimizer):
             error_example_string,
             textual_gradient,
         )
-        opt_prompt_meta.replace(
+        opt_prompt_meta = opt_prompt_meta.replace(
             "{{API_TOOLS_DESCRIPTION}}", str(tools) if tools else "None"
         )
         refined_meta = self._chat_completion(opt_prompt_meta)
@@ -201,7 +201,7 @@ class GreedyOptimizer(BasicOptimizer):
                 error_example_string,
                 textual_gradient,
             )
-            opt_prompt_schema.replace(
+            opt_prompt_schema = opt_prompt_schema.replace(
                 "{{API_TOOLS_DESCRIPTION}}", str(tools) if tools else "None"
             )
             opt_prompt_schema = opt_prompt_schema.replace(
