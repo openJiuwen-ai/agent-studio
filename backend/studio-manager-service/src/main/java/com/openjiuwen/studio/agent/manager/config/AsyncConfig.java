@@ -4,6 +4,8 @@
 
 package com.openjiuwen.studio.agent.manager.config;
 
+import com.openjiuwen.studio.agent.manager.observability.MdcTaskDecorator;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -71,6 +73,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         // 等待所有任务结束后再关闭线程池
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 
@@ -92,6 +95,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         // 等待所有任务结束后再关闭线程池
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 
@@ -104,6 +108,7 @@ public class AsyncConfig {
         taskExecutor.setThreadNamePrefix(threadNamePrefix);
         taskExecutor.setKeepAliveSeconds(keepAliveSeconds);
         taskExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        taskExecutor.setTaskDecorator(new MdcTaskDecorator());
         taskExecutor.initialize();
         return taskExecutor;
     }
@@ -125,6 +130,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(pollingCheckAwaitTerminationSeconds);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 
@@ -146,6 +152,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         // 等待所有任务结束后再关闭线程池
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 
@@ -167,6 +174,7 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("insightPersist-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 
@@ -188,6 +196,7 @@ public class AsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         // 等待所有任务结束后再关闭线程池
         executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         return executor;
     }
 }
