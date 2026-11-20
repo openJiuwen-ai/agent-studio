@@ -104,6 +104,25 @@ class McpTransferServiceJsonlParseTest {
     }
 
     @Test
+    @DisplayName("J-08: 带 UTF-8 BOM 的合法文件正常解析（Excel/旧编辑器另存场景）")
+    void bomStrippedBeforeParse() {
+        String content = "﻿" + line(payload("svc-a")) + "\n";
+        java.util.List<McpTransferServiceDefinition> defs = service.parseAndValidateFile(content);
+        assertEquals(1, defs.size());
+        assertEquals("svc-a", defs.get(0).getName());
+    }
+
+    @Test
+    @DisplayName("J-09: 孤立 CR 行尾（旧式换行）按行解析")
+    void loneCarriageReturnLineEnding() {
+        String content = line(payload("svc-a")) + "\r" + line(payload("svc-b")) + "\r";
+        java.util.List<McpTransferServiceDefinition> defs = service.parseAndValidateFile(content);
+        assertEquals(2, defs.size());
+        assertEquals("svc-a", defs.get(0).getName());
+        assertEquals("svc-b", defs.get(1).getName());
+    }
+
+    @Test
     @DisplayName("J-07: 定义字段缺失报错带行号（name 过短）")
     void fieldInvalidCarriesLineNo() {
         String shortName = "{\"name\":\"s\",\"org_type\":\"STREAMABLE_HTTP\","

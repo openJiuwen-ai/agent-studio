@@ -97,7 +97,7 @@ public class McpOperationService {
      */
     private void executeImportItem(McpOperationEntity operation, McpOperationItemEntity item) {
         McpServiceEntity entity = serviceDao.getMcpServiceById(item.getServiceId(), operation.getTenantId(),
-            item.getSafeReason() != null ? null : null, operation.getProjectId(), operation.getWorkspaceId());
+            null, operation.getProjectId(), operation.getWorkspaceId());
         if (entity == null) {
             failItem(operation, item, StudioError.MCP_SERVICE_NOT_EXIST.getCode(), "service not found");
             return;

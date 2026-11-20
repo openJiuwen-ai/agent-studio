@@ -100,6 +100,14 @@ public class McpTransferSanitizer {
             if (!ALLOWED_NODE_KEYS.contains(key)) {
                 throw unsafe("unknown config key rejected: " + basePath + "/" + key);
             }
+            if ("url".equals(key)) {
+                // 节点 url 与顶层 url 同规则：userinfo/非空 query 值拒绝（导出端已清洗，
+                // 导入端必须对称校验，防手工文件携带凭据进库）
+                if (entry.getValue() instanceof String nodeUrl
+                    && StringUtils.isNotBlank(nodeUrl) && !nodeUrl.contains(PLACEHOLDER_PREFIX)) {
+                    validateUrlSafety(nodeUrl);
+                }
+            }
             if ("headers".equals(key)) {
                 if (entry.getValue() instanceof Map<?, ?> headers) {
                     for (Map.Entry<?, ?> h : headers.entrySet()) {
@@ -121,7 +129,11 @@ public class McpTransferSanitizer {
             if ("args".equals(key)) {
                 if (entry.getValue() instanceof List<?> args) {
                     for (Object arg : args) {
-                        if (arg instanceof String s && s.startsWith("-") && !isKnownLauncherFlag(s)) {
+                        // 非字符串元素（如内嵌对象）不属于启动器参数合法形态，拒绝
+                        if (!(arg instanceof String s)) {
+                            throw unsafe("non-string args element rejected: " + basePath + "/args");
+                        }
+                        if (s.startsWith("-") && !isKnownLauncherFlag(s)) {
                             throw unsafe("unknown launcher flag rejected: " + basePath + "/args/" + s);
                         }
                     }
@@ -133,6 +145,7 @@ public class McpTransferSanitizer {
     /**
      * 递归拒绝凭据键——但跳过标准配置节点的值区域（env/headers/args 的键名是
      * 合法变量名如 API_KEY，值已由 validateNodeSafety 单独校验为空/非空）。
+     * List 元素同样递归（args:[{token:...}] 这类嵌套对象不能绕过键名检查）。
      */
     private void rejectCredentialKeys(Map<String, Object> map, String path, boolean insideStandardNode) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
@@ -147,10 +160,20 @@ public class McpTransferSanitizer {
                         + entry.getKey());
                 }
             }
-            // 递归时：进入 mcpServers 节点标记为标准区域
-            boolean childIsNode = "mcpServers".equals(lowerKey) || ALLOWED_NODE_KEYS.contains(lowerKey);
+            // 递归时：进入 mcpServers 节点标记为标准区域（服务名是任意字符串，
+            // 不能按凭据字段名拒绝——注意 lowerKey 已小写，须与小写常量比较）
+            boolean childIsNode = "mcpservers".equals(lowerKey) || ALLOWED_NODE_KEYS.contains(lowerKey);
             if (entry.getValue() instanceof Map<?, ?> child) {
                 rejectCredentialKeys((Map<String, Object>) child, path + "/" + entry.getKey(), childIsNode);
+            } else if (entry.getValue() instanceof List<?> list) {
+                // List 元素继承当前区域标记：标准节点内（args）属值区域；顶层未知
+                // 列表的内嵌对象不在豁免区，凭据键名照常拒绝
+                for (int i = 0; i < list.size(); i++) {
+                    if (list.get(i) instanceof Map<?, ?> element) {
+                        rejectCredentialKeys((Map<String, Object>) element,
+                            path + "/" + entry.getKey() + "/" + i, insideStandardNode);
+                    }
+                }
             }
         }
     }

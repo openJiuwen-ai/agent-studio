@@ -148,11 +148,7 @@ public class McpToolSnapshotService {
         // 成功结果建立在数据库已提交的快照上（L2 §3.4）
         diff.put("previous_tool_count", previousTools.size());
         diff.put("requires_republish", true);
-        item.setStatus("SUCCESS");
-        item.setRefreshStatus("SUCCESS");
-        item.setResultJson(toJson(diff));
-        item.setFinishedDate(new Timestamp(System.currentTimeMillis()));
-        // finishOperationItem 由 operationService.succeedItem 完成（含汇总）
+        // 状态与完成时间由 succeedItemRaw 统一落（此处只组结果 JSON，避免重复赋值）
         item.setResultJson(toJson(diff));
         getOperationService().succeedItemRaw(operation, item);
     }

@@ -311,6 +311,59 @@ class McpTransferSanitizerTest {
                 definition("test", "SSE", "sse", "https://example.com/mcp", config);
             assertDoesNotThrow(() -> sanitizer.validateImportSafety(def));
         }
+
+        @Test
+        @DisplayName("R-01: 节点 URL 携带 userinfo 被拒绝（与顶层 URL 对称）")
+        void nodeUrlUserInfoRejected() {
+            Map<String, Object> config = serverConfig(node("https://user:pass@example.com/mcp"));
+            McpTransferServiceDefinition def =
+                definition("test", "SSE", "sse", "https://example.com/mcp", config);
+            AgentStudioException e = assertThrows(AgentStudioException.class,
+                () -> sanitizer.validateImportSafety(def));
+            assertEquals(StudioError.MCP_TRANSFER_UNSAFE_CONFIG, e.getErrorCode());
+        }
+
+        @Test
+        @DisplayName("R-02: args 内嵌非字符串元素被拒绝（对象借 args 绕过键名检查）")
+        void argsNonStringElementRejected() {
+            Map<String, Object> n = new LinkedHashMap<>();
+            n.put("args", List.of(Map.of("token", "injected")));
+            Map<String, Object> config = serverConfig(n);
+            McpTransferServiceDefinition def =
+                definition("test", "NPX", "stdio", null, config);
+            AgentStudioException e = assertThrows(AgentStudioException.class,
+                () -> sanitizer.validateImportSafety(def));
+            assertEquals(StudioError.MCP_TRANSFER_UNSAFE_CONFIG, e.getErrorCode());
+        }
+
+        @Test
+        @DisplayName("R-03: 列表内嵌套对象的凭据键被拒绝（List 递归）")
+        void credentialKeyInsideListRejected() {
+            // 顶层未知列表字段：非 mcpServers 区域，列表内对象的凭据键须被键名检查覆盖
+            Map<String, Object> config = new LinkedHashMap<>();
+            config.put("extraList", List.of(Map.of("apiKey", "injected")));
+            Map<String, Object> servers = new LinkedHashMap<>();
+            servers.put("test-service", node("https://example.com/mcp"));
+            config.put("mcpServers", servers);
+            McpTransferServiceDefinition def =
+                definition("test", "SSE", "sse", "https://example.com/mcp", config);
+            AgentStudioException e = assertThrows(AgentStudioException.class,
+                () -> sanitizer.validateImportSafety(def));
+            assertEquals(StudioError.MCP_TRANSFER_UNSAFE_CONFIG, e.getErrorCode());
+        }
+
+        @Test
+        @DisplayName("R-04: mcpServers 下的服务名（如 credentials）不按凭据字段名误拒")
+        void serviceNameNotTreatedAsCredentialKey() {
+            // 修复前 "mcpServers".equals(lowerKey) 恒 false，服务名会被当凭据键误拒（fail-closed 误报）
+            Map<String, Object> config = new LinkedHashMap<>();
+            Map<String, Object> servers = new LinkedHashMap<>();
+            servers.put("credentials-proxy", node("https://example.com/mcp"));
+            config.put("mcpServers", servers);
+            McpTransferServiceDefinition def =
+                definition("test", "SSE", "sse", "https://example.com/mcp", config);
+            assertDoesNotThrow(() -> sanitizer.validateImportSafety(def));
+        }
     }
 
     // ================================================================ 二次扫描

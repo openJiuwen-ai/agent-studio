@@ -4782,7 +4782,7 @@ public enum StudioError {
     CALL_ASSET_APP_EXCEED_FREE_TRIAL_TIMES(BAD_REQUEST, ASSET, "1001"),
 
     /**
-     * MCP迁移文件格式非法（非JSON根对象/重复键/深度超限等结构级错误）
+     * MCP迁移文件格式非法（文件为空/行无法解析/行类型非MCP_SERVICE等结构级错误）
      */
     MCP_TRANSFER_FORMAT_INVALID(BAD_REQUEST, COMPONENT, "1191"),
 

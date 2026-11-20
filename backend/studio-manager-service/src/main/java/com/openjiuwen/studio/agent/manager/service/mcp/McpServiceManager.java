@@ -3562,6 +3562,14 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
         if (!mcpFeOperationDao.claimOperationOnService(serviceId, tenantId, projectId, workspaceId,
             operation.getId())) {
+            // 抢锁失败：item 落终态 FAILED（否则永久 PENDING——回收只扫 RUNNING 操作，
+            // 而该操作已置 INTERRUPTED 不在回收范围）
+            item.setStatus("FAILED");
+            item.setRefreshStatus("FAILED");
+            item.setErrorCode(StudioError.MCP_OPERATION_IN_PROGRESS.getCode());
+            item.setSafeReason("another operation is active on this service");
+            item.setFinishedDate(new Timestamp(System.currentTimeMillis()));
+            mcpFeOperationDao.finishOperationItem(item);
             mcpFeOperationDao.markOperationInterrupted(operation.getId());
             throw new AgentStudioException(StudioError.MCP_OPERATION_IN_PROGRESS,
                 "another operation is active on this service");

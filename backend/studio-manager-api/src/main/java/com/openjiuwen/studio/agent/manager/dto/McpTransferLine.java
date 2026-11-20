@@ -30,8 +30,6 @@ public class McpTransferLine {
 
     public static final long MAX_FILE_BYTES = 10L * 1024 * 1024;
 
-    public static final int MAX_JSON_DEPTH = 32;
-
     @JsonProperty("import_type")
     private String importType;
 

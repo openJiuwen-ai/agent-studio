@@ -51,6 +51,10 @@ public class McpTransferService {
     private static final Logger log = LoggerFactory.getLogger(McpTransferService.class);
     private static final int NAME_MAX = 64;
 
+    /** 与 McpServiceManager 正常创建同口径的租户配额。 */
+    @org.springframework.beans.factory.annotation.Value("${mcp.mcp-quota:30}")
+    private String mcpQuota;
+
     @Autowired
     private McpServiceDao serviceDao;
 
@@ -106,9 +110,17 @@ public class McpTransferService {
         List<McpTransferServiceDefinition> definitions = parseAndValidateFile(fileContent);
         String tenantId = RequestContextUtils.getRequestUserDomainId();
 
-        // 配额检查（同目标空间互斥由数据库行级实现；此处按现有配额口径）
-        long count = serviceDao.getMcpServiceCountByTenantId(tenantId);
-        // mcpQuota 由 McpServiceManager 管理；此处保守按单批上限不突破租户配额检查
+        // 配额检查（与正常创建同口径 mcp.mcp-quota：当前数量 + 本批数量不得超配额，
+        // 否则导入可绕过配额无限建实例）
+        long mcpServiceCount = serviceDao.getMcpServiceCountByTenantId(tenantId);
+        long quota = Long.parseLong(mcpQuota);
+        if (mcpServiceCount + definitions.size() > quota) {
+            log.warn("import would exceed mcp quota. current: {}, incoming: {}, quota: {}",
+                mcpServiceCount, definitions.size(), quota);
+            throw new AgentStudioException(StudioError.SERVICE_EXCEEDING_LIMIT,
+                "import would exceed mcp service quota: current " + mcpServiceCount + " + incoming "
+                    + definitions.size() + " > quota " + quota);
+        }
 
         McpOperationEntity operation = new McpOperationEntity();
         operation.setId(UUID.randomUUID().toString().replace("-", ""));
@@ -181,7 +193,9 @@ public class McpTransferService {
                 throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                     "service_ids must be empty when selection is ALL");
             }
-            List<McpServiceEntity> list = serviceDao.listMcpServiceByTenant(tenantId, workspaceId);
+            // 共享查询不带 deleted 过滤（统计功能同用）；导出只取未删除实例
+            List<McpServiceEntity> list = serviceDao.listMcpServiceByTenant(tenantId, workspaceId)
+                .stream().filter(entity -> !Boolean.TRUE.equals(entity.getDeleted())).toList();
             if (list.size() > McpTransferLine.MAX_SERVICES) {
                 throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                     "workspace has more than 100 manageable services; select in batches");
@@ -269,11 +283,17 @@ public class McpTransferService {
         if (fileContent == null || fileContent.isBlank()) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID, "file is empty");
         }
+        // UTF-8 BOM 剥离：Jackson 字符串解析不跳 BOM，Excel/旧编辑器另存的合法文件
+        // 会在 line 1 误报「not valid JSON」
+        if (fileContent.startsWith("﻿")) {
+            fileContent = fileContent.substring(1);
+        }
         if (fileContent.getBytes(StandardCharsets.UTF_8).length > McpTransferLine.MAX_FILE_BYTES) {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FORMAT_INVALID, "file exceeds 10 MiB limit");
         }
-        // JSONL：一个服务一行；跳过空行（与插件/工作流导入同口径）
-        String[] rawLines = fileContent.split("\\r?\\n", -1);
+        // JSONL：一个服务一行；跳过空行（与插件/工作流导入同口径）；
+        // 兼容 CRLF/LF/孤立 CR（旧式换行）三种行尾
+        String[] rawLines = fileContent.split("\\r\\n|\\n|\\r", -1);
         List<McpTransferServiceDefinition> definitions = new ArrayList<>();
         for (int i = 0; i < rawLines.length; i++) {
             String raw = rawLines[i].trim();
@@ -336,8 +356,8 @@ public class McpTransferService {
         if (!expected.equals(def.getDeployType())) {
             throw fieldInvalid(at + ".deploy_type " + def.getDeployType() + " does not match org_type " + orgType);
         }
-        if (Set.of("SSE", "STREAMABLE_HTTP").contains(orgType) && StringUtils.isBlank(def.getUrl())
-            && !StringUtils.contains(def.getUrl(), "${_env.")) {
+        // HTTP 类必填非空 url（占位符形态的 url 也非空，天然放行；原含 contains 的子句在 blank 时恒 false）
+        if (Set.of("SSE", "STREAMABLE_HTTP").contains(orgType) && StringUtils.isBlank(def.getUrl())) {
             throw fieldInvalid(at + ".url is required for HTTP-type services");
         }
         if (def.getServerConfig() == null || def.getServerConfig().isEmpty()) {
@@ -355,14 +375,12 @@ public class McpTransferService {
         entity.setDescription(def.getDescription());
         entity.setDescriptionEn(def.getDescriptionEn());
         entity.setOrgType(normalizeOrgType(def.getOrgType()));
-        entity.setNodeType("Mcp"); // NOT NULL 列：普通 MCP 服务统一为 Mcp
-        entity.setDeployType(def.getDeployType());
+        entity.setNodeType("Mcp"); // NOT NULL 列：普通 MCP 服务统一为 Mcp        entity.setDeployType(def.getDeployType());
         entity.setFcInstanceUrl(def.getUrl());
         entity.setTenantId(tenantId);
         entity.setProjectId(projectId);
         entity.setWorkspaceId(workspaceId);
         entity.setDeptCode(CommonUtil.getDeptCode());
-        entity.setNodeType("Mcp");
         entity.setCreatedDate(new Timestamp(System.currentTimeMillis()));
         entity.setLastUpdatedDate(new Timestamp(System.currentTimeMillis()));
         entity.setDeleted(false);
@@ -403,7 +421,9 @@ public class McpTransferService {
 
     private Set<String> loadWorkspaceNames(String tenantId, String workspaceId) {
         Set<String> names = new HashSet<>();
-        List<McpServiceEntity> all = serviceDao.listMcpServiceByTenant(tenantId, workspaceId);
+        // 软删实例不占名（列表页同样不展示）：删除 Foo 后导入 Foo 应沿用原名而非 Foo-1
+        List<McpServiceEntity> all = serviceDao.listMcpServiceByTenant(tenantId, workspaceId)
+            .stream().filter(entity -> !Boolean.TRUE.equals(entity.getDeleted())).toList();
         for (McpServiceEntity entity : all) {
             if (entity.getName() != null) {
                 names.add(entity.getName().toLowerCase());
