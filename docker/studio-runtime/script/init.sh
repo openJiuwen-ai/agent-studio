@@ -12,7 +12,6 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p ${SERVICE_HOME}/tls
 mkdir -p /opt/cloud/logs
 mkdir -p /opt/cloud/tool
-mkdir -p /opt/cloud/logs/agent-runtime/run
 
 # 设置目录权限
 chmod -R 700 ${SERVICE_HOME}/tls 2>/dev/null || true

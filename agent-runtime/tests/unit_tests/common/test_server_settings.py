@@ -43,35 +43,29 @@ class TestServerSettingsPerformanceLog:
             assert s.performance_log_enabled is True
 
 
-class TestServerSettingsPerformanceLogLevel:
+class TestServerSettingsLogLevel:
+    """LOG_LEVEL 是进程内唯一的日志级别开关（同时驱动 uvicorn 与 agent-core）。"""
+
     @staticmethod
-    def test_default_warning_when_env_absent():
-        """未配置 PERFORMANCE_LOG_LEVEL 时默认 WARNING（perf 日志静默）。"""
-        saved = os.environ.pop("PERFORMANCE_LOG_LEVEL", None)
+    def test_default_info_when_env_absent():
+        saved = os.environ.pop("LOG_LEVEL", None)
         try:
             s = ServerSettings(_env_file=None)
-            assert s.performance_log_level == "WARNING"
+            assert s.log_level == "INFO"
         finally:
             if saved is not None:
-                os.environ["PERFORMANCE_LOG_LEVEL"] = saved
+                os.environ["LOG_LEVEL"] = saved
 
     @staticmethod
-    def test_env_override_info():
-        """PERFORMANCE_LOG_LEVEL=INFO 时开启 perf 日志打印。"""
-        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": "INFO"}):
-            s = ServerSettings(_env_file=None)
-            assert s.performance_log_level == "INFO"
-
-    @staticmethod
-    def test_env_override_lowercase_normalized():
+    def test_env_override_passthrough():
         """小写值保持原样传入，由调用方 upper() 归一化。"""
-        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": "info"}):
+        with patch.dict(os.environ, {"LOG_LEVEL": "debug"}):
             s = ServerSettings(_env_file=None)
-            assert s.performance_log_level == "info"
+            assert s.log_level == "debug"
 
     @staticmethod
-    def test_empty_string_defaults_warning():
-        """K8s YAML 空字符串 value: '' 应回退为默认值 WARNING。"""
-        with patch.dict(os.environ, {"PERFORMANCE_LOG_LEVEL": ""}):
+    def test_empty_string_defaults_info():
+        """K8s YAML 空字符串 value: '' 应回退为默认值 INFO。"""
+        with patch.dict(os.environ, {"LOG_LEVEL": ""}):
             s = ServerSettings(_env_file=None)
-            assert s.performance_log_level == "WARNING"
+            assert s.log_level == "INFO"

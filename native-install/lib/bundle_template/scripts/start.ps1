@@ -198,7 +198,7 @@ if (-not (Is-PidAlive $RtPid)) {
   if ($env:PYTHONPATH) { $pp = $pp + ';' + $env:PYTHONPATH }
   $env:PYTHONPATH = $pp
   $env:JIUWEN_EXTENSION_PATH = Join-Path $BundleRoot 'app\agent_runtime\extension'
-  $env:LOGGING_LOG_PATH = $Log; $env:TGF_LOG_DIR = $Log
+  $env:LOGGING_LOG_PATH = $Log
   $env:host = '127.0.0.1'; $env:PORT = $env:RUNTIME_PORT
   $p = Start-Bg $VenvPy @('-u',"$(Join-Path $BundleRoot 'app\agent_runtime\EIStart.py')",'--host','0.0.0.0','--port',"$($env:RUNTIME_PORT)") (Join-Path $Log 'runtime.log'); $p.Id | Set-Content $RtPid
 }

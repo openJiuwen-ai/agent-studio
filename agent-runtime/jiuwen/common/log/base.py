@@ -10,7 +10,6 @@ __all__ = (
     "set_thread_session",
 )
 
-import ast
 import json
 import logging
 import os
@@ -24,15 +23,10 @@ from typing import Callable, Any
 from jiuwen.common.configs.base import config
 from jiuwen.common.configs.env_constants import (
     JIUWEN_GRAY_DEBUG_KEY,
-    JIUWEN_LOG_BACKUP_COUNT_KEY,
-    JIUWEN_LOG_MAX_BYTES_KEY,
-    JIUWEN_LOG_LEVEL_KEY,
-    JIUWEN_LOG_PATH_KEY,
-    JIUWEN_PERF_LOG_LEVEL_KEY,
+    LOG_LEVEL_KEY,
 )
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
-from jiuwen.common.log.diagnostics import DiagnosticPolicy, get_default_policy
 from jiuwen.serve.common.context import request_json, request_ctx
 
 CRITICAL = 50
@@ -59,17 +53,14 @@ name_to_level = {
 }
 # Log output method, output to the console
 CONSOLE = "console"
+# Log output method, write to log file
+FILE_OUTPUT = "log"
 # Unique identifier of the session, user tag log
 TRACE_ID = "trace_id"
 EXECUTION_ID = "x-execution-id"
 REQUEST_ID = "x-request-id"
 
 GRAY_DEBUG_ENABLED = "gray_debug_enabled"
-
-ENV_BACKUP_COUNT = os.environ.get(JIUWEN_LOG_BACKUP_COUNT_KEY)
-ENV_MAX_BYTES = os.environ.get(JIUWEN_LOG_MAX_BYTES_KEY)
-# COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy.from_env()
-# (jiuwen/common/log/diagnostics.py)，不再在本模块读取环境变量。
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
@@ -84,22 +75,26 @@ DEFAULT_LOG_FORMAT = "%(asctime)s|%(log_type)s|%(trace_id)s|%(levelname)s|%(mess
 # 使用方式，在需要注入session_id的参数地方，使用：thread_local_data.trace_id = trace_id
 _thread_log_instance = threading.local()
 
-JIUWEN_LOG_MSG_MAX_LENGTH_KEY = "JIUWEN_LOG_MSG_MAX_LENGTH"
+LOG_MSG_MAX_LENGTH_KEY = "LOG_MSG_MAX_LENGTH"
 
-DEFAULT_MSG_MAX_LENGTH = 1000
+# console 单行日志的最大字符数（整行，含时间戳/ID 前缀）。默认 4000：
+# 归一化后 common.log 是唯一副本，1000 字符会砍掉模型请求体等排查必需内容；
+# 但也不能不设上限——长上下文请求会产出几十到几百 KB 的单行，超过下游
+# 日志平台（VictoriaLogs 的 -insert.maxLineSizeBytes）上限会被拒收。
+DEFAULT_LOG_MSG_MAX_LENGTH = 4000
 
 
 def get_msg_max_length() -> int:
-    """获取日志消息最大长度配置"""
+    """获取日志消息最大长度配置（仅对 console 输出生效）。"""
     try:
         max_length = int(
-            os.environ.get(JIUWEN_LOG_MSG_MAX_LENGTH_KEY, DEFAULT_MSG_MAX_LENGTH)
+            os.environ.get(LOG_MSG_MAX_LENGTH_KEY, DEFAULT_LOG_MSG_MAX_LENGTH)
         )
         if max_length <= 0:
-            return DEFAULT_MSG_MAX_LENGTH
+            return DEFAULT_LOG_MSG_MAX_LENGTH
         return max_length
     except (ValueError, TypeError):
-        return DEFAULT_MSG_MAX_LENGTH
+        return DEFAULT_LOG_MSG_MAX_LENGTH
 
 
 def replace_crlf(message):
@@ -212,6 +207,9 @@ def get_log_max_bytes(max_bytes_config):
 def get_list_from_env(env_var_name, default="[]"):
     """
     从环境变量中解析出list
+
+    刻意对空值/非法值快速失败：LOG_MASKED_ENABLED=true 却没给出任何脱敏规则
+    属于自相矛盾的配置，宁可启动期报错，也不让用户以为已经在脱敏。
     """
     env_var = os.getenv(env_var_name, default)
     try:
@@ -245,6 +243,27 @@ class SafeRotatingFileHandler(RotatingFileHandler):
         os.chmod(self.baseFilename, 0o640)
 
 
+def _ensure_log_dir(log_config, jiuwen_log_path: str) -> None:
+    """所有通道都不落文件时不预建日志目录。
+
+    默认配置（output / interface_output / performance_output 全为 console）下，
+    提前 makedirs 会在进程工作目录里凭空留下一个空的 logs/ 目录。真正写文件时
+    _get_logger 里仍会兜底创建。
+    """
+    outputs = (
+        log_config.get("output", CONSOLE) or CONSOLE,
+        log_config.get("interface_output", CONSOLE) or CONSOLE,
+        log_config.get("performance_output", CONSOLE) or CONSOLE,
+    )
+    if not any(FILE_OUTPUT in output for output in outputs):
+        return
+
+    log_dir = os.path.dirname(jiuwen_log_path)
+    if log_dir and not os.path.exists(log_dir):
+        # 日志文件目录权限为750
+        os.makedirs(log_dir, mode=0o750)
+
+
 class SingletonLogger:
     """
     logger Singleton.
@@ -269,12 +288,10 @@ class SingletonLogger:
         log_config = config["logging"]
         if log_config is None:
             return
-        jiuwen_log_path = os.environ.get(
-            JIUWEN_LOG_PATH_KEY, log_config.get("log_path")
-        )
-        if not os.path.exists(os.path.dirname(jiuwen_log_path)):
-            # 日志文件目录权限为750
-            os.makedirs(os.path.dirname(jiuwen_log_path), mode=0o750)
+        jiuwen_log_path = log_config.get("log_path")
+        # 仅当某个通道确实落文件时才预建日志目录：默认（全 console）配置下不应在
+        # 工作目录里凭空留下一个空的 logs/ 目录。真正写文件时 _get_logger 也会兜底创建。
+        _ensure_log_dir(log_config, jiuwen_log_path)
         log_file = os.path.join(jiuwen_log_path, log_config.get("log_file"))
         performance_log_file = os.path.join(
             jiuwen_log_path, log_config.get("performance_log_file")
@@ -336,16 +353,30 @@ class SingletonLogger:
         )
 
     @classmethod
+    def build_logger(cls, log_type, log_config, output, log_file):
+        """构造指定 log_type 的 logger（标准四类之外的扩展/测试入口）。"""
+        return cls._get_logger(log_type, log_config, output, log_file)
+
+    @classmethod
     def _get_logger(cls, log_type, log_config, output, log_file):
-        if log_type == "performance":
-            level = os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("performance_level", "WARNING"))
-        else:
-            level = os.environ.get(JIUWEN_LOG_LEVEL_KEY, log_config.get("level", "WARNING"))
-        max_bytes = (
-            get_log_max_bytes(ast.literal_eval(ENV_MAX_BYTES))
-            if ENV_MAX_BYTES
-            else get_log_max_bytes(log_config.get("max_bytes", CONFIG_LOG_MAX_BYTES))
-        )
+        # 统一日志级别：所有 legacy 日志器（含 performance）都跟随 LOG_LEVEL /
+        # logging.level，不再按 log_type 单独取 performance_level，避免同一进程内出现
+        # "全局 LOG_LEVEL=INFO 但性能埋点仍静默" 这类级别分叉。
+        # env 可能写成小写（debug），配置可能写出 null/数值；本处在模块导入期执行，
+        # 必须容错：先字符串化再转大写，非法级别名回退 WARNING（env 非法值在真实
+        # 进程里由 uvicorn 启动期 fail-fast 拦截，见 e2e-log-env-vars 矩阵 C9）。
+        # 空白值（K8s value: ' '）等价未设置，与 ServerSettings 空值归一口径一致：
+        # 回退 config 级别，而不是让 strip 后的空串走进白名单回退。
+        env_level = os.environ.get(LOG_LEVEL_KEY)
+        if env_level is not None and env_level.strip() == "":
+            env_level = None
+        raw_level = env_level or log_config.get("level") or "WARNING"
+        level = str(raw_level).strip().upper()
+        if level not in name_to_level:
+            level = "WARNING"
+        # 轮转参数只取 config.yaml（JIUWEN_LOG_MAX_BYTES / JIUWEN_LOG_BACKUP_COUNT
+        # 两个环境变量已删除：归一化后不再落文件，保留配置文件键以备改回 file 输出）
+        max_bytes = get_log_max_bytes(log_config.get("max_bytes", CONFIG_LOG_MAX_BYTES))
         if log_type == "common":
             log_format = log_config.get("format", COMMON_LOG_FORMAT)
         elif log_type == "performance":
@@ -404,16 +435,14 @@ class SingletonLogger:
             )
             common_logger.addHandler(stream_handler)
 
-        if "log" in output:
+        if FILE_OUTPUT in output:
             if not os.path.exists(os.path.dirname(log_file)):
                 # 日志文件目录权限为750
                 os.makedirs(os.path.dirname(log_file), mode=0o750)
             file_handler = SafeRotatingFileHandler(
                 filename=log_file,
                 maxBytes=max_bytes,
-                backupCount=ast.literal_eval(ENV_BACKUP_COUNT)
-                if ENV_BACKUP_COUNT
-                else log_config.get("backup_count", DEFAULT_BACKUP_COUNT),
+                backupCount=log_config.get("backup_count", DEFAULT_BACKUP_COUNT),
                 encoding="utf-8",
             )
             if TRACE_ID in log_format:
@@ -511,9 +540,13 @@ class MaskingFormatter(logging.Formatter):
             try:
                 self.pattern_regex = re.compile("|".join(f"({p})" for p in wrapped))
             except re.error as e:
-                import warnings
-                warnings.warn(f"Invalid LOG_MASKED_PATTERNS regex, masking disabled: {e}")
-                self.pattern_regex = None
+                # 与列表空值同口径 fail-fast（用户裁定 2026-11-18）：非法正则
+                # 静默关闭 pattern 脱敏，与"打开开关却没配规则"是同一类风险——
+                # 用户以为在脱敏。本构造发生在 install_log_formatter_patch /
+                # SingletonLogger 初始化（模块导入期），抛错即启动失败。
+                raise ValueError(
+                    f"Invalid regex in environment variable LOG_MASKED_PATTERNS: {e}"
+                ) from e
         else:
             self.pattern_regex = None
         self.truncate_for_console = truncate_for_console
@@ -553,8 +586,6 @@ class MaskingFormatter(logging.Formatter):
 
 
 class LogRouter:
-    # COM-08: LOG_VERBOSE 读取集中到 DiagnosticPolicy，不再在此读取环境变量。
-
     @staticmethod
     def route_log(original_method: Callable) -> Callable:
         """route log."""
@@ -564,18 +595,8 @@ class LogRouter:
             has_simple_log = "simple_log" in kwargs
             simple_log = kwargs.pop("simple_log", msg)
             # COM-08: always use safe (simple_log) as base message;
-            # exc_info 不再因 verbose=False 删除，始终到达底层 logger。
+            # exc_info 始终到达底层 logger。
             processed_msg = simple_log
-
-            # COM-08 §4.3条5: verbose 仅追加 allowlist 治理字段（opt-in）。
-            event = kwargs.pop("event", None)
-            verbose_fields = kwargs.pop("verbose_fields", None)
-            if event is not None and verbose_fields:
-                policy = get_default_policy()
-                if policy.verbose:
-                    extra = policy.build_verbose_fields(event, verbose_fields)
-                    if extra:
-                        processed_msg = f"{processed_msg} | {extra}"
 
             kwargs.setdefault("stacklevel", 2)
             if has_simple_log:

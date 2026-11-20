@@ -83,7 +83,7 @@ runtime → service（模型路由）   runtime → OBS 直连模型（默认）
 | 模型配置 | `MODEL_CONFIG_STRATEGY` | 默认 `obs` |
 | 外部模型网关 [选填] | `MODEL_ROUTER_API` | 默认不配置；仅接入独立外部模型网关时填写 `https://<model-gateway>/v1/agent-builder`，不得填写旧 `studio-service:31113`，也不得指向 builder 自身 |
 | 提示词任务持久化 [选填] | `STORE_DB_TYPE`（mysql/gaussdb）`STORE_DB_HOST` `STORE_DB_PORT` `STORE_DB_USER` `STORE_DB_PASSWORD` `STORE_DB_DATABASE`（默认 `agent-builder`）`STORE_DB_SCHEMA` `STORE_DB_SSLMODE` | 不填则仅存内存；与 runtime 共用同一套 `STORE_DB_*` 语义 |
-| 日志 | `JIUWEN_LOG_FILE` `JIUWEN_LOG_PATH` `JIUWEN_LOGGING_LOG_FILE` `LOGGING_LOG_PATH` `TGF_LOG_DIR` `LOG_VERBOSE` | 默认写到 `/opt/cloud/logs/` |
+| 日志 | `LOGGING_LOG_PATH` | 日志根目录：k8s 为 `/opt/cloud/logs/`，docker-compose 为 `/opt/cloud/logs/agent-builder`；文件名、轮转、输出方式与级别由 builder 内部固定，不支持环境变量覆盖 |
 
 > studio-builder 启动时会按需初始化提示词优化任务所需的存储表；`studio-manager` 负责主业务表。`STORE_DB_*` 未完整配置时，提示词任务存储不可按数据库持久化。
 

@@ -139,10 +139,9 @@ _DEFAULT = "default"
 _AGENT_ERROR_REPLY = "生成回复失败"
 _UTF_8 = "utf-8"
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
-# COM-08 §4.7B: 旧 SSE 出口的固定安全公开文案。不再读取 LOG_VERBOSE_MODE、
-# 不以 item.message / item.data.message 作为公开文案来源。
-# 错误码仍通过模板的 code 槽与 CODE 字段透传；message 槽固定为安全文案，
-# 两种 LOG_VERBOSE 配置下 wire 完全一致。
+# COM-08 §4.7B: 旧 SSE 出口的固定安全公开文案。不以 item.message /
+# item.data.message 作为公开文案来源；错误码仍通过模板的 code 槽与 CODE
+# 字段透传，message 槽固定为安全文案。
 _SAFE_PUBLIC_ERROR_MESSAGE = "系统内部错误，请参考错误码并联系系统管理员"
 
 item_code_to_conversation_event_type = {
@@ -686,13 +685,10 @@ async def _handle_error_response(item: JiuWenBaseException) -> bytes:
         }
     ).model_dump_json(by_alias=True, exclude_none=True)
     # COM-08 §4.7B: 不再把原始 item.message 直接写入普通 ERROR 日志；
-    # 最终责任边界记录固定基础事件 + exc_info（traceback 两种配置都保留），
-    # verbose 时只追加 allowlist 治理字段（error_code），不新增第二条 ERROR。
+    # 最终责任边界记录固定基础事件 + exc_info（traceback 始终保留）。
     logger.error(
         "workflow execution failed",
         exc_info=item,
-        event="workflow.execute",
-        verbose_fields={"error_code": item.error_code},
     )
     err_resp = f"data: {error_response_str}\n\n".encode(_UTF_8)
     return err_resp
@@ -1059,7 +1055,7 @@ async def _process_streaming_output(
         if item.code == StreamCode.ERROR.value:
             code_of_data = item.data.get("code") or item.code
             # COM-08 §4.7B 条3: 不以 item.data.get("message") 作为公开文案来源；
-            # 固定安全文案，两种 LOG_VERBOSE 配置 wire 一致。
+            # 固定安全文案。
             item.data.update(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(

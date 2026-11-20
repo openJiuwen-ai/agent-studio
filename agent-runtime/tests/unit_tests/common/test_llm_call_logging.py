@@ -18,7 +18,7 @@ def _reset_registration(monkeypatch):
     reset_registration_state()
     # 默认开启 model-call 日志开关并设 DEBUG 级别，让详情注册生效
     monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
-    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     yield
     # 清理：移除测试中注册的回调
     fw = get_callback_framework()
@@ -46,13 +46,13 @@ def test_register_adds_callbacks():
 
 
 def test_register_at_info_level(monkeypatch):
-    """验证开关开启 + WORKFLOW_LOG_LEVEL=INFO 时注册详情回调"""
+    """验证开关开启 + LOG_LEVEL=INFO 时注册详情回调"""
     from agent_runtime.common.llm_call_logging import (
         register_llm_call_logging_callbacks, reset_registration_state,
     )
 
     monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
-    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
     reset_registration_state()
 
     register_llm_call_logging_callbacks()
@@ -70,7 +70,7 @@ def test_register_skipped_when_warning_level(monkeypatch):
     )
 
     monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
-    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "WARNING")
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
     reset_registration_state()
 
     register_llm_call_logging_callbacks()
@@ -95,7 +95,7 @@ def test_register_skipped_when_disabled(monkeypatch):
 
     # 不设 MODEL_CALL_LOGGING_ENABLED，取默认 false；级别设 DEBUG 也无济于事
     monkeypatch.delenv("MODEL_CALL_LOGGING_ENABLED", raising=False)
-    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     reset_registration_state()
 
     register_llm_call_logging_callbacks()

@@ -7,7 +7,7 @@ import threading
 from typing import Dict, Any, List
 
 from jiuwen.common.configs.base import config
-from jiuwen.common.configs.env_constants import JIUWEN_PERF_LOG_LEVEL_KEY
+from jiuwen.common.configs.env_constants import LOG_LEVEL_KEY
 from jiuwen.common.log.base import performance_logger, get_thread_session
 
 TOTAL_LOG_TAG = "total"
@@ -34,12 +34,19 @@ class PerformanceLogBuffer:
         self._perf_records: Dict[str, PerformanceLogBuffer.Records] = dict()
         self._lock = threading.Lock()
         log_config = config.get("logging", {})
-        perf_log_level = logging.getLevelName(
-            os.environ.get(JIUWEN_PERF_LOG_LEVEL_KEY, log_config.get("level", "INFO"))
-        )
+        # 统一级别：与 agent-core / uvicorn 共用 LOG_LEVEL。取值先字符串化再转大写，
+        # 保留 getLevelName 对非法值返回字符串、随后回退 INFO 的容错——配置写出
+        # null/数值或非法级别名时不再在导入期抛 AttributeError。
+        raw_level = os.environ.get(LOG_LEVEL_KEY) or log_config.get("level") or "INFO"
+        perf_log_level = logging.getLevelName(str(raw_level).strip().upper())
         if not isinstance(perf_log_level, int):
             perf_log_level = logging.INFO
         self._log_level: int = perf_log_level
+
+    @property
+    def log_level(self) -> int:
+        """当前性能埋点生效级别（只读，诊断/测试用）。"""
+        return self._log_level
 
     def init(self, uid: str, extra: List[str] = None):
         """create perf record queue"""

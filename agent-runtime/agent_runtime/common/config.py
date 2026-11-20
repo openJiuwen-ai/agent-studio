@@ -32,14 +32,6 @@ class ServerSettings(BaseSettings):
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
     # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
     performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
-    # 性能日志级别，默认 WARNING (静默)；设为 INFO 才真正打印 perf 指标
-    performance_log_level: str = Field(default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL")
-
-    @field_validator("performance_log_level", mode="before")
-    @classmethod
-    def _perf_level_default(cls, v):
-        """空字符串按默认 WARNING 处理。"""
-        return v or "WARNING"
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -71,6 +63,18 @@ class ServerSettings(BaseSettings):
         """兼容已有配置中的空字符串，并按默认值 1 处理。"""
         if v == "":
             return 1
+        return v
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _empty_log_level_to_info(cls, v):
+        """K8s YAML 中空字符串 value: '' 应回退为默认级别 INFO。
+
+        LOG_LEVEL 是进程内唯一的日志级别开关（uvicorn + agent-core + legacy 共用），
+        空值若不归一，openjiuwen 的级别解析会失败并静默回退，排障时难以察觉。
+        """
+        if v is None or str(v).strip() == "":
+            return "INFO"
         return v
 
     @field_validator("workers")
@@ -196,30 +200,13 @@ class SecuritySandboxSettings(BaseSettings):
     )
 
 
-class WorkflowLogSettings(BaseSettings):
-    """Workflow logger configuration."""
-
-    level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
-    graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
-    llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
-    # 性能埋点级别（workflow_cache|hit/miss、ir_convert|、agent_group_stream| 等）。
-    # 缺省 WARNING 保持静默；排查性能问题时设为 INFO 打开埋点。
-    performance_level: str = Field(
-        default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL"
-    )
-
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-
-
 class LlmCallLoggingSettings(BaseSettings):
     """Model call logging configuration.
 
     Controls whether the model-call detail callbacks (request/response/usage/
     latency/tool_calls) are registered. Error callback is always registered
     regardless of this switch. Defaults to off; set MODEL_CALL_LOGGING_ENABLED=true
-    to enable detail logging (still subject to the WORKFLOW_LOG_LEVEL <= INFO gate).
+    to enable detail logging (still subject to the LOG_LEVEL <= INFO gate).
     """
 
     enabled: bool = Field(default=False, validation_alias="MODEL_CALL_LOGGING_ENABLED")
@@ -536,7 +523,6 @@ class Settings:
     object_storage = ObjectStorageSettings()
     health_check = HealthCheckSettings()
     security_sandbox = SecuritySandboxSettings()
-    workflow_log = WorkflowLogSettings()
     llm_call_logging = LlmCallLoggingSettings()
     cache = CacheSettings()
     skill_storage = SkillStorageSettings()

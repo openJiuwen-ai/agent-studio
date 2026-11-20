@@ -77,7 +77,7 @@ class TestServerLifespanLocalSysOp:
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -123,7 +123,7 @@ class TestServerLifespanLocalSysOp:
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -177,7 +177,7 @@ class TestServerLifespanSandboxSysOp:
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -235,7 +235,7 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.scope = "system"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
         mock_settings.security_sandbox.timeout_seconds = 300
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -289,7 +289,7 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.scope = "session"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
         mock_settings.security_sandbox.timeout_seconds = 300
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -348,7 +348,7 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.scope = "system"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
         mock_settings.security_sandbox.timeout_seconds = 300
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -397,7 +397,7 @@ class TestServerLifespanCancelSubscriber:
         mock_resource_mgr.get_sys_operation.return_value = MagicMock()
         mock_settings = MagicMock()
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
         mock_settings.server.docs_enabled = False  # 阻断 openapi 归档（mock app 无法 dump，60022377 引入该调用）
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
@@ -479,7 +479,7 @@ class TestServerLifespanS3Init:
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -531,7 +531,7 @@ class TestServerLifespanS3Init:
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
+        mock_settings.server.log_level = "INFO"
 
         # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
         # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
@@ -573,14 +573,14 @@ class TestServerLifespanS3Init:
 
 
 class TestServerLifespanLogLevels:
-    """日志级别由 settings 驱动，不再硬编码。
+    """日志配置由 settings 驱动：单一全局级别 + 仅 console 输出。
 
-    performance 原先硬编码 WARNING，导致 performance_logger.info 的性能埋点
-    （workflow_cache|hit/miss 等）无法通过配置打开。
+    common.log 是进程内唯一的日志文件（console handler -> stdout -> shell 重定向），
+    因此不再下发 loggers 覆盖，也不再有 per-namespace 文件。
     """
 
     @staticmethod
-    def _run_lifespan_capturing_log_config(performance_level):
+    def _run_lifespan_capturing_log_config(level):
         """跑一遍 lifespan，返回传给 configure_log_config 的配置字典。"""
         from agent_runtime.serve.server import lifespan
         from fastapi import FastAPI
@@ -592,13 +592,8 @@ class TestServerLifespanLogLevels:
 
         mock_settings = MagicMock()
         mock_settings.server.docs_enabled = False
+        mock_settings.server.log_level = level
         mock_settings.security_sandbox.server = ""
-        mock_settings.workflow_log.level = "INFO"
-        mock_settings.workflow_log.graph_level = "WARNING"
-        mock_settings.workflow_log.llm_level = "WARNING"
-        # 主线实现读 settings.server.performance_log_level（PR 版的
-        # workflow_log.performance_level 键已随 server.py 冲突取主线而废弃）
-        mock_settings.server.performance_log_level = performance_level
 
         mock_redis_client = AsyncMock()
         mock_redis_client.ping = AsyncMock(return_value=True)
@@ -636,17 +631,25 @@ class TestServerLifespanLogLevels:
             return mock_log_config.call_args[0][0]
 
     @staticmethod
-    def test_performance_level_comes_from_settings():
-        config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("INFO")
-        assert config["loggers"]["performance"]["level"] == "INFO"
-
-    @staticmethod
-    def test_performance_level_defaults_silent():
+    def test_global_level_comes_from_settings():
         config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("WARNING")
-        assert config["loggers"]["performance"]["level"] == "WARNING"
+        assert config["level"] == "WARNING"
 
     @staticmethod
     def test_level_is_upper_cased():
         """env 里写小写也应归一，避免 openjiuwen 级别解析失败回退默认值。"""
-        config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("info")
-        assert config["loggers"]["performance"]["level"] == "INFO"
+        config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("debug")
+        assert config["level"] == "DEBUG"
+
+    @staticmethod
+    def test_outputs_are_console_only():
+        """三个输出位都只留 console —— 保证 common.log 是唯一日志文件。"""
+        config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("INFO")
+        assert config["output"] == ["console"]
+        assert config["interface_output"] == ["console"]
+        assert config["performance_output"] == ["console"]
+
+    @staticmethod
+    def test_no_per_logger_level_overrides():
+        config = TestServerLifespanLogLevels._run_lifespan_capturing_log_config("INFO")
+        assert not config.get("loggers")

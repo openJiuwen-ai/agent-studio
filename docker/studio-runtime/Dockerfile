@@ -61,10 +61,6 @@ RUN mkdir -p $SERVICE_HOME/bin \
     && mkdir -p /opt/cloud/logs \
     && mkdir -p /opt/cloud/tool \
     && mkdir -p /opt/tmp/agent \
-    && mkdir -p /opt/cloud/logs/agent-runtime/run \
-    && touch /opt/cloud/logs/agent-runtime/run/agent-runtime.pid \
-    && touch /opt/cloud/logs/agent-runtime/run/agent-runtime_access.log \
-    && touch /opt/cloud/logs/agent-runtime/run/agent-runtime_debug.log \
     && chmod 750 -R /opt/cloud/logs $SERVICE_HOME/tls/ \
     && chmod u+w ${PACKAGES_HOME} \
     && chown -R service:service ${PACKAGES_HOME} \
