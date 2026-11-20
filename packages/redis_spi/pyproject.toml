@@ -1,0 +1,16 @@
+[project]
+name = "redis-spi"
+version = "0.1.0"
+description = "Redis 适配层 SPI：能力协议、契约类型、异常体系、Provider 工厂与注册表（零 redis-py 依赖）"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["redis_spi*"]

@@ -21,6 +21,15 @@ for _dir in reversed(_SOURCE_DIRS):
 import pytest  # noqa: E402
 
 
+def _reset_redis_provider():
+    """复位 Redis Provider 适配层单例（未安装适配层包的环境为 no-op）。"""
+    try:
+        from redis_spi import accessor
+    except ImportError:
+        return
+    accessor.reset()
+
+
 @pytest.fixture
 def env_cleanup():
     """保存/恢复 os.environ，防止测试间环境变量互相污染。"""
@@ -39,8 +48,10 @@ def reset_common_utils_state():
 
     customer_header.set_config(None)
     redis_manager.RedisClientManager.reset()
+    _reset_redis_provider()
     CryptTool.set_default(PlainCrypt.NAME)
     yield
     customer_header.set_config(None)
     redis_manager.RedisClientManager.reset()
+    _reset_redis_provider()
     CryptTool.set_default(PlainCrypt.NAME)

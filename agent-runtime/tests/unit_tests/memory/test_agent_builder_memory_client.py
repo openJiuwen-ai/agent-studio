@@ -57,6 +57,11 @@ def _pkg_stub(name):
 
 # Parents: package-like stubs (real __path__). Guarded so we don't clobber a
 # real package already imported earlier in the session.
+# NOTE: store 不 stub（两个清单都不进）——其 __init__ 是纯 re-export
+# （BaseKVStore 等三行），真加载既满足本文件对 store 的使用，也满足
+# 同会话后续测试（test_kv_store_redis_impl 等）对 store 子模块的真
+# import；此前把它当 MagicMock leaf 会以 "store is not a package"
+# 破坏后续收集。
 for _mod in (
     "jiuwen.context",
     "jiuwen.context.memory_engine",
@@ -73,7 +78,6 @@ for _mod in (
     "jiuwen.context.memory_engine.client.local_memory_client",
     "jiuwen.context.memory_engine.config.config",
     "jiuwen.context.memory_engine.engine.memory_engine",
-    "jiuwen.context.memory_engine.store",
     "memory",
     "memory.kv_store_redis_impl",
 ):

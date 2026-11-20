@@ -5,9 +5,10 @@ import os
 import threading
 from abc import ABC, abstractmethod
 
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
+
 from jiuwen.common.configs.env_constants import EXECUTION_STATE_TTL_SECONDS_KEY
-from jiuwen.common.store.redis import get_redis_instance
 
 # Agent 状态 Redis key 默认过期时间（秒），默认 24h。
 # 正常结束会 delete_state 删除；此处 TTL 兜底异常/中断残留的 key，
@@ -77,25 +78,6 @@ class MemoryStateStorage(StateStorage):
             self._state_dict[k] = v
 
 
-class RedisStateStorage(StateStorage):
-    """Agent状态Redis存储"""
-
-    def __init__(self):
-        self.redis_client = get_redis_instance()
-
-    def delete_state(self, k):
-        """从Redis中删除某个状态"""
-        self.redis_client.delete(key=k)
-
-    def get_state(self, k):
-        """从Redis中获取状态"""
-        return self.redis_client.get(key=k)
-
-    def set_state(self, k, v):
-        """往Redis中设置状态"""
-        self.redis_client.set(key=k, value=v, ex=_STATE_TTL_SECONDS)
-
-
 class AsyncMemoryStateStorage(AsyncStateStorage):
     """Agent状态内存存储异步封装"""
 
@@ -124,10 +106,10 @@ class AsyncRedisStateStorage(AsyncStateStorage):
     """Agent状态异步Redis存储"""
 
     def __init__(self):
-        self.redis_client = get_redis_client()
+        self.redis_client = accessor.get_redis()
 
     async def init(self):
-        """No-op: get_redis_client() 返回已初始化的 redis.asyncio.Redis 实例，无需再 init"""
+        """No-op: accessor.get_redis() 返回已装配的 SPI 客户端，无需再 init"""
         pass
 
     async def delete_state(self, k):
@@ -140,4 +122,4 @@ class AsyncRedisStateStorage(AsyncStateStorage):
 
     async def set_state(self, k, v):
         """往Redis中设置状态"""
-        await self.redis_client.set(k, v, ex=_STATE_TTL_SECONDS)
+        await self.redis_client.set(k, v, duration=Duration.seconds(_STATE_TTL_SECONDS))

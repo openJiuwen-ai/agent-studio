@@ -19,12 +19,12 @@ from jiuwen.common.llm_service.base import ModelFactory
 from jiuwen.common.llm_service.language_model.base import LanguageModelInput
 from jiuwen.common.llm_service.model_util import ModelUtil
 from jiuwen.common.log.base import logger
-from jiuwen.common.store.async_redis import get_async_redis_instance
 from jiuwen.common.utils.utils import safe_json_loads
 from jiuwen.controller.common.constants import IntentionDetectConstants
 from jiuwen.planner.common.stream_post_utils import convert_ai_message_to_llm_output
 from jiuwen.prompt import Prompt
 from jiuwen.prompt import Template, TemplateManager
+from redis_spi import accessor
 
 DECODE_TYPE = "utf-8"
 DEFAULT_CLASS = "分类1"
@@ -56,7 +56,6 @@ class LLMMatcher(BaseMatcher):
     """
 
     name = "llm"
-    redis_instance = None
 
     def __init__(self, config: LLMMatcherConfig):
         """
@@ -70,10 +69,10 @@ class LLMMatcher(BaseMatcher):
         self.llm_config = config.llm_config
 
         self.llm = self._get_llm_instance()
-        # 懒加载 Redis 客户端（只在首次创建 LLMMatcher 时初始化）
-        if LLMMatcher.redis_instance is None:
-            LLMMatcher.redis_instance = get_async_redis_instance()
-        self.redis_client = LLMMatcher.redis_instance
+        # Redis 经 redis_spi accessor（server lifespan 装配）。迁移自 jiuwen 老
+        # store（DATASOURCE_REDIS_* 独立配置面，未配置环境必失败）；accessor 单例
+        # 即连接复用，无需类级缓存。
+        self.redis_client = accessor.get_redis()
         self.llm_retrival_config = self._get_llm_retrival_config()
 
         self.category_2_intent_map: Dict[str, str] = {}
@@ -160,9 +159,8 @@ class LLMMatcher(BaseMatcher):
             意图及对应的示例
         """
         try:
-            redis_client = self.redis_client.get_redis_client()
-            raw_examples = await redis_client.hmget(
-                self.llm_retrival_config.example_key, *intent_ids
+            raw_examples = await self.redis_client.hmget(
+                self.llm_retrival_config.example_key, intent_ids
             )
             n_per_intent = self.llm_retrival_config.example_per_intent
             filtered_examples = {}
@@ -208,9 +206,8 @@ class LLMMatcher(BaseMatcher):
             意图及对应的描述
         """
         try:
-            redis_client = self.redis_client.get_redis_client()
-            raw_descriptions = await redis_client.hmget(
-                self.llm_retrival_config.description_key, *intent_ids
+            raw_descriptions = await self.redis_client.hmget(
+                self.llm_retrival_config.description_key, intent_ids
             )
             descriptions = {}
 

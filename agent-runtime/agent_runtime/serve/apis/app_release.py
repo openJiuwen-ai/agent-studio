@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi.responses import JSONResponse
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import BaseModel, Field, ConfigDict
+from redis_spi import accessor
 
 # Redis key 格式：release_web_rel_{short_code}
 _RELEASE_WEB_REL_KEY = "release_web_rel_%s"
@@ -75,10 +76,8 @@ class AppRelease:
             ReleaseInfo 实例；查询失败时返回 JSONResponse 错误响应。
 
         """
-        from common_utils.redis_manager import get_redis_client
-
         release_key = _RELEASE_WEB_REL_KEY % short_code
-        redis_client = get_redis_client()
+        redis_client = accessor.get_redis()
 
         try:
             raw = await redis_client.get(release_key)

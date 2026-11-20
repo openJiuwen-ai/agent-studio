@@ -21,6 +21,16 @@
         <module>studio-manager-service</module>
     </modules>
 
+    <profiles>
+        <!-- 示例工程（demo Provider 等）：默认 reactor 不含，-Pexamples 显式启用，不进产品 artifact 与镜像 -->
+        <profile>
+            <id>examples</id>
+            <modules>
+                <module>examples/redis-demo-provider</module>
+            </modules>
+        </profile>
+    </profiles>
+
     <properties>
         <jdk.version>17</jdk.version>
         <obs.version>3.23.9</obs.version>
