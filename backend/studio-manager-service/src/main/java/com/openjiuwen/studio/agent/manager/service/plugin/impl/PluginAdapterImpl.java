@@ -356,18 +356,57 @@ public class PluginAdapterImpl implements IPlugin {
     @Override
     public ToolEntity getToolEntity(String id, String projectId, String opProjectId, String versionId) {
         ToolEntity toolEntity;
-        if (StringUtils.isNotEmpty(versionId)) {
+        // 资产广场上架插件（platform_published=1）版本锚定（#1735）：消费侧（引用/运行/导入/校验/搜索）
+        // 一律按上架锚定的 plaza_version_id 解析，忽略调用方传入的 versionId（可能是最新版 last_version_id，
+        // 也可能为空）。避免"上架锚定 v2、发 v3 后消费侧漂移到 v3"。
+        // 非广场插件或锚定版本缺失时保持原逻辑（versionId 非空按 versionId，空走最新版）。
+        String[] ids = id.split("#");
+        String pluginId = ids[0];
+        String plazaAnchorVersionId = resolvePlazaAnchorVersionId(pluginId);
+        if (StringUtils.isNotEmpty(plazaAnchorVersionId)) {
+            toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
+            toolEntity.setVersionId(plazaAnchorVersionId);
+        } else if (StringUtils.isNotEmpty(versionId)) {
             toolEntity = pluginBase.getToolEntityByVersion(id, versionId);
             toolEntity.setVersionId(versionId);
         } else {
-            String[] ids = id.split("#");
-            String pluginId = ids[0]; // 获取 pluginId
             // 确保 toolId 存在
             String toolId = ids.length > 1 ? ids[1] : "0"; // 如果存在 toolId, 否则为 null
             toolEntity = pluginBase.buildToolByPlugin(projectId, null, pluginId, toolId);
         }
 
         return toolEntity;
+    }
+
+    /**
+     * 解析资产广场上架锚定版本ID（#1735）。
+     * 仅当插件已上架到资产广场（platform_published=1）且锚定版本非空时返回 plaza_version_id；
+     * 否则返回 null（调用方走原版本解析逻辑）。
+     * 锚定字段缺失（上架后 plaza_version_id 异常为空）时降级返回 null 并 warn 记日志，不阻断主流程。
+     */
+    private String resolvePlazaAnchorVersionId(String pluginId) {
+        if (StringUtils.isEmpty(pluginId)) {
+            return null;
+        }
+        try {
+            PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, null);
+            if (pluginEntity == null) {
+                return null;
+            }
+            boolean plazaPublished = pluginEntity.getPlatformPublished() != null
+                && pluginEntity.getPlatformPublished() == 1;
+            if (!plazaPublished) {
+                return null;
+            }
+            if (StringUtils.isBlank(pluginEntity.getPlazaVersionId())) {
+                log.warn("Plaza published plugin has no anchor version, fallback to default. pluginId: {}", pluginId);
+                return null;
+            }
+            return pluginEntity.getPlazaVersionId();
+        } catch (Exception e) {
+            log.warn("Failed to resolve plaza anchor version, fallback to default. pluginId: {}", pluginId, e);
+            return null;
+        }
     }
 
     @Override

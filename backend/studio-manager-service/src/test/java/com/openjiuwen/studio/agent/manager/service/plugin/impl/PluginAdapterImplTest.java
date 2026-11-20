@@ -258,4 +258,102 @@ class PluginAdapterImplTest {
 
         assertTrue(result.isEmpty());
     }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchoredByVersionIgnoringPassedVersionId() {
+        // 资产广场上架插件（platform_published=1, plaza_version_id=v2）：
+        // 即使调用方传入最新版 versionId=v3，也应锚定到 plaza_version_id=v2（#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPlazaVersionId("v2");
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        expected.setVersionId("v2");
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v2", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).getToolEntityByVersion(eq("plugin-1#t1"), eq("v3"));
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchoredWhenVersionIdNull() {
+        // 资产广场上架插件，versionId 为空（单智能体引用路径）也应锚定 plaza_version_id（#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPlazaVersionId("v2");
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null);
+
+        assertNotNull(result);
+        assertEquals("v2", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_NotPlazaPublished_KeepsVersionIdBranch() {
+        // 非广场插件：传入 versionId 非空，走 getToolEntityByVersion（原逻辑不变）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v3")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v3", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v3");
+    }
+
+    @Test
+    void testGetToolEntity_NotPlazaPublished_VersionIdNull_FallsBackToBuildToolByPlugin() {
+        // 非广场插件：versionId 空，走 buildToolByPlugin（原逻辑不变）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        when(pluginBase.buildToolByPlugin("proj-1", null, "plugin-1", "t1")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null);
+
+        assertNotNull(result);
+        verify(pluginBase).buildToolByPlugin("proj-1", null, "plugin-1", "t1");
+        verify(pluginBase, never()).getToolEntityByVersion(anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchorVersionBlank_FallsBackToVersionId() {
+        // 广场上架但锚定版本异常缺失：降级走原 versionId 分支并 warn（fail-open 降级，#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPlazaVersionId(null);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v3")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v3", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v3");
+    }
 }
