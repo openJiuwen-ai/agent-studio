@@ -165,7 +165,8 @@ public class ExtJdbcUrlDatabaseIdProvider implements DatabaseIdProvider {
 
 > **SQL Server 分页注意（2012+，含 Azure SQL Edge）**：`OFFSET/FETCH` **必须**跟在 `ORDER BY` 后面。产品里大量存在性查询是裸 `LIMIT 1`（无 `ORDER BY`），不能一律改成 `OFFSET 0 FETCH`。规则：  
 > - 已有 `ORDER BY` → `OFFSET … FETCH …`  
-> - 仅 `LIMIT n`、无排序 → 改成 `SELECT TOP (n) …`（插在第一个 `SELECT`/`SELECT DISTINCT` 后）  
+> - 仅字面量 `LIMIT n`、无排序 → 改成 `SELECT TOP (n) …`（插在第一个 `SELECT`/`SELECT DISTINCT` 后）  
+> - 仅参数化 `LIMIT ?`、无排序 → **不要**改成 `TOP (?)`（`?` 会挪到语句头，前置条件参数会绑错）；改成 `ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY`，占位符留在末尾  
 > - `LIMIT … OFFSET …` 或 `LIMIT offset,count` 且无排序 → 先补 `ORDER BY (SELECT NULL)` 再 `OFFSET/FETCH`（任意行语义，与 MySQL 无序 LIMIT 接近）  
 >
 > **时间函数 / 时区策略**：产品默认 `spring.jackson.time-zone: GMT+8`。MySQL `NOW()` 一般跟**会话/库时区**的墙上时间走。文档示例把 `NOW()` 改成 **`SYSDATETIME()`**（SQL Server 实例本地时间），请把目标库时区（或容器 `TZ`）配成与应用一致的 **GMT+8**，避免创建/更新时间静默偏移。若你坚持库内存 UTC，可改用 `SYSUTCDATETIME()`，但须同步把 Jackson/业务展示也按 UTC 理解，并改外部 Mapper 里的时间函数。`FROM_UNIXTIME`/`DATEADD` 针对的是 **Unix 纪元秒**（UTC 起点），与「`NOW` 用本地还是 UTC」是另一件事，不要混改。  
@@ -323,8 +324,9 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         s = s.replaceAll("(?i)=\\s*true\\b", "= 1");
         s = s.replaceAll("(?i)=\\s*false\\b", "= 0");
 
-        // OFFSET/FETCH 需 ORDER BY（SQL Server 2012+）。无排序时：LIMIT n → TOP；带 offset 则补 ORDER BY (SELECT NULL)。
-        // 参数化 limit ? offset ? → OFFSET ? FETCH ? 后还须 swapLimitOffsetParameterOrder。
+        // OFFSET/FETCH 需 ORDER BY（SQL Server 2012+）。
+        // 无排序：字面量 LIMIT n → TOP；参数化 LIMIT ? → 尾部 OFFSET 0 FETCH（勿 TOP(?)，否则 ? 前移绑错）；
+        // 带 offset 则补 ORDER BY (SELECT NULL)。参数化 limit ? offset ? → OFFSET ? FETCH ? 后还须 swapLimitOffsetParameterOrder。
         Matcher m = LIMIT_OFFSET.matcher(s);
         if (m.find()) {
             String tail = hasOrderBy(s)
@@ -342,10 +344,15 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         }
         m = LIMIT_ONLY.matcher(s);
         if (m.find()) {
-            if (hasOrderBy(s)) {
+            String n = m.group(1);
+            if ("?".equals(n)) {
+                // 参数化裸 LIMIT ?：占位符必须留在末尾；injectTop 会把 ? 挪到 SELECT 头
+                s = m.replaceAll(hasOrderBy(s)
+                    ? "OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY"
+                    : "ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY");
+            } else if (hasOrderBy(s)) {
                 s = m.replaceAll("OFFSET 0 ROWS FETCH NEXT $1 ROWS ONLY");
             } else {
-                String n = m.group(1);
                 s = injectTop(m.replaceFirst(""), n);
             }
         }
@@ -361,7 +368,7 @@ public class VendorSqlRewriteInterceptor implements Interceptor {
         return ORDER_BY.matcher(sql).find();
     }
 
-    /** 在第一个 SELECT / SELECT DISTINCT 后插入 TOP (n)；适用于无 ORDER BY 的裸 LIMIT。 */
+    /** 在第一个 SELECT / SELECT DISTINCT 后插入 TOP (n)；仅用于无 ORDER BY 的**字面量**裸 LIMIT（勿对 ? 调用）。 */
     static String injectTop(String sql, String n) {
         Matcher sel = SELECT_HEAD.matcher(sql);
         if (!sel.find()) {
@@ -627,9 +634,15 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
       ) AS v(id, evaluation_task_id, prompt_id, test_num,
              generate_result, eval_result, eval_failed_reason, workspace_id)
     ) AS source
-    ON (target.id = source.id)
+    <!-- 与表 UNIQUE (evaluation_task_id, prompt_id, test_num) 对齐；勿按 id 匹配。
+         调用方重试会 new UUID（EvaluationPromptHandler），三元组不变、id 变；
+         按 id 会走 NOT MATCHED 再插，随后唯一键冲突。MySQL ODKU 亦会 id=VALUES(id)。 -->
+    ON (target.evaluation_task_id = source.evaluation_task_id
+        AND target.prompt_id = source.prompt_id
+        AND target.test_num = source.test_num)
     WHEN MATCHED THEN
-      UPDATE SET generate_result = source.generate_result,
+      UPDATE SET id = source.id,
+                 generate_result = source.generate_result,
                  eval_result = source.eval_result,
                  eval_failed_reason = source.eval_failed_reason
     WHEN NOT MATCHED THEN
@@ -643,6 +656,8 @@ Interceptor 改不了或不适合改的语句（典型：`FROM_UNIXTIME`、整�
 ```
 
 > SQL Server 的 `MERGE` 建议以分号结尾。升级产品后请再搜一遍 `(?i)on duplicate key update`，以及 `in ("…")` / `= "…"` 这类双引号字面量；若新增语句须同样补外部 Mapper。  
+>
+> **冲突键**：`t_pe_evaluation_result` 的真实唯一键是 `(evaluation_task_id, prompt_id, test_num)`，不是 `id`。`MERGE … ON` 必须与此一致，且 `UPDATE` 要写 `id = source.id`（对齐内置 `id = VALUES(id)`）。  
 >
 > **批量上限**：`USING (VALUES …)` 单语句最多 **1000** 行（错误 10738）。产品 `batchInsertEvalResult` 调用方未分批；提示词/结果很多时，请在业务侧分批调用、改为临时表+`MERGE`，或在外部 Mapper 文档中写明「单次 ≤1000，超出必失败」。  
 >
@@ -1058,11 +1073,12 @@ curl -sk -X POST -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' \
 | `Invalid column name 'pending'`（或 `running` / `pausing` / `retrying`） | 内置 `queryByTaskIdAndStatus` 用了双引号字符串；SQL Server 当标识符。补 `PeEvaluationTaskMapperSqlServer.xml` 中 `databaseId="sqlserver"` 且改为单引号的同 id 语句（步骤 3.6）；**不要**在 Interceptor 全局改双引号 |
 | 可空 `deleted` 行丢失 | 勿用 `<> 1` 替代 `IS NOT true`；确认 `ISNULL(col,0)<>1` 或外部 Mapper 的 `(col IS NULL OR col=0)` |
 | 评估批量 MERGE 报 10738 | VALUES 单批 >1000；业务分批或改临时表方案 |
+| 评估批量 MERGE 唯一键冲突（三元组已存在） | `ON` 是否误用 `target.id = source.id`？应匹配 `(evaluation_task_id, prompt_id, test_num)`，且 `UPDATE` 含 `id = source.id`（步骤 3.6） |
 | `` Incorrect syntax near '`' `` | 补反引号改写 |
 | `UUID()` 相关失败 | 确认 `UUID()`→目标库函数已写入 `rewrite()` |
 | `FETCH NEXT 0` | 确认 `clampZeroFetch` 生效 |
-| `Incorrect syntax near 'OFFSET'`（无 ORDER BY） | 裸 `LIMIT n` 须走 `TOP (n)`，带 offset 须补 `ORDER BY`；勿一律改成 `OFFSET 0 FETCH` |
-| 分页 limit/offset 行数错乱或像互换 | 参数化 `limit ? offset ?` 改写后是否调用了 `swapLimitOffsetParameterOrder` |
+| `Incorrect syntax near 'OFFSET'`（无 ORDER BY） | 字面量裸 `LIMIT n` 可走 `TOP (n)`；带 offset 或参数化裸 `LIMIT ?` 须补 `ORDER BY`（后者用 `ORDER BY (SELECT NULL) OFFSET 0 FETCH NEXT ?`） |
+| 分页 limit/offset 行数错乱或像互换 | 参数化 `limit ? offset ?` 改写后是否调用了 `swapLimitOffsetParameterOrder`；参数化裸 `LIMIT ?` 勿改成 `TOP (?)` |
 | 401 且 TOKEN 为空 | `TOKEN='testUser|0'` 必须加引号，否则 `|` 被 shell 当成管道 |
 | `FROM_UNIXTIME` / 日期函数报错 | Interceptor 一般不改；补带 `databaseId` 的外部 Mapper（步骤 3.6）并用 `DATEADD`；确认 `ext-mapper` 已进 `mapper-locations` 且在内置前 |
 | `ON DUPLICATE KEY UPDATE` 语法错 | 补齐两处外部 MERGE：`insertRating` 与 `batchInsertEvalResult`；确认 Provider 返回 `sqlserver` |
