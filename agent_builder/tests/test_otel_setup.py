@@ -33,7 +33,11 @@ def _fake_otel(**overrides):
 
 def test_setup_disabled_is_noop(monkeypatch):
     tracer_otel_mod.reset_otel_tracer_for_tests()
-    monkeypatch.setattr(tracer_otel_mod, "_otel_settings", lambda: _fake_otel(enabled=False))
+
+    def _disabled_otel():
+        return _fake_otel(enabled=False)
+
+    monkeypatch.setattr(tracer_otel_mod, "_otel_settings", _disabled_otel)
     tracer_otel_mod.setup_otel_tracer()
     assert tracer_otel_mod.is_otel_tracer_initialized() is False
 
@@ -44,11 +48,11 @@ def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
     from types import ModuleType
 
     tracer_otel_mod.reset_otel_tracer_for_tests()
-    monkeypatch.setattr(
-        tracer_otel_mod,
-        "_otel_settings",
-        lambda: _fake_otel(enabled=True, service_name="agent-builder"),
-    )
+
+    def _enabled_otel():
+        return _fake_otel(enabled=True, service_name="agent-builder")
+
+    monkeypatch.setattr(tracer_otel_mod, "_otel_settings", _enabled_otel)
 
     created = []
 
@@ -73,15 +77,15 @@ def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
     saved_tracer = {
         k: getattr(tracer_pkg, k, None) for k in ("TracerHandlerRegistry",)
     }
-    saved_ext = {
-        k: getattr(ext_pkg, k, None)
-        for k in (
-            "OtelAgentHandler",
-            "OtelTracerConfig",
-            "OtelWorkflowHandler",
-            "init_otel_tracer",
-        )
-    }
+    _ext_attrs = (
+        "OtelAgentHandler",
+        "OtelTracerConfig",
+        "OtelWorkflowHandler",
+        "init_otel_tracer",
+    )
+    saved_ext = {}
+    for k in _ext_attrs:
+        saved_ext[k] = getattr(ext_pkg, k, None)
 
     class _Registry:
         @staticmethod
@@ -95,23 +99,23 @@ def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
     def _bad_config(**_kwargs):
         raise TypeError("OtelTracerConfig got an unexpected keyword argument")
 
+    def _fake_init_otel_tracer(_c):
+        return object()
+
+    def _record_raw_sdk(otel):
+        raw_calls.append(otel.service_name)
+
     tracer_pkg.TracerHandlerRegistry = _Registry
     ext_pkg.OtelTracerConfig = _bad_config
     ext_pkg.OtelAgentHandler = type("OtelAgentHandler", (), {})
     ext_pkg.OtelWorkflowHandler = type("OtelWorkflowHandler", (), {})
-    ext_pkg.init_otel_tracer = lambda _c: object()
+    ext_pkg.init_otel_tracer = _fake_init_otel_tracer
 
     raw_calls = []
-    monkeypatch.setattr(
-        tracer_otel_mod,
-        "_setup_raw_sdk",
-        lambda otel: raw_calls.append(otel.service_name),
-    )
+    monkeypatch.setattr(tracer_otel_mod, "_setup_raw_sdk", _record_raw_sdk)
 
     try:
-        assert (
-            tracer_otel_mod._try_setup_openjiuwen(_fake_otel(enabled=True)) is False
-        )
+        # Public API only: openjiuwen TypeError must fall back to raw SDK.
         tracer_otel_mod.setup_otel_tracer()
         assert raw_calls == ["agent-builder"]
         assert tracer_otel_mod.is_otel_tracer_initialized() is True
@@ -132,12 +136,17 @@ def test_openjiuwen_api_mismatch_falls_back_to_raw_sdk(monkeypatch):
 
 def test_setup_raw_sdk_records_span(monkeypatch):
     tracer_otel_mod.reset_otel_tracer_for_tests()
+
+    def _enabled_otel():
+        return _fake_otel(enabled=True, service_name="agent-builder")
+
+    def _openjiuwen_unavailable(_otel):
+        return False
+
+    monkeypatch.setattr(tracer_otel_mod, "_otel_settings", _enabled_otel)
     monkeypatch.setattr(
-        tracer_otel_mod,
-        "_otel_settings",
-        lambda: _fake_otel(enabled=True, service_name="agent-builder"),
+        tracer_otel_mod, "_try_setup_openjiuwen", _openjiuwen_unavailable
     )
-    monkeypatch.setattr(tracer_otel_mod, "_try_setup_openjiuwen", lambda _otel: False)
 
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
