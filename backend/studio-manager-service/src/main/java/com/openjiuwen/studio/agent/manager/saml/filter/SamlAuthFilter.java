@@ -165,7 +165,6 @@ public class SamlAuthFilter extends OncePerRequestFilter {
         return path.startsWith("/saml/") || path.startsWith("/api/auth/") || path.startsWith("/login")
             || path.startsWith("/css/") || path.startsWith("/js/") || path.startsWith("/images/")
             || path.startsWith("/api/public/") || path.equals("/") || path.equals("/favicon.ico")
-            || path.equals("/v3/auth/tokens") || path.startsWith("/health")
-            || path.startsWith("/actuator") || path.equals("/metrics");
+            || path.equals("/v3/auth/tokens") || path.startsWith("/health");
     }
 }

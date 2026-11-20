@@ -259,18 +259,6 @@ def instance_app() -> FastAPI:
     # 那样 dispatcher 会跑到 establish 外层，与目标序相反（§6.4 第 4 点）。
     app.add_middleware(FlaskRouteDispatchMiddleware, flask_app=prompt_manage_app)
 
-    # #1659/#1727：Prometheus 文本指标（3-8-1）— 须在 Flask catch-all 之前注册路由
-    from agent_builder.observability import metrics_router, record_http_request
-
-    app.include_router(metrics_router)
-
-    @app.middleware("http")
-    async def metrics_http_counter(request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path != "/metrics":
-            record_http_request("builder", request.method, response.status_code)
-        return response
-
     @app.middleware("http")
     async def otel_http_span(request: Request, call_next):
         """Root HTTP span when OTEL_ENABLED — any builder request becomes a Jaeger span."""

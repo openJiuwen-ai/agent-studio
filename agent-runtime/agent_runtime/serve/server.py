@@ -61,7 +61,7 @@ from common_utils.redis_manager import RedisClientManager
 from agent_runtime.serve.execution_registry import get_execution_registry
 from agent_runtime.serve.redis_bootstrap import init_redis_provider
 from agent_runtime.context.middleware import RequestContextMiddleware
-from agent_runtime.observability import metrics_router, record_http_request, setup_otel_tracer
+from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm
 from agent_runtime.memory.internal_routes import memory_internal_router
 from agent_runtime.serve.apis.orchestration import execution_app
@@ -379,16 +379,6 @@ def instance_app(config: dict | None = None):
         description="智能体运行时 API 文档（对话/推理/执行）",
     )
     _app.add_middleware(RequestContextMiddleware)
-
-    # #1659/#1727：Prometheus 文本指标（3-8-1）
-    _app.include_router(metrics_router)
-
-    @_app.middleware("http")
-    async def _metrics_http_counter(request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path != "/metrics":
-            record_http_request("runtime", request.method, response.status_code)
-        return response
 
     for i in apps_map:
         _app.include_router(i)

@@ -33,8 +33,7 @@ import java.util.Set;
 public class LicenseValidatorFilter extends OncePerRequestFilter {
     private static final Set<String> WHITE_LIST =
         new HashSet<>(List.of("/v1/*/agent-manager/license/upload-file", "/v1/*/agent-manager/license", "/v3/**",
-            "/saml/**", "/v1/health", "/health", "/login", "/api/public/**", "/v1/*/agent-manager/workspace/init",
-            "/actuator/**", "/metrics"));
+            "/saml/**", "/v1/health", "/health", "/login", "/api/public/**", "/v1/*/agent-manager/workspace/init"));
 
     @Autowired
     private I18nUtil i18nUtil;
