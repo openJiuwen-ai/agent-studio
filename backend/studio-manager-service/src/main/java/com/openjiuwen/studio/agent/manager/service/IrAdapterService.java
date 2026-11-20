@@ -2585,7 +2585,7 @@ public class IrAdapterService {
             .filter(MappingEntity::isValid)
             .map(MappingEntity::getResourceId)
             .toList();
-        List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(agentSkillIds);
+        List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(agentSkillIds, agent.getWorkspaceId());
         // 2.生成skill相关配置
         Map<String, Object> skillConfigs = new HashMap<>();
         skillConfigs.put("skill_dir", "skills" + CommonConstant.FOLDER_SEPARATOR + agent.getAgentId());

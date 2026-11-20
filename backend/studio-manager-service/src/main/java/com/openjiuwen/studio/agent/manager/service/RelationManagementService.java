@@ -2208,7 +2208,7 @@ public class RelationManagementService implements IRelationManagementService {
                 }
             });
             // 2. 更新skill类型资源的最新版本
-            searchSkillResourceLatestVersion(relations, mappingEntities);
+            searchSkillResourceLatestVersion(relations, mappingEntities, listAppRelationsQo.getWorkspaceId());
         }
 
         RelationList relationList = new RelationList();
@@ -2261,13 +2261,14 @@ public class RelationManagementService implements IRelationManagementService {
         return result;
     }
 
-    private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities) {
+    private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities,
+                                                    String workspaceId) {
         List<String> resourceIdsSKill = mappingEntities.stream()
             .filter(mappingEntity ->
                 ResourceTypeEnum.SKILL.toString().equals(mappingEntity.getResourceType()))
             .map(MappingEntity::getResourceId)
             .toList();
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(resourceIdsSKill, workspaceId);
         Map<String, SkillDetails> latestSkillVersionMap = skillDetailsList.stream()
             .collect(Collectors.toMap(SkillDetails::getSkillId, skillDetails -> skillDetails));
         relations.forEach(relation -> {
@@ -2528,7 +2529,8 @@ public class RelationManagementService implements IRelationManagementService {
         final List<String> skillIds = agentSkillList.stream()
             .map(MappingEntity::getResourceId)
             .collect(Collectors.toList());
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds,
+            RequestContextUtils.getRequestWorkspaceId());
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return Collections.emptyList();
         }

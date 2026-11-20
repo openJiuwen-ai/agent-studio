@@ -8,27 +8,33 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.ErrorHandler;
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.io.StringReader;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * issue #1734 回归守卫：SkillMapper.xml 的 searchBySkillIds 是通用批量查询（9 处共用：
  * 资源存在性 validResourceExist / 引用关系 / agent skill 列表 / 导入导出 / IR 解析 / SkillAdapter /
- * 运行时资产导出归属校验），承载"资源存在/能否查到详情"语义，不是"广场是否可见"语义。
- * 曾经末尾硬编码 {@code AND t_skill.published_asset = '1'}，把"未上架 Skill"误判为"不存在"，
- * 致 validResourceExist 误报 RESOURCE_NOT_EXISTS（删除前引用确认弹框报"资源不存在"，但删除接口仍成功）。
+ * 运行时资产导出归属校验），承载"资源存在/能否查到详情"语义。
  *
- * <p>本测试解析 classpath 真实 SkillMapper.xml，断言 searchBySkillIds 的 select 块不再含 published_asset 过滤，
- * 防止该过滤被重新加回。广场可见性过滤的合法位置是 {@code search}（带可选 publishedAsset 参数）。
+ * <p>原 bug：末尾硬编码 {@code AND t_skill.published_asset = '1'}，把"未上架 Skill"误判为"不存在"，
+ * 致 validResourceExist 误报 RESOURCE_NOT_EXISTS（删除前引用确认报资源不存在，但删除走另一查询仍成功）。
+ *
+ * <p>巡检问题1（workspace 隔离）：移除硬编码过滤后该查询无 workspace 隔离，跨空间未上架草稿存在性/元数据
+ * 泄露。修复为 {@code WHERE (workspace_id = #{workspaceId} OR published_asset = '1')}——本 workspace
+ * 全部（含未上架草稿）+ 跨空间仅已上架（广场可见语义）。本测试断言该隔离条件存在，防回退到无隔离或硬编码过滤。
+ *
+ * <p>巡检问题2（DTD 外部加载）：JAXP 默认加载外部 DTD（mybatis.org），离线 CI 会 UnknownHostException。
+ * 关闭 load-external-dtd + 设空 EntityResolver，使解析不访问网络。
  *
  * <p>实现说明：用 DOM 取 select 元素的 {@code getTextContent()}（仅含 TEXT/CDATA 节点，不含 XML 注释），
- * 而非 raw 字符串扫描——源文件中防回归注释也含 published_asset 字样，raw 扫描会误判。
+ * 而非 raw 字符串扫描——源文件中注释也含 published_asset 字样，raw 扫描会误判。
  */
 class SkillMapperXmlRegressionTest {
 
@@ -37,7 +43,11 @@ class SkillMapperXmlRegressionTest {
             assertThat(in).as("mapper/SkillMapper.xml 须在 classpath").isNotNull();
             DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
             f.setNamespaceAware(false);
+            // 巡检问题2：关闭外部 DTD 加载，避免离线 CI 访问 mybatis.org 抛 UnknownHostException
+            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             DocumentBuilder db = f.newDocumentBuilder();
+            // 双保险：空 EntityResolver，解析时不发起任何外部请求
+            db.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
             db.setErrorHandler(new FailErrorHandler());
             Document doc = db.parse(in);
             doc.getDocumentElement().normalize();
@@ -58,14 +68,20 @@ class SkillMapperXmlRegressionTest {
     }
 
     @Test
-    void searchBySkillIds_doesNotFilterPublishedAsset() throws Exception {
+    void searchBySkillIds_workspaceIsolation_noHardcodedFilter() throws Exception {
         String text = selectText(loadMapperXml(), "searchBySkillIds");
         assertThat(text).as("searchBySkillIds select 须存在").isNotNull();
         // 查询结构完整：仍按 skill_id IN 批量查（未误删查询主体）
         assertThat(text).contains("skill_id IN");
-        // 回归守卫（issue #1734）：通用批量查询不得再带 published_asset 过滤
-        assertThat(text).as("searchBySkillIds 通用批量查询不得过滤 published_asset（issue #1734）")
-            .doesNotContain("published_asset");
+        // 隔离条件（issue #1734 巡检问题1）：WHERE 含 (workspace_id=? OR published_asset='1')
+        //   ——本 workspace 全部（含未上架草稿）+ 跨空间仅已上架（广场可见语义）
+        assertThat(text).contains("workspace_id");
+        assertThat(text).contains("published_asset");
+        assertThat(text).contains("OR");
+        // 防回退（issue #1734）：不得有独立硬编码 AND published_asset='1' 过滤
+        //   （旧根因：误判未上架为不存在 + 跨空间泄露；OR 条件内的 published_asset 是 'OR' 前缀，不含 'AND t_skill.published_asset'）
+        assertThat(text).as("searchBySkillIds 不得有独立 AND published_asset 过滤（issue #1734）")
+            .doesNotContain("AND t_skill.published_asset");
     }
 
     @Test

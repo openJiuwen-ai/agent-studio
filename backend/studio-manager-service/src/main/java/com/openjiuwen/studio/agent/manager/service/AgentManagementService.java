@@ -1825,7 +1825,7 @@ public class AgentManagementService implements IAgentManagementService {
         if (body.getSkills() != null) {
             // 0. 还原版本场景，根据传入的skills，构造List<AgentSkillDetail>
             List<String> skillIds = body.getSkills().stream().map(SkillReference::getSkillId).toList();
-            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds);
+            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds, workspaceId);
             List<AgentSkillDetail> agentSkillDetails = new ArrayList<>();
             skillDetails.forEach(skill -> {
                 AgentSkillDetail agentSkillDetail = new AgentSkillDetail().setSkillId(skill.getSkillId())
@@ -1833,7 +1833,7 @@ public class AgentManagementService implements IAgentManagementService {
                 agentSkillDetails.add(agentSkillDetail);
             });
             // 1. 校验
-            Map<String, SkillDetails> validSkillsMap = validateSkills(agentSkillDetails);
+            Map<String, SkillDetails> validSkillsMap = validateSkills(agentSkillDetails, workspaceId);
             // 2. 生成技能引用实体
             List<MappingEntity> skillReferences = generateSkillReferences(agentId, agentSkillDetails, validSkillsMap);
             // 3. 处理agent和skill的关联信息入库
@@ -1842,7 +1842,7 @@ public class AgentManagementService implements IAgentManagementService {
         if (body.getSkillDetails() != null) {
             List<AgentSkillDetail> skillDetails = body.getSkillDetails();
             // 1. 校验
-            Map<String, SkillDetails> validSkillsMap = validateSkills(skillDetails);
+            Map<String, SkillDetails> validSkillsMap = validateSkills(skillDetails, workspaceId);
             // 2. 生成技能引用实体（仅包含有效skill）
             List<MappingEntity> skillReferences = generateSkillReferences(agentId, skillDetails, validSkillsMap);
             // 3. 处理agent和skill的关联信息入库
@@ -2006,7 +2006,7 @@ public class AgentManagementService implements IAgentManagementService {
      * @param skillDetails 前端传入body
      * @return 有效的Map<String, SkillEntity>
      */
-    private Map<String, SkillDetails> validateSkills(List<AgentSkillDetail> skillDetails) {
+    private Map<String, SkillDetails> validateSkills(List<AgentSkillDetail> skillDetails, String workspaceId) {
         // 1. 空值校验
         if (CollectionUtils.isEmpty(skillDetails)) {
             return new HashMap<>();
@@ -2021,7 +2021,7 @@ public class AgentManagementService implements IAgentManagementService {
             .map(AgentSkillDetail::getSkillId)
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, workspaceId);
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return new HashMap<>();
         }

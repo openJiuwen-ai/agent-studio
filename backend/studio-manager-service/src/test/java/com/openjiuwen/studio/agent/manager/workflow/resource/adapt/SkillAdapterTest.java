@@ -81,7 +81,7 @@ class SkillAdapterTest {
             List<SkillDetails> skillDetailsList = new ArrayList<>();
             SkillDetails skillDetails = new SkillDetails();
             skillDetailsList.add(skillDetails);
-            when(skillMapper.searchBySkillIds(anyList())).thenReturn(skillDetailsList);
+            when(skillMapper.searchBySkillIds(anyList(), any())).thenReturn(skillDetailsList);
 
             List<ExportResourceUnit> exportResources = new ArrayList<>();
             ExportResourceUnit exportResourceUnit = new ExportResourceUnit();

@@ -197,7 +197,7 @@
             t_skill.skill_id = #{skillId, jdbcType=VARCHAR}
     </select>
 
-    <select id="searchBySkillIds" resultMap="SearchResultMap" parameterType="java.util.List">
+    <select id="searchBySkillIds" resultMap="SearchResultMap">
         SELECT
         t_skill.*,
         t_skill_version.obs_path,
@@ -215,9 +215,13 @@
         <if test="skillIds == null or skillIds.size() == 0">
             1=0
         </if>
-        <!-- 通用批量查询：按 skill_id 查存在性/详情，不过滤 published_asset。
-             广场可见性由 search/countSelectedSkills 负责；此处过滤会把未上架 Skill 误判为不存在，
-             致 validResourceExist 误报 RESOURCE_NOT_EXISTS（issue #1734）。请勿再加 published_asset 过滤。 -->
+        <!-- 隔离语义（issue #1734）：workspaceId 非空时仅返回"本 workspace 全部 + 跨空间已上架
+             (published_asset='1')"的 Skill——本 workspace 未上架草稿可见（修删除前引用确认误报不存在），
+             跨空间仅可见已上架（广场可见语义，堵跨空间未上架草稿的存在性/元数据泄露）。
+             广场列表展示的可见性仍由 search/countSelectedSkills 的 publishedAsset 参数负责。 -->
+        <if test="workspaceId != null and workspaceId != ''">
+            AND (t_skill.workspace_id = #{workspaceId,jdbcType=VARCHAR} OR t_skill.published_asset = '1')
+        </if>
     </select>
     <select id="searchBySkillIdAndDomainId" resultMap="SearchResultMap">
         SELECT

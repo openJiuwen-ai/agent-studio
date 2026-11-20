@@ -125,7 +125,7 @@ class ResourceServiceNewTest {
         // 防止在 service 层把"未上架=published_asset==0"误判为不存在（存在性校验不得混入广场可见性语义）。
         SkillDetails skill = new SkillDetails();
         skill.setSkillId("skill-1");
-        when(skillMapper.searchBySkillIds(List.of("skill-1"))).thenReturn(List.of(skill));
+        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), any())).thenReturn(List.of(skill));
 
         resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1");
     }
@@ -133,7 +133,7 @@ class ResourceServiceNewTest {
     @Test
     void testValidResourceExist_Skill_Missing_Throws() {
         // 契约（issue #1734）：资源确实查不到时才抛 RESOURCE_NOT_EXISTS（非"未上架"误报）。
-        when(skillMapper.searchBySkillIds(List.of("skill-1"))).thenReturn(Collections.emptyList());
+        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), any())).thenReturn(Collections.emptyList());
 
         AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> resourceService.validResourceExist(List.of("skill-1"), "skill", "p1", "w1"));
@@ -336,7 +336,8 @@ class ResourceServiceNewTest {
         SkillDetails skill = new SkillDetails();
         skill.setSkillId("skill-1");
         skill.setName("Test Skill");
-        when(skillMapper.searchBySkillIds(List.of("skill-1")))
+        // 隔离契约（issue #1734）：getResourceMeta 透传 workspaceId 给 searchBySkillIds（本 workspace 全部 + 跨空间已上架）
+        when(skillMapper.searchBySkillIds(eq(List.of("skill-1")), eq("w1")))
             .thenReturn(List.of(skill));
 
         Map<String, CommonMeta> result = resourceService.getResourceMeta(List.of("skill-1"), "skill", "p1", "w1");
@@ -344,7 +345,7 @@ class ResourceServiceNewTest {
         assertNotNull(result);
         assertTrue(result.containsKey("skill-1"));
         assertEquals("Test Skill", result.get("skill-1").getName());
-        verify(skillMapper).searchBySkillIds(List.of("skill-1"));
+        verify(skillMapper).searchBySkillIds(eq(List.of("skill-1")), eq("w1"));
     }
 
     @Test

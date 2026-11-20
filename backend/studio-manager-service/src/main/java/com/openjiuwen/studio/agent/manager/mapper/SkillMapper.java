@@ -72,9 +72,18 @@ public interface SkillMapper {
     SkillDetails searchBySkillId(String skillId);
 
     /**
-     * 根据 skillIds 批量查询 Skills
+     * 根据 skillIds 批量查询 Skills（通用批量查询，不硬编码广场可见性过滤）。
+     *
+     * <p>隔离语义（issue #1734）：workspaceId 非空时按"本 workspace 全部 + 跨空间已上架
+     * （published_asset='1'）"过滤——本 workspace 的未上架草稿可见（修复删除前引用确认误报
+     * 资源不存在），跨空间仅可见已上架（广场可见语义，堵住跨空间未上架草稿的存在性/元数据泄露）。
+     * workspaceId 为空时不过滤（保留全局行为，兼容无法获取 workspace 上下文的调用方；
+     * 新调用方应优先传 workspaceId）。</p>
+     *
+     * @param skillIds skill id 列表
+     * @param workspaceId 当前 workspace id（null=不过滤 workspace，保留全局行为）
      */
-    List<SkillDetails> searchBySkillIds(List<String> skillIds);
+    List<SkillDetails> searchBySkillIds(@Param("skillIds") List<String> skillIds, @Param("workspaceId") String workspaceId);
 
     /**
      * 根据 Skill Id 和 domain Id 查询
