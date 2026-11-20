@@ -205,10 +205,12 @@ def _stream_planner(latest_intent=None, wf_ctx=None, func2cat=None, id2func=None
         intent_function_2_category_map=dict(func2cat or {}),
         intent_id_to_function_map=dict(id2func or {}),
     )
-    idm.reset_intent_state = lambda: (
-        setattr(idm, "intent_detected_this_turn", False),
-        setattr(idm, "intent_workflow_user_fields", {}),
-    )
+
+    def _reset_intent_state():
+        idm.intent_detected_this_turn = False
+        idm.intent_workflow_user_fields = {}
+
+    idm.reset_intent_state = _reset_intent_state
     p.intention_detect_module = idm
     cm = MagicMock()
     cm.get_latest_intent.return_value = latest_intent

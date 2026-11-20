@@ -438,7 +438,8 @@ class TestSubscriber:
     @pytest.mark.asyncio
     async def test_subscriber_uses_pubsub_client_not_redis(self):
         """订阅通过 as_capability(PubSubCapability) 获取 pubsub 句柄,
-        而非直接在 Redis 客户端上调用 pubsub()（集群模式下 RedisCluster 无 pubsub()）。"""
+        而非直接在 Redis 客户端上调用 pubsub()（集群模式下 RedisCluster 无 pubsub()）。
+        """
         client = _make_redis()
         pubsub = self._make_pubsub(
             [
