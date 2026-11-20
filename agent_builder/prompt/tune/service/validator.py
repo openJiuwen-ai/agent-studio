@@ -146,15 +146,18 @@ class OptimizeInfoValidator:
         # 使非法参数以 500 而非参数校验错误暴露——捕获后归一到越界分支
         try:
             early_stop_score = float(early_stop_score)
-        except OverflowError:
+        except OverflowError as exc:
             raise TaskParamsValidationException(
                 f"early_stop_score must be in range "
                 f"[{TuneConstant.MIN_EARLY_STOPPING_SCORE},"
                 f"{TuneConstant.MAX_EARLY_STOPPING_SCORE}]"
-            )
-        if (
-            early_stop_score < TuneConstant.MIN_EARLY_STOPPING_SCORE
-            or early_stop_score > TuneConstant.MAX_EARLY_STOPPING_SCORE
+            ) from exc
+        # NaN 与任何值比较均为 False，"或"式越界判断会放行 NaN——改用
+        # 区间包含判断的否定式，NaN 同样落入拒绝分支
+        if not (
+            TuneConstant.MIN_EARLY_STOPPING_SCORE
+            <= early_stop_score
+            <= TuneConstant.MAX_EARLY_STOPPING_SCORE
         ):
             raise TaskParamsValidationException(
                 f"early_stop_score must be in range "
