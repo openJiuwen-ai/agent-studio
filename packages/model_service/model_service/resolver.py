@@ -484,7 +484,7 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     auth_id = str(auth_data.get("id", ""))
     auth_type = _get("auth_type", "authType") or ""
     raw = _get("auth_info", "authInfo") or ""
-    _logger.info("[decrypt] _auth_from_data: auth_id=%s, auth_type=%s, raw_len=%d", auth_id, auth_type, len(raw))
+    _logger.debug("[decrypt] _auth_from_data: auth_id=%s, auth_type=%s, raw_len=%d", auth_id, auth_type, len(raw))
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",
