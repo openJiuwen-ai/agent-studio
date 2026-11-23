@@ -87,12 +87,24 @@ def register_llm_call_logging_callbacks() -> None:
     # 错误回调无条件注册：低频（仅出错时触发）、高重要，不应受级别门控
     @fw.on(LLMCallEvents.LLM_CALL_ERROR)
     async def _log_error(model_name=None, model_provider=None, error=None, **kwargs):
-        """打印模型调用错误"""
+        """打印模型调用错误（#1642/#1711：含下游 URL 与失败耗时）。
+
+        期望 kwargs 携带 ``api_url`` / ``latency_ms``（由 model_service 失败 trigger
+        注入）；缺失时回退为 unknown/N/A，避免回调因字段不全而崩。
+        """
+        api_url = kwargs.get("api_url") or kwargs.get("apiUrl") or "unknown"
+        latency_ms = kwargs.get("latency_ms")
+        if latency_ms is None:
+            latency_ms = kwargs.get("latency")
+        latency_display = "N/A" if latency_ms is None else latency_ms
         workflow_logger.error(
-            "model call error, model=%s, provider=%s, is_stream=%s, error=%s",
+            "model call error, model=%s, provider=%s, is_stream=%s, "
+            "url=%s, latency_ms=%s, error=%s",
             model_name or "unknown",
             model_provider or "unknown",
             kwargs.get("is_stream", False),
+            api_url,
+            latency_display,
             error,
         )
 

@@ -212,8 +212,13 @@ def get_log_max_bytes(max_bytes_config):
 def get_list_from_env(env_var_name, default="[]"):
     """
     从环境变量中解析出list
+
+    已设置但为空串/空白串时等价于未设置，返回 default（默认 []），
+    避免 LOG_MASKED_ENABLED=true 且 LOG_MASKED_PATTERNS= 时 json.loads("") 导致启动崩溃。
     """
     env_var = os.getenv(env_var_name, default)
+    if env_var is None or (isinstance(env_var, str) and not env_var.strip()):
+        env_var = default
     try:
         return json.loads(env_var)
     except json.JSONDecodeError as e:

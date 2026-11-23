@@ -58,8 +58,9 @@ except ImportError:
     # set_session_id 旧版不返回 token → trace_token=None → reset 跳过（middleware 已检查 None）
     def reset_session_id(_token):
         pass
+from agent_runtime.observability.otel_parent_flags import resolve_injected_trace_flags
 from opentelemetry import context as otel_context, trace as otel_trace
-from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+from opentelemetry.trace import SpanContext, TraceState
 from opentelemetry.trace.span import NonRecordingSpan
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -224,11 +225,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             set_x_execution_id(execution_id)
             # 注入 OTel 上下文，使 openjiuwen 创建的 span 继承业务关联 trace_id
             # （D-A：OTel trace 从 request_id 派生，业务 trace_id 独立选值）
+            # TraceFlags 必须按 OTEL_SAMPLE_RATE 决策：硬编码 SAMPLED 会让
+            # ParentBased 采样器跟随父决策，导致采样率 0 被静默绕过（#1644/#1713）。
+            _otel_trace_id = _to_otel_trace_id(request_id)
             _otel_span_ctx = SpanContext(
-                trace_id=_to_otel_trace_id(request_id),
+                trace_id=_otel_trace_id,
                 span_id=int(uuid.uuid4().hex[:16], 16),
                 is_remote=False,
-                trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                trace_flags=resolve_injected_trace_flags(_otel_trace_id),
                 trace_state=TraceState(),
             )
             _otel_span = NonRecordingSpan(_otel_span_ctx)
