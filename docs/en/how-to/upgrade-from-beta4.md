@@ -83,7 +83,7 @@ Full variables in `deploy/k8s/studio-builder.yaml`, grouped as follows:
 | Model config | `MODEL_CONFIG_STRATEGY` | Default `obs` |
 | External model gateway [optional] | `MODEL_ROUTER_API` | Not configured by default; only fill in `https://<model-gateway>/v1/agent-builder` when connecting a standalone external model gateway; must not use old `studio-service:31113` or point to builder itself |
 | Prompt task persistence [optional] | `STORE_DB_TYPE` (mysql/gaussdb) `STORE_DB_HOST` `STORE_DB_PORT` `STORE_DB_USER` `STORE_DB_PASSWORD` `STORE_DB_DATABASE` (default `agent-builder`) `STORE_DB_SCHEMA` `STORE_DB_SSLMODE` | If not filled, only in-memory; shares same `STORE_DB_*` semantics as runtime |
-| Logging | `JIUWEN_LOG_FILE` `JIUWEN_LOG_PATH` `JIUWEN_LOGGING_LOG_FILE` `LOGGING_LOG_PATH` `TGF_LOG_DIR` `LOG_VERBOSE` | Default writes to `/opt/cloud/logs/` |
+| Logging | `LOGGING_LOG_PATH` | Log root directory: `/opt/cloud/logs/` for k8s, `/opt/cloud/logs/agent-builder` for docker-compose; file names, rotation, sinks and level are fixed inside builder and cannot be overridden by env vars |
 
 > studio-builder initializes storage tables for prompt optimization tasks on startup as needed; `studio-manager` is responsible for main business tables. If `STORE_DB_*` is not fully configured, prompt task storage cannot be persisted to database.
 

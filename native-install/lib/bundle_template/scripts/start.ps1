@@ -198,11 +198,13 @@ if (-not (Is-PidAlive $RtPid)) {
   if ($env:PYTHONPATH) { $pp = $pp + ';' + $env:PYTHONPATH }
   $env:PYTHONPATH = $pp
   $env:JIUWEN_EXTENSION_PATH = Join-Path $BundleRoot 'app\agent_runtime\extension'
-  $env:LOGGING_LOG_PATH = $Log; $env:TGF_LOG_DIR = $Log
+  $env:LOGGING_LOG_PATH = $Log
   $env:host = '127.0.0.1'; $env:PORT = $env:RUNTIME_PORT
-  $p = Start-Bg $VenvPy @('-u',"$(Join-Path $BundleRoot 'app\agent_runtime\EIStart.py')",'--host','0.0.0.0','--port',"$($env:RUNTIME_PORT)") (Join-Path $Log 'runtime.log'); $p.Id | Set-Content $RtPid
+  # stdout 归一重定向 common.log（与 start.sh 对齐：runtime 进程输出统一进
+  # ${LOGGING_LOG_PATH}/common.log，不再单独落 runtime.log）
+  $p = Start-Bg $VenvPy @('-u',"$(Join-Path $BundleRoot 'app\agent_runtime\EIStart.py')",'--host','0.0.0.0','--port',"$($env:RUNTIME_PORT)") (Join-Path $Log 'common.log'); $p.Id | Set-Content $RtPid
 }
-if (-not (Wait-Http "http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health" 'studio-runtime' 180)) { W-Die "studio-runtime 启动失败，见 $Log\runtime.log" }
+if (-not (Wait-Http "http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health" 'studio-runtime' 180)) { W-Die "studio-runtime 启动失败，见 $Log\common.log" }
 
 # ════════════════════════════════════════════════════════════════════════════
 # [6/7] studio-builder (Python, agent_builder/EIBuilder)

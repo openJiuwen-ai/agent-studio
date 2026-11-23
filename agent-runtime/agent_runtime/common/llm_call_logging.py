@@ -11,7 +11,7 @@ LLM 调用日志 — 通过 callback framework 记录模型请求体和响应内
 - 自动覆盖所有 ModelClient（OpenAI / SiliconFlow / DeepSeek 等均触发相同事件）
 - 依赖 SDK 公开的 callback 接口，升级更安全
 - 模型请求体/响应内容/token 用量/延迟/tool_calls 为 INFO 级别，默认输出；错误日志为 ERROR 级别
-- 错误回调无条件注册（始终可见）；input/output 回调仅在 WORKFLOW_LOG_LEVEL ≤ INFO 时注册（WARNING 下零开销）
+- 错误回调无条件注册（始终可见）；input/output 回调仅在 LOG_LEVEL ≤ INFO 时注册（WARNING 下零开销）
 
 日志格式示例：
     model call request data: {"model": "xxx", "stream": false, "messages": [...]}
@@ -50,16 +50,16 @@ def _is_llm_call_logging_enabled() -> bool:
 
     需同时满足两个条件：
     - MODEL_CALL_LOGGING_ENABLED=true（功能开关，默认关闭）；
-    - WORKFLOW_LOG_LEVEL ≤ INFO（级别门控，WARNING 下省掉 json.dumps 开销）。
+    - LOG_LEVEL ≤ INFO（级别门控，WARNING 下省掉 json.dumps 开销）。
 
     错误回调不受此函数约束，始终注册。
     每次调用时新建 Settings 实例以读取最新环境变量（Settings 单例在 import 时
     缓存，无法感知运行期环境变量变更）。
     """
-    from agent_runtime.common.config import LlmCallLoggingSettings, WorkflowLogSettings
+    from agent_runtime.common.config import LlmCallLoggingSettings, ServerSettings
     if not LlmCallLoggingSettings().enabled:
         return False
-    configured_level = _LOG_LEVEL_MAP.get(WorkflowLogSettings().level.upper(), 20)
+    configured_level = _LOG_LEVEL_MAP.get(ServerSettings().log_level.upper(), 20)
     return configured_level <= _LOG_LEVEL_MAP["INFO"]
 
 
@@ -71,9 +71,9 @@ def register_llm_call_logging_callbacks() -> None:
     注册策略分两档：
     - LLM_CALL_ERROR：无条件注册。错误回调仅在调用失败时触发，成功路径零开销；
       错误是低频高重要事件，应始终可见，不受 MODEL_CALL_LOGGING_ENABLED 开关与
-      WORKFLOW_LOG_LEVEL 门控约束。
+      LOG_LEVEL 门控约束。
     - LLM_INPUT / LLM_OUTPUT：需 MODEL_CALL_LOGGING_ENABLED=true 且
-      WORKFLOW_LOG_LEVEL ≤ INFO 才注册。开关默认关闭；门控用于在 WARNING/ERROR
+      LOG_LEVEL ≤ INFO 才注册。开关默认关闭；门控用于在 WARNING/ERROR
       级别下省掉回调体里 json.dumps(完整 messages) 的开销。
 
     重复调用为幂等操作，不会重复注册。
@@ -96,7 +96,7 @@ def register_llm_call_logging_callbacks() -> None:
             error,
         )
 
-    # 检查 WORKFLOW_LOG_LEVEL，INFO 及更细级别才注册 input/output 回调
+    # 检查 LOG_LEVEL，INFO 及更细级别才注册 input/output 回调
     if not _is_llm_call_logging_enabled():
         _registered = True  # 标记为"已决定"，后续调用不再重复检查
         return

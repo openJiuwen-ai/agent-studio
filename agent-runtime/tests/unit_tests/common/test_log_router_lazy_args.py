@@ -2,15 +2,13 @@
 # -*- coding: UTF-8 -*-
 """UT for LogRouter.route_log lazy-formatting + COM-08 always-safe contract.
 
-COM-08（SYNC-01 P5-R3）：LOG_VERBOSE 读取集中到 DiagnosticPolicy，route_log
-不再按 verbose 分支 msg/exc_info——always-safe：simple_log 作基础消息、
-exc_info 始终到达底层 logger、verbose 仅追加 event+verbose_fields allowlist。
-本测试 pin 新契约（取代旧 LOG_VERBOSE_MODE 分支契约）：
+COM-08：route_log 不按级别/开关分支 msg/exc_info——always-safe：
+simple_log 作基础消息、exc_info 始终到达底层 logger。
+本测试 pin 该契约：
 
 - simple_log 在场 → 用 simple_log，丢弃 msg 的惰性格式化参数（避免占位符错配）。
 - 无 simple_log → 转发 msg + args（惰性 %-format）。
-- simple_log 不受 verbose 影响（verbose 仅作用于 event+verbose_fields）。
-- exc_info 始终保留（不再因 verbose=False 删除）。
+- exc_info 始终保留。
 """
 import jiuwen.common.log.base as log_base
 
@@ -43,22 +41,8 @@ def test_no_simple_log_keeps_lazy_args():
     assert stub.calls == [("param extra: %s", ("value",), {"stacklevel": 2})]
 
 
-def test_simple_log_used_regardless_of_verbose():
-    """COM-08: verbose 不改变 simple_log 行为（verbose 仅作用于 event+verbose_fields）。"""
-    from jiuwen.common.log.diagnostics import DiagnosticPolicy, set_default_policy
-
-    set_default_policy(DiagnosticPolicy(verbose=True))
-    try:
-        wrapped, stub = _wrapped()
-        wrapped("loading ir data of %s", "child-1", simple_log="loading ir data of child")
-        # verbose=True 仍用 simple_log（不转发 msg+args）
-        assert stub.calls == [("loading ir data of child", (), {"stacklevel": 2})]
-    finally:
-        set_default_policy(None)
-
-
 def test_exc_info_always_kept():
-    """COM-08: exc_info 始终到达底层 logger（不再因 verbose 删除）。"""
+    """COM-08: exc_info 始终到达底层 logger。"""
     wrapped, stub = _wrapped()
     err = RuntimeError("x")
     wrapped("boom", exc_info=err)

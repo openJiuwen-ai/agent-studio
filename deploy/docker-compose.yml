@@ -330,11 +330,7 @@ services:
       MEMORY_DB_USER: ${MEMORY_DB_USER:-}
       MEMORY_DB_PASSWORD: ${MEMORY_DB_PASSWORD:-}
       MEMORY_DB_NAME: ${MEMORY_DB_NAME:-agent-memory}
-      JIUWEN_LOG_FILE: /opt/cloud/logs/tgf_python.log
-      JIUWEN_LOG_PATH: /opt/cloud/logs/jiuwen.log
-      JIUWEN_LOGGING_LOG_FILE: /opt/cloud/logs/jiuwen_python.log
       LOGGING_LOG_PATH: /opt/cloud/logs/
-      TGF_LOG_DIR: /opt/cloud/logs/
       PORT: ${SERVER_PORT:-31014}
       PLUGIN_SSL_API_CERT: ${PLUGIN_SSL_API_CERT:-false}
       WORKFLOW_EXECUTE_TIMEOUT: ${WORKFLOW_EXECUTE_TIMEOUT:-900}
@@ -376,13 +372,16 @@ services:
       LOG_MASKED_PATTERNS: ${LOG_MASKED_PATTERNS:-}
       MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
       # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
+      # （级别跟随 LOG_LEVEL，不再有独立的性能日志级别变量）
       PERFORMANCE_LOG_ENABLED: ${PERFORMANCE_LOG_ENABLED:-true}
-      # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
-      PERFORMANCE_LOG_LEVEL: ${PERFORMANCE_LOG_LEVEL:-WARNING}
+      # 进程内唯一日志级别：同时驱动 uvicorn、agent-core 与 legacy logger，
+      # 所有日志统一写入 ${LOGGING_LOG_PATH}/common.log
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # 单条日志最大字符数（整行），只对 console 输出（common.log）生效
+      LOG_MSG_MAX_LENGTH: ${LOG_MSG_MAX_LENGTH:-4000}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}
-      LOG_VERBOSE: ${LOG_VERBOSE:-true}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
@@ -447,7 +446,6 @@ services:
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
-      LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       STORAGE_TYPE: ${STORAGE_TYPE:-OBS}
       STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}

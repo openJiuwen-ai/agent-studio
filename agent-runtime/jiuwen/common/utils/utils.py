@@ -25,8 +25,6 @@ MAX_UPLOAD_FILE_SIZE = 20 * 1024 * 1024
 MAX_ENCODED_LENGTH = (
     MAX_UPLOAD_FILE_SIZE * 4 // 3
 )  # base64编码后的内容长度是原始内容的4/3倍
-# COM-08 §4.4: 删除模块级 LOG_VERBOSE_MODE——env 解析集中到
-# DiagnosticPolicy.from_env()（jiuwen/common/log/diagnostics.py）。
 
 # COM-08 §4.4: 无登记稳定 reason 时的通用安全阶段描述。
 _GENERIC_SAFE_REASON = "internal error"
@@ -35,7 +33,7 @@ _GENERIC_SAFE_REASON = "internal error"
 def safe_exception_reason(exception: Exception, reason: str | None = None) -> str:
     """COM-08 §4.4: 确定性安全异常原因。
 
-    不读取 ``LOG_VERBOSE``，两种配置返回值完全相同；不返回 ``str(exception)``。
+    返回值与异常正文无关、与任何日志开关无关；不返回 ``str(exception)``。
 
     - 有登记稳定 ``reason`` 时返回 ``reason``；
     - 无 ``reason`` 时返回通用安全阶段描述 ``_GENERIC_SAFE_REASON``；
@@ -50,7 +48,7 @@ def format_exception_reason(exception: Exception, reason: str | None = None) -> 
     """[Deprecated] COM-08 §4.4: 改用 :func:`safe_exception_reason`。
 
     保留为不读取环境变量的弃用兼容壳，行为等价于 ``safe_exception_reason``；
-    不再随 ``LOG_VERBOSE`` 返回 ``str(exception)``。
+    不再返回 ``str(exception)``。
     """
     return safe_exception_reason(exception, reason)
 

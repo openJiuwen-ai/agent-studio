@@ -178,7 +178,7 @@ if [ ! -f "$RUN/.venv_ready" ]; then
   if [ -d "$BUNDLE_ROOT/deps/wheels" ]; then
     "$VENV_PIP" install --find-links "$BUNDLE_ROOT/deps/wheels/" \
       -i "${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" --trusted-host "${PIP_TRUSTED_HOST:-mirrors.aliyun.com}" \
-      -r "$BUNDLE_ROOT/app/requirements.txt" || warn "依赖安装有部分失败（见 $LOG/runtime.log）"
+      -r "$BUNDLE_ROOT/app/requirements.txt" || warn "依赖安装有部分失败（见 $LOG/common.log）"
   else
     "$VENV_PIP" install -i "${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" \
       --trusted-host "${PIP_TRUSTED_HOST:-mirrors.aliyun.com}" \
@@ -196,10 +196,10 @@ if [ -f "$RT_PID" ] && kill -0 "$(cat "$RT_PID")" 2>/dev/null; then
 else
   export PYTHONPATH="$VENV/lib/python3.11/site-packages:$BUNDLE_ROOT/app:$BUNDLE_ROOT/app/agent_runtime${PYTHONPATH:+:$PYTHONPATH}"
   export JIUWEN_EXTENSION_PATH="$BUNDLE_ROOT/app/agent_runtime/extension"
-  export LOGGING_LOG_PATH="$LOG"; export TGF_LOG_DIR="$LOG"
+  export LOGGING_LOG_PATH="$LOG"
   export host=127.0.0.1; export PORT="$RUNTIME_PORT"
   nohup "$VENV_PY" -u "$BUNDLE_ROOT/app/agent_runtime/EIStart.py" --host 0.0.0.0 --port "$RUNTIME_PORT" \
-    >> "$LOG/runtime.log" 2>&1 & echo $! > "$RT_PID"
+    >> "$LOG/common.log" 2>&1 & echo $! > "$RT_PID"
 fi
 wait_http "http://127.0.0.1:$RUNTIME_PORT/v1/health" "studio-runtime" 180 || warn "runtime 健康检查未通过（可能仍启动中）"
 

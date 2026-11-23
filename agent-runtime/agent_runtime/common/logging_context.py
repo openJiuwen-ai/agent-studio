@@ -3,20 +3,25 @@ import logging
 import re
 
 from agent_runtime.common.config import settings
+from agent_runtime.common.log_bootstrap import install_request_context_log_record_factory
+from agent_runtime.common.log_format import (
+    COMMON_LOG_FORMAT,
+    DEFAULT_LOG_FORMAT,
+    PERFORMANCE_LOG_FORMAT,
+)
 from agent_runtime.common.session_state_access import get_state_info
 from agent_runtime.context.request_context import _request_ctx
 
-COMMON_LOG_FORMAT = (
-    "%(asctime)s,%(msecs)03d|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
-    "%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|%(message)s"
-)
-PERFORMANCE_LOG_FORMAT = (
-    "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(execution_id)s|%(request_id)s|"
-    "%(levelname)s|%(message)s"
-)
-DEFAULT_LOG_FORMAT = "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(levelname)s|%(message)s"
+__all__ = [
+    "COMMON_LOG_FORMAT",
+    "DEFAULT_LOG_FORMAT",
+    "PERFORMANCE_LOG_FORMAT",
+    "get_log_format",
+    "install_log_formatter_patch",
+    "install_request_id_log_record_factory",
+]
 
-_INSTALLED = False
+
 _FORMATTER_PATCH_INSTALLED = False
 _OPENJIUWEN_LOGGING_MANAGED = False
 
@@ -162,12 +167,14 @@ def _is_masking_enabled():
     return os.getenv("LOG_MASKED_ENABLED", "false").lower() == "true"
 
 
-def _get_sensitive_patterns():
+def get_sensitive_patterns():
+    """读取 LOG_MASKED_PATTERNS 的 JSON 列表（空串/非法 JSON 走 fail-fast）。"""
     from jiuwen.common.log.base import get_list_from_env
     return get_list_from_env("LOG_MASKED_PATTERNS")
 
 
-def _get_sensitive_words():
+def get_sensitive_words():
+    """读取 LOG_MASKED_SENS_WORDS 的 JSON 列表（空串/非法 JSON 走 fail-fast）。"""
     from jiuwen.common.log.base import get_list_from_env
     return get_list_from_env("LOG_MASKED_SENS_WORDS")
 
@@ -182,8 +189,8 @@ def install_log_formatter_patch() -> None:
     from openjiuwen.core.common.logging.default.default_impl import DefaultLogger
 
     if _is_masking_enabled():
-        sensitive_words = _get_sensitive_words()
-        sensitive_patterns = _get_sensitive_patterns()
+        sensitive_words = get_sensitive_words()
+        sensitive_patterns = get_sensitive_patterns()
     else:
         sensitive_words = None
         sensitive_patterns = None
@@ -207,27 +214,7 @@ def install_log_formatter_patch() -> None:
 
 def install_request_id_log_record_factory() -> None:
     """Add request_id to stdlib LogRecords used by openjiuwen formatters."""
-    global _INSTALLED
-    if _INSTALLED:
-        return
-
-    previous_factory = logging.getLogRecordFactory()
-
-    def record_factory(*args, **kwargs):
-        record = previous_factory(*args, **kwargs)
-        ctx = _request_ctx.get()
-        if not hasattr(record, "trace_id"):
-            record.trace_id = ctx.trace_id
-        if not hasattr(record, "execution_id"):
-            record.execution_id = ctx.execution_id
-        if not hasattr(record, "request_id"):
-            record.request_id = ctx.request_id
-        if not hasattr(record, "conversation_id"):
-            record.conversation_id = ctx.conversation_id
-        return record
-
-    logging.setLogRecordFactory(record_factory)
-    _INSTALLED = True
+    install_request_context_log_record_factory()
 
 
 _TEMPLATE_MASKING_PATCHED = False

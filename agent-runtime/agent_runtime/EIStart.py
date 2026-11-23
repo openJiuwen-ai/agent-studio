@@ -1,6 +1,7 @@
 """CLI entry point for OLE server."""
 
 import argparse
+import os
 
 # 在 openjiuwen 导入之前应用 patch
 from agent_runtime.patch import apply_patches
@@ -25,6 +26,9 @@ def main():
         settings.server.port = args.port
     if args.log_level is not None:
         settings.server.log_level = args.log_level
+        # 同步写回环境变量：legacy jiuwen logger（base.py）直读 os.environ 的
+        # LOG_LEVEL，只写 settings 会造成 uvicorn/agent-core 与 legacy 级别分叉
+        os.environ["LOG_LEVEL"] = args.log_level
 
     start_server()
 

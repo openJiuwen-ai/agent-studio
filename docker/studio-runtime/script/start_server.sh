@@ -27,6 +27,8 @@ function env_init(){
 
   # 创建容器中服务的日志目录，用于容器启动时将服务日志挂载到宿主机
   chmod -R 700 ${LOGGING_LOG_PATH}
+
+  # 日志级别由 LOG_LEVEL 统一驱动（uvicorn / agent-core / legacy jiuwen 共用）
   server_path=${SERVICE_HOME}/app/agent_runtime/EIStart.py
 
   hosts=`hostname -I`
