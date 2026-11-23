@@ -1501,6 +1501,7 @@
   "MCPUpdateSuccess": "The MCP update task has been submitted successfully and is expected to take about 5–120 seconds before the deployment can be completed.",
   "MCPUpdateFail": "MCP update failed",
   "mcp_export": "Export MCP Services",
+  "mcp_export_failed": "Export failed. Please try again later.",
   "mcp_import_accepted": "Import accepted: {{count}} services are being processed (auth is not migrated with the file; configure it in the target environment)",
   "mcp_import_completed": "Import completed: {{total}} total, {{success}} tool refresh succeeded",
   "mcp_import_partial": "Import partially completed: {{total}} total, {{success}} succeeded, {{failed}} failed (failed instances are preserved; reload after configuring auth)",

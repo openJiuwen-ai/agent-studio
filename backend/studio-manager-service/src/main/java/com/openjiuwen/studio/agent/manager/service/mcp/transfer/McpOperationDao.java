@@ -59,6 +59,13 @@ public class McpOperationDao {
         mapper.releaseOperationOnService(serviceId, operationId);
     }
 
+    /**
+     * 导入受理后回写实际创建数（轮询读库，须落库）。
+     */
+    public void updateCreatedCount(String operationId, int createdCount) {
+        mapper.updateCreatedCount(operationId, createdCount);
+    }
+
     public boolean finishOperation(String id, String status, Integer createdCount, Integer successCount,
         Integer failedCount) {
         return mapper.finishOperation(id, status, createdCount, successCount, failedCount,

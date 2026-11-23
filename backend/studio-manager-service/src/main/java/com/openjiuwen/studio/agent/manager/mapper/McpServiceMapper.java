@@ -39,6 +39,12 @@ public interface McpServiceMapper {
     List<McpServiceEntity> selectListByTenant(@Param("tenantId") String tenantId, @Param("deptCode") String deptCode,
         @Param("workspaceId") String workspaceId);
 
+    /**
+     * FEAT-134 导出专用：强制 tenant/project/workspace 过滤（selectList 缺租户条件，导出不得复用）。
+     */
+    List<McpServiceEntity> selectListForExport(@Param("ids") List<String> ids, @Param("tenantId") String tenantId,
+        @Param("projectId") String projectId, @Param("workspaceId") String workspaceId);
+
     Long selectCount(@Param("tenantId") String tenantId, @Param("deptCode") String deptCode);
 
     int insert(McpServiceEntity serviceEntity);

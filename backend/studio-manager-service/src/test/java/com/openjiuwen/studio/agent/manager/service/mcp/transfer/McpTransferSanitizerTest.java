@@ -154,11 +154,20 @@ class McpTransferSanitizerTest {
         }
 
         @Test
-        @DisplayName("S-03: 含 ${_env.} 占位符的 URL 原样保留")
+        @DisplayName("S-03: 整串 ${_env.} 占位符 URL 原样保留（平台唯一支持的占位形态）")
         void envPlaceholderUrlPreserved() {
-            String url = "https://${_env.plugin_url_params.MCP_HOST}/mcp";
+            String url = "${_env.plugin_url_params.MCP_URL}";
             McpTransferSanitizer.SanitizeResult result = sanitizer.sanitizeForExport(url, null, List.of(), false);
             assertEquals(url, result.url);
+        }
+
+        @Test
+        @DisplayName("R-05: 内嵌占位符 URL 不放行原样导出（host 含占位符非合法 URI，拒绝）")
+        void embeddedPlaceholderUrlNotPassedThrough() {
+            // 创建侧契约仅支持整串占位；内嵌形态按普通 URL 清洗，host 非法即拒绝
+            String url = "https://${_env.plugin_url_params.MCP_HOST}/mcp";
+            assertThrows(AgentStudioException.class,
+                () -> sanitizer.sanitizeForExport(url, null, List.of(), false));
         }
 
         @Test
@@ -363,6 +372,60 @@ class McpTransferSanitizerTest {
             McpTransferServiceDefinition def =
                 definition("test", "SSE", "sse", "https://example.com/mcp", config);
             assertDoesNotThrow(() -> sanitizer.validateImportSafety(def));
+        }
+
+        @Test
+        @DisplayName("R-06: 内嵌占位符 URL 被拒（占位符 fail-open 修复）")
+        void embeddedPlaceholderQueryValueRejected() {
+            // 修复前：URL 只要含 ${_env. 即整体跳过 userinfo/query 校验，
+            // https://${_env.x}?token=secret 可通过；修复后按普通 URL 校验——
+            // 未转义花括号在任何 URI 部位都解析失败，内嵌占位符整类在此即被拒
+            // （fail-closed：FIELD_INVALID）
+            McpTransferServiceDefinition def =
+                definition("test", "SSE", "sse", "https://${_env.x}?token=secret", null);
+            AgentStudioException e = assertThrows(AgentStudioException.class,
+                () -> sanitizer.validateImportSafety(def));
+            assertEquals(StudioError.MCP_TRANSFER_FIELD_INVALID, e.getErrorCode());
+        }
+
+        @Test
+        @DisplayName("R-07: 整串占位符 URL 通过导入校验（目标环境解析后出站前另校）")
+        void wholeFormPlaceholderAccepted() {
+            McpTransferServiceDefinition def = definition("test", "SSE", "sse",
+                "${_env.plugin_url_params.MCP_URL}", serverConfig(node("https://example.com/mcp")));
+            assertDoesNotThrow(() -> sanitizer.validateImportSafety(def));
+        }
+
+        @Test
+        @DisplayName("R-08: headers/env/args/url 类型不匹配一律拒绝（fail-closed）")
+        void typeMismatchValuesRejected() {
+            // headers 为字符串
+            Map<String, Object> n1 = new LinkedHashMap<>();
+            n1.put("headers", "not-a-map");
+            assertThrows(AgentStudioException.class, () -> sanitizer
+                .validateImportSafety(definition("t", "SSE", "sse", "https://example.com/mcp",
+                    serverConfig(n1))));
+
+            // env 为字符串
+            Map<String, Object> n2 = new LinkedHashMap<>();
+            n2.put("env", "not-a-map");
+            assertThrows(AgentStudioException.class, () -> sanitizer
+                .validateImportSafety(definition("t", "SSE", "sse", "https://example.com/mcp",
+                    serverConfig(n2))));
+
+            // args 为对象（如 {"token":"secret"}）
+            Map<String, Object> n3 = new LinkedHashMap<>();
+            n3.put("args", Map.of("token", "secret"));
+            assertThrows(AgentStudioException.class, () -> sanitizer
+                .validateImportSafety(definition("t", "SSE", "sse", "https://example.com/mcp",
+                    serverConfig(n3))));
+
+            // url 为数字
+            Map<String, Object> n4 = new LinkedHashMap<>();
+            n4.put("url", 12345);
+            assertThrows(AgentStudioException.class, () -> sanitizer
+                .validateImportSafety(definition("t", "SSE", "sse", "https://example.com/mcp",
+                    serverConfig(n4))));
         }
     }
 

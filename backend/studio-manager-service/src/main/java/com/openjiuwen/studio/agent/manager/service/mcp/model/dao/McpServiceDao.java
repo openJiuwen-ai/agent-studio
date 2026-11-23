@@ -58,6 +58,14 @@ public class McpServiceDao {
         return mcpServiceMapper.selectList(ids, tenantId, deptCode,  workspaceId);
     }
 
+    /**
+     * FEAT-134 导出专用：tenant/project/workspace 全过滤（跨租户导出防护）。
+     */
+    public List<McpServiceEntity> listMcpServiceForExport(List<String> ids, String tenantId, String projectId,
+        String workspaceId) {
+        return mcpServiceMapper.selectListForExport(ids, tenantId, projectId, workspaceId);
+    }
+
     public List<McpServiceEntity> listMcpServiceByTenant(String tenantId, String workspaceId) {
         return mcpServiceMapper.selectListByTenant(tenantId, null, workspaceId);
     }

@@ -1521,6 +1521,7 @@
   "MCPUpdateSuccess": "MCP更新任务已成功提交，预计需要等待5~120秒，才可以完成部署",
   "MCPUpdateFail": "MCP更新失败",
   "mcp_export": "导出MCP服务",
+  "mcp_export_failed": "导出失败，请稍后重试",
   "mcp_import_accepted": "导入已受理，共 {{count}} 项服务正在处理（鉴权不随文件迁移，需在目标环境补配）",
   "mcp_import_completed": "导入完成：共 {{total}} 项，工具刷新成功 {{success}} 项",
   "mcp_import_partial": "导入部分完成：共 {{total}} 项，成功 {{success}} 项，失败 {{failed}} 项（失败项实例已保留，可补配后重载）",

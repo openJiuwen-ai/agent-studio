@@ -43,7 +43,17 @@ public class McpTransferSanitizer {
     private static final Set<String> KNOWN_SENSITIVE_HEADERS =
         Set.of("authorization", "cookie", "x-hw-id", "x-hw-appkey", "x-auth-token");
 
-    private static final String PLACEHOLDER_PREFIX = "${_env.";
+    /**
+     * 平台支持的唯一占位符形态：整串 URL 恰为一个环境变量占位符
+     * （创建侧契约：仅整串，不支持内嵌）。含占位符但非此形态的 URL
+     * 一律按普通 URL 走完整校验（防内嵌形态绕过 userinfo/query 检查）。
+     */
+    private static final java.util.regex.Pattern WHOLE_FORM_PLACEHOLDER =
+        java.util.regex.Pattern.compile("^\\$\\{_env\\.plugin_url_params\\.[A-Za-z0-9_-]+\\}$");
+
+    public static boolean isWholeFormEnvPlaceholder(String url) {
+        return url != null && WHOLE_FORM_PLACEHOLDER.matcher(url).matches();
+    }
 
     /**
      * 导出侧：清理服务定义，输出安全投影 + 记录被清理路径。
@@ -71,8 +81,10 @@ public class McpTransferSanitizer {
         if (serverConfig != null) {
             rejectCredentialKeys(serverConfig, "", false);
         }
+        // 仅整串占位符形态跳过校验（解析后、出站前由取数链路校验）；
+        // 内嵌占位符（如 https://${_env.x}?token=secret）按普通 URL 全量校验
         String url = definition.getUrl();
-        if (StringUtils.isNotBlank(url) && !url.contains(PLACEHOLDER_PREFIX)) {
+        if (StringUtils.isNotBlank(url) && !isWholeFormEnvPlaceholder(url)) {
             validateUrlSafety(url);
         }
         if (serverConfig != null) {
@@ -100,43 +112,50 @@ public class McpTransferSanitizer {
             if (!ALLOWED_NODE_KEYS.contains(key)) {
                 throw unsafe("unknown config key rejected: " + basePath + "/" + key);
             }
+            // 严格类型校验（fail-closed）：类型不匹配一律拒绝，不放行待运行期再炸
             if ("url".equals(key)) {
-                // 节点 url 与顶层 url 同规则：userinfo/非空 query 值拒绝（导出端已清洗，
-                // 导入端必须对称校验，防手工文件携带凭据进库）
-                if (entry.getValue() instanceof String nodeUrl
-                    && StringUtils.isNotBlank(nodeUrl) && !nodeUrl.contains(PLACEHOLDER_PREFIX)) {
+                if (!(entry.getValue() instanceof String)) {
+                    throw unsafe("non-string url value rejected: " + basePath + "/url");
+                }
+                // 节点 url 与顶层 url 同规则；仅整串占位符形态跳过（内嵌形态全量校验）
+                String nodeUrl = (String) entry.getValue();
+                if (StringUtils.isNotBlank(nodeUrl) && !isWholeFormEnvPlaceholder(nodeUrl)) {
                     validateUrlSafety(nodeUrl);
                 }
-            }
-            if ("headers".equals(key)) {
-                if (entry.getValue() instanceof Map<?, ?> headers) {
-                    for (Map.Entry<?, ?> h : headers.entrySet()) {
-                        if (h.getValue() != null && !"".equals(h.getValue())) {
-                            throw unsafe("non-empty header value rejected: " + basePath + "/headers/" + h.getKey());
-                        }
+            } else if ("headers".equals(key)) {
+                if (!(entry.getValue() instanceof Map<?, ?> headers)) {
+                    throw unsafe("non-object headers rejected: " + basePath + "/headers");
+                }
+                for (Map.Entry<?, ?> h : headers.entrySet()) {
+                    if (h.getValue() != null && !"".equals(h.getValue())) {
+                        throw unsafe("non-empty header value rejected: " + basePath + "/headers/" + h.getKey());
                     }
                 }
-            }
-            if ("env".equals(key)) {
-                if (entry.getValue() instanceof Map<?, ?> env) {
-                    for (Map.Entry<?, ?> e : env.entrySet()) {
-                        if (e.getValue() != null && !"".equals(e.getValue())) {
-                            throw unsafe("non-empty env value rejected: " + basePath + "/env/" + e.getKey());
-                        }
+            } else if ("env".equals(key)) {
+                if (!(entry.getValue() instanceof Map<?, ?> env)) {
+                    throw unsafe("non-object env rejected: " + basePath + "/env");
+                }
+                for (Map.Entry<?, ?> e : env.entrySet()) {
+                    if (e.getValue() != null && !"".equals(e.getValue())) {
+                        throw unsafe("non-empty env value rejected: " + basePath + "/env/" + e.getKey());
                     }
                 }
-            }
-            if ("args".equals(key)) {
-                if (entry.getValue() instanceof List<?> args) {
-                    for (Object arg : args) {
-                        // 非字符串元素（如内嵌对象）不属于启动器参数合法形态，拒绝
-                        if (!(arg instanceof String s)) {
-                            throw unsafe("non-string args element rejected: " + basePath + "/args");
-                        }
-                        if (s.startsWith("-") && !isKnownLauncherFlag(s)) {
-                            throw unsafe("unknown launcher flag rejected: " + basePath + "/args/" + s);
-                        }
+            } else if ("args".equals(key)) {
+                if (!(entry.getValue() instanceof List<?> args)) {
+                    throw unsafe("non-list args rejected: " + basePath + "/args");
+                }
+                for (Object arg : args) {
+                    // 非字符串元素（如内嵌对象）不属于启动器参数合法形态，拒绝
+                    if (!(arg instanceof String s)) {
+                        throw unsafe("non-string args element rejected: " + basePath + "/args");
                     }
+                    if (s.startsWith("-") && !isKnownLauncherFlag(s)) {
+                        throw unsafe("unknown launcher flag rejected: " + basePath + "/args/" + s);
+                    }
+                }
+            } else if ("command".equals(key)) {
+                if (!(entry.getValue() instanceof String)) {
+                    throw unsafe("non-string command value rejected: " + basePath + "/command");
                 }
             }
         }
@@ -201,7 +220,9 @@ public class McpTransferSanitizer {
         if (StringUtils.isBlank(url)) {
             return url;
         }
-        if (url.contains(PLACEHOLDER_PREFIX)) {
+        // 仅整串占位符原样保留（目标环境解析）；内嵌占位符按普通 URL 清洗
+        // （非占位部分的 userinfo/query 照常剔除，防借占位符绕过导出清洗）
+        if (isWholeFormEnvPlaceholder(url)) {
             return url;
         }
         try {

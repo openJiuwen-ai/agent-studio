@@ -88,6 +88,13 @@
           AND active_mcp_operation_id = #{operationId}
     </update>
 
+    <!-- 导入受理后回写实际创建数（轮询读库，内存对象不落库则恒为 0） -->
+    <update id="updateCreatedCount">
+        UPDATE ws_mcp_operation
+        SET created_count = #{createdCount}
+        WHERE id = #{operationId}
+    </update>
+
     <update id="finishOperation">
         UPDATE ws_mcp_operation
         SET status = #{status},

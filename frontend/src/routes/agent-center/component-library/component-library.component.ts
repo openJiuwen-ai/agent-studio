@@ -296,6 +296,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
     this.destroy$.next();
     this.destroy$.complete();
     this.ppServ.setImportRes();
+    // 清理导入结果轮询定时器：组件销毁后残留会继续跑最长 5 分钟并持有闭包引用
+    this.mcpOperationTimers.forEach(timer => clearInterval(timer));
+    this.mcpOperationTimers.clear();
   }
 
   private getSiteCreateItem() {
@@ -789,6 +792,7 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
             })
             .then(res => {
               if (!res) {
+                MessageComponent.showError(this.i18n.transform('mcp_export_failed'));
                 return;
               }
               CommonUtils.downloadFile(
@@ -798,7 +802,8 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
               );
             })
             .catch(() => {
-              // 导出异常静默处理，避免阻断后续重试
+              // 导出失败必须给用户可见反馈（静默吞掉会让用户以为成功）
+              MessageComponent.showError(this.i18n.transform('mcp_export_failed'));
             })
             .finally(() => {
               this.mcpExporting = false;

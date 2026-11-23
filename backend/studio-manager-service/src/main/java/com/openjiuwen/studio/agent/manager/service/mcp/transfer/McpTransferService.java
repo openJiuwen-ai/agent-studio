@@ -15,6 +15,8 @@ import com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity;
 import com.openjiuwen.studio.agent.manager.entity.McpServiceEntity;
 import com.openjiuwen.studio.agent.manager.enums.EnumMcpStatus;
 import com.openjiuwen.studio.agent.manager.mapper.McpServiceMapper;
+import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
+import com.openjiuwen.studio.agent.manager.service.mcp.McpServiceManager;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServiceDao;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.McpJsonUtils;
@@ -23,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +57,20 @@ public class McpTransferService {
     /** 与 McpServiceManager 正常创建同口径的租户配额。 */
     @org.springframework.beans.factory.annotation.Value("${mcp.mcp-quota:30}")
     private String mcpQuota;
+
+    @Value("${mcp.enable-url-check}")
+    private Boolean enableUrlCheck;
+
+    @Value("${workflow.connector_config_host_blacklist}")
+    private String connectorConfigHostBlacklist;
+
+    @Autowired
+    private UrlCheckUtils urlCheckUtils;
+
+    /** 复用创建侧的黑名单/网段校验（manager 实例方法；@Lazy 断环与既有模式一致）。 */
+    @org.springframework.context.annotation.Lazy
+    @Autowired
+    private McpServiceManager mcpServiceManager;
 
     @Autowired
     private McpServiceDao serviceDao;
@@ -109,6 +126,19 @@ public class McpTransferService {
     public McpTransferOperationResp importServices(String projectId, String workspaceId, String fileContent) {
         List<McpTransferServiceDefinition> definitions = parseAndValidateFile(fileContent);
         String tenantId = RequestContextUtils.getRequestUserDomainId();
+
+        // 与正常创建一致的 SSRF/内网防护：普通 URL 在创建前校验
+        // （占位符 URL 由 getMcpServiceToolList 在解析后、出站前校验，此处跳过）；
+        // 否则导入可绕过创建侧黑名单/网段校验触发服务端内网访问
+        if (Boolean.TRUE.equals(enableUrlCheck)) {
+            for (McpTransferServiceDefinition def : definitions) {
+                String url = def.getUrl();
+                if (StringUtils.isNotBlank(url) && !McpTransferSanitizer.isWholeFormEnvPlaceholder(url)) {
+                    urlCheckUtils.checkUrl(null, url);
+                    mcpServiceManager.checkSwaggerUrlValid(url, connectorConfigHostBlacklist);
+                }
+            }
+        }
 
         // 配额检查（与正常创建同口径 mcp.mcp-quota：当前数量 + 本批数量不得超配额，
         // 否则导入可绕过配额无限建实例）
@@ -168,6 +198,8 @@ public class McpTransferService {
             operationDao.insertOperationItem(item);
         }
         operation.setCreatedCount(createdEntities.size());
+        // 回写 DB：轮询从库读操作行，仅更新内存对象时 created_count 恒为初始 0
+        operationDao.updateCreatedCount(operation.getId(), createdEntities.size());
 
         // 事务提交后投递（由调用方在事务外执行投递）
         McpTransferOperationResp resp = buildOperationResp(operation, null);
@@ -193,9 +225,9 @@ public class McpTransferService {
                 throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                     "service_ids must be empty when selection is ALL");
             }
-            // 共享查询不带 deleted 过滤（统计功能同用）；导出只取未删除实例
-            List<McpServiceEntity> list = serviceDao.listMcpServiceByTenant(tenantId, workspaceId)
-                .stream().filter(entity -> !Boolean.TRUE.equals(entity.getDeleted())).toList();
+            // 导出专用查询：强制 tenant/project/workspace + 未删 + 普通 Mcp 节点
+            // （共享查询缺租户/项目过滤，IDS 导出可跨租户，不复用）
+            List<McpServiceEntity> list = serviceDao.listMcpServiceForExport(null, tenantId, projectId, workspaceId);
             if (list.size() > McpTransferLine.MAX_SERVICES) {
                 throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                     "workspace has more than 100 manageable services; select in batches");
@@ -212,8 +244,8 @@ public class McpTransferService {
             throw new AgentStudioException(StudioError.MCP_TRANSFER_FIELD_INVALID,
                 "service_ids contains duplicates");
         }
-        List<McpServiceEntity> list = serviceDao.listMcpServiceByIdAndTenant(new ArrayList<>(unique), tenantId,
-            CommonUtil.getDeptCode(), workspaceId);
+        List<McpServiceEntity> list = serviceDao.listMcpServiceForExport(new ArrayList<>(unique), tenantId,
+            projectId, workspaceId);
         if (list.size() != unique.size()) {
             throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST,
                 "one or more services not found or not manageable in current workspace");

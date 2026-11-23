@@ -44,6 +44,11 @@ public interface McpOperationMapper {
      */
     int releaseOperationOnService(@Param("serviceId") String serviceId, @Param("operationId") String operationId);
 
+    /**
+     * 导入受理后回写实际创建数（轮询读库，须落库）。
+     */
+    int updateCreatedCount(@Param("operationId") String operationId, @Param("createdCount") int createdCount);
+
     int finishOperation(@Param("id") String id, @Param("status") String status,
         @Param("createdCount") Integer createdCount, @Param("successCount") Integer successCount,
         @Param("failedCount") Integer failedCount, @Param("finishedDate") Timestamp finishedDate);

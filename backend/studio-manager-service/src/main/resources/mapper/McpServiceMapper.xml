@@ -154,6 +154,31 @@
         </where>
     </select>
 
+    <!-- FEAT-134 导出专用：强制 tenant/project/workspace + 未删 + 普通 Mcp 节点。
+         selectList 缺租户过滤（跨租户导出漏洞），导出路径不得复用。 -->
+    <select id="selectListForExport" resultMap="mcpServerEntity">
+        SELECT *
+        FROM ws_mcp_service_def
+        <where>
+            <choose>
+                <when test="ids != null">
+                    id IN
+                    <foreach item="id" collection="ids" open="(" separator="," close=")">
+                        #{id}
+                    </foreach>
+                </when>
+                <otherwise>
+                    1 = 1
+                </otherwise>
+            </choose>
+            AND tenant_id = #{tenantId}
+            AND project_id = #{projectId}
+            AND workspace_id = #{workspaceId}
+            AND node_type = 'Mcp'
+            AND deleted = 0
+        </where>
+    </select>
+
     <select id="selectListByTenant" resultMap="mcpServerEntity">
         SELECT *
         FROM ws_mcp_service_def
