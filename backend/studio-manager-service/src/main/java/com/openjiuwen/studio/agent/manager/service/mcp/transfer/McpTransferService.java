@@ -129,14 +129,15 @@ public class McpTransferService {
 
         // 与正常创建一致的 SSRF/内网防护：普通 URL 在创建前校验
         // （占位符 URL 由 getMcpServiceToolList 在解析后、出站前校验，此处跳过）；
-        // 否则导入可绕过创建侧黑名单/网段校验触发服务端内网访问
+        // 否则导入可绕过创建侧黑名单/网段校验触发服务端内网访问。
+        // 注意两条出站路径都要覆盖：
+        // - manager 侧拉工具拨 fcInstanceUrl（+server_config query）
+        // - 工作流运行时拨 server_config 节点 URL（IrAdapterService.parseMcpConfigForWorkflow）
+        // 两条来自文件的不同字段，只校验其一可被「合法 fcInstanceUrl + 内网节点 URL」绕过
         if (Boolean.TRUE.equals(enableUrlCheck)) {
             for (McpTransferServiceDefinition def : definitions) {
-                String url = def.getUrl();
-                if (StringUtils.isNotBlank(url) && !McpTransferSanitizer.isWholeFormEnvPlaceholder(url)) {
-                    urlCheckUtils.checkUrl(null, url);
-                    mcpServiceManager.checkSwaggerUrlValid(url, connectorConfigHostBlacklist);
-                }
+                checkImportUrlSsrf(def.getUrl());
+                checkImportUrlSsrf(extractNodeUrl(def.getServerConfig()));
             }
         }
 
@@ -215,6 +216,36 @@ public class McpTransferService {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /**
+     * 导入 URL 的 SSRF/黑名单校验（与正常创建同口径）；整串占位符跳过。
+     */
+    private void checkImportUrlSsrf(String url) {
+        if (StringUtils.isNotBlank(url) && !McpTransferSanitizer.isWholeFormEnvPlaceholder(url)) {
+            urlCheckUtils.checkUrl(null, url);
+            mcpServiceManager.checkSwaggerUrlValid(url, connectorConfigHostBlacklist);
+        }
+    }
+
+    /**
+     * 提取 server_config.mcpServers 唯一节点的 url 字段（工作流运行时实际拨打的地址）。
+     * 结构不合法时返回 null（结构级校验由 sanitizer.validateImportSafety 负责，此处只取值）。
+     */
+    private String extractNodeUrl(Map<String, Object> serverConfig) {
+        if (serverConfig == null) {
+            return null;
+        }
+        Object servers = serverConfig.get("mcpServers");
+        if (!(servers instanceof Map<?, ?> serverMap) || serverMap.isEmpty()) {
+            return null;
+        }
+        Object firstNode = serverMap.values().iterator().next();
+        if (!(firstNode instanceof Map<?, ?> node)) {
+            return null;
+        }
+        Object url = node.get("url");
+        return url instanceof String s ? s : null;
+    }
 
     private List<McpServiceEntity> loadExportEntities(String projectId, String workspaceId,
         McpTransferExportReq req) {

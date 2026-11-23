@@ -217,6 +217,13 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     @Override
     public ResponseEntity<Object> importMcpServices(String projectId, String workspaceId,
         org.springframework.web.multipart.MultipartFile file) {
+        // 读字节前先查大小：multipart 层上限 128MB（平台共享配置），业务上限 10MiB——
+        // 先 getBytes() 再校验会让单请求瞬时吃数百 MB 内存（并发即 DoS 面）
+        if (file.getSize() > com.openjiuwen.studio.agent.manager.dto.McpTransferLine.MAX_FILE_BYTES) {
+            throw new com.openjiuwen.studio.agent.common.exception.AgentStudioException(
+                com.openjiuwen.studio.agent.common.enums.StudioError.MCP_TRANSFER_FORMAT_INVALID,
+                "file exceeds 10 MiB limit");
+        }
         try {
             String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
             return ResponseModel.success(
