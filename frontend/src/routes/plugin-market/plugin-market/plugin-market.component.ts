@@ -575,7 +575,7 @@ export class PluginMarketComponent implements OnInit {
   private confirmUnpublishPlugin(plugin: any, relations: any[], count: number): void {
     const confirmTitle =
       count > 0
-        ? this.buildPluginReferenceWarningTitle(relations)
+        ? this.buildPluginReferenceWarningTitle(relations, count)
         : this.i18n.transform('plaza_offshelf_confirm');
     this.nzModalService.confirm({
       nzTitle: confirmTitle,
@@ -595,18 +595,14 @@ export class PluginMarketComponent implements OnInit {
     });
   }
 
-  private buildPluginReferenceWarningTitle(relations: any[]): string {
-    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
-    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
+  private buildPluginReferenceWarningTitle(relations: any[], count: number): string {
+    const separator = this.i18n.transform('plaza_offshelf_referenced_name_separator');
     const names = relations
       .map(r => r?.app_name)
       .filter((n): n is string => !!n)
       .slice(0, 3)
-      .join('、');
-    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', {
-      workflow: workflowCount,
-      agent: agentCount,
-    });
+      .join(separator);
+    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', { count });
     const tail = names
       ? this.i18n.transform('plaza_offshelf_referenced_names', { names })
       : this.i18n.transform('plaza_offshelf_referenced_no_names');
