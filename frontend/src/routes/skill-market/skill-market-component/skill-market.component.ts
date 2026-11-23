@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { I18NEXT_NAMESPACE } from 'angular-i18next';
+import { I18nNamespace } from '@i18n';
 import { finalize, fromEvent, sampleTime, Subscription, tap } from 'rxjs';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzTagModule } from 'ng-zorro-antd/tag';
@@ -126,8 +127,30 @@ export class SkillMarketComponent {
   }
 
   unpublishSkill(card: SkillDetail): void {
+    // 下架前查引用：存量引用会因下架失效，引用确认让用户知情（方案 B，#1733）
+    // queryReference 默认 catchError 吞错返空，故查询失败时 count=0 走无引用通用确认，不阻塞下架
+    this._skillApi
+      .queryReference(card.skillId, 0, 100, { showFailMessage: false })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((res: any) => this.confirmUnpublish(card, res?.relations || [], res?.count || 0));
+  }
+
+  /**
+   * 下架二次确认：有引用时动态文案展示引用方数量与名称，无引用走通用确认。
+   * 下架是全局生效（published_asset=0 后存量引用解析失败），故引用数量须在下架前展示。
+   * 组件 ns 限定 skill/common，plaza_* 文案在 agent-center 命名空间，故显式传 ns。
+   */
+  private confirmUnpublish(card: SkillDetail, relations: any[], count: number): void {
+    const agentCenterNs = { ns: I18nNamespace.AGENT_CENTER };
+    const confirmTitle =
+      count > 0
+        ? this.buildReferenceWarningTitle(relations, agentCenterNs)
+        : this._i18n.transform('plaza_offshelf_confirm', agentCenterNs);
     this.nzModal.confirm({
-      nzTitle: this._i18n.transform('skill.detail.plaza.unpublish.confirm'),
+      nzTitle: confirmTitle,
+      nzOkText: this._i18n.transform('plaza_offshelf', agentCenterNs),
+      nzCancelText: this._i18n.transform('cancel'),
+      nzOkDanger: true,
       nzOnOk: () => {
         this._skillApi
           .unpublishSkill(card.skillId)
@@ -138,6 +161,29 @@ export class SkillMarketComponent {
           });
       },
     });
+  }
+
+  /**
+   * 构造引用提示文案：聚合引用方类型（工作流/智能体）数量 + 前几个名称。
+   * app_type 实测值为 'agent'/'workflow'（后端 MappingEntity.app_type）。
+   */
+  private buildReferenceWarningTitle(relations: any[], ns: { ns: I18nNamespace }): string {
+    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
+    const names = relations
+      .map(r => r?.app_name)
+      .filter((n): n is string => !!n)
+      .slice(0, 3)
+      .join('、');
+    const summary = this._i18n.transform('plaza_offshelf_referenced_summary', {
+      ...ns,
+      workflow: workflowCount,
+      agent: agentCount,
+    });
+    const tail = names
+      ? this._i18n.transform('plaza_offshelf_referenced_names', { ...ns, names })
+      : this._i18n.transform('plaza_offshelf_referenced_no_names', ns);
+    return `${this._i18n.transform('plaza_offshelf_referenced_prefix', ns)}${summary}${tail}`;
   }
 
   ngAfterViewInit() {
