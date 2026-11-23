@@ -675,6 +675,9 @@ public class RelationManagementService implements IRelationManagementService {
      * @return List<Map<String, Object>>
      */
     public List<Map<String, Object>> parseNestedProperties(Map<String, SchemaConfig> properties) {
+        if (properties == null) {
+            return new ArrayList<>();
+        }
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, SchemaConfig> entry : properties.entrySet()) {
             String paramName = entry.getKey();
