@@ -288,4 +288,48 @@ public interface IMcpServiceManagerService {
      * @return 服务目录条目 ID（重复下架幂等）
      */
     String unpublishServer(String projectId, String workspaceId, String serverId);
+
+    /**
+     * FEAT-134：导出 MCP 服务为迁移文件（不含凭据）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param req 导出请求（selection=IDS/ALL + service_ids）
+     * @return 迁移文件 JSON 字符串
+     */
+    String exportMcpServices(String projectId, String workspaceId,
+        com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq req);
+
+    /**
+     * FEAT-134：导入 MCP 服务（全量校验 + 新建实例 + 异步刷新）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param fileContent 迁移文件内容
+     * @return 操作结果（受理快照，HTTP 202 语义）
+     */
+    com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp importMcpServices(String projectId,
+        String workspaceId, String fileContent);
+
+    /**
+     * FEAT-134：重载 MCP 服务工具快照（原地刷新，不动引用）。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param serviceId 服务 ID
+     * @return 操作结果（受理快照）
+     */
+    com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp reloadMcpService(String projectId,
+        String workspaceId, String serviceId);
+
+    /**
+     * FEAT-134：查询导入/重载操作结果。
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param operationId 操作 ID
+     * @return 操作终态或运行态
+     */
+    com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp getMcpOperationResult(String projectId,
+        String workspaceId, String operationId);
 }

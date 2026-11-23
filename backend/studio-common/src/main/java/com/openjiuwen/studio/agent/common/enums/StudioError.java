@@ -4779,7 +4779,47 @@ public enum StudioError {
     /**
      * ==============================资产广场-应用模板==============================
      */
-    CALL_ASSET_APP_EXCEED_FREE_TRIAL_TIMES(BAD_REQUEST, ASSET, "1001");
+    CALL_ASSET_APP_EXCEED_FREE_TRIAL_TIMES(BAD_REQUEST, ASSET, "1001"),
+
+    /**
+     * MCP迁移文件格式非法（文件为空/行无法解析/行类型非MCP_SERVICE等结构级错误）
+     */
+    MCP_TRANSFER_FORMAT_INVALID(BAD_REQUEST, COMPONENT, "1191"),
+
+    /**
+     * MCP迁移文件字段非法（缺必填/枚举不符/名称不合法/交叉校验失败）
+     */
+    MCP_TRANSFER_FIELD_INVALID(BAD_REQUEST, COMPONENT, "1184"),
+
+    /**
+     * MCP迁移文件版本不支持
+     */
+    MCP_TRANSFER_VERSION_UNSUPPORTED(BAD_REQUEST, COMPONENT, "1185"),
+
+    /**
+     * MCP迁移文件安全契约违规（携带鉴权字段/未清理的凭据槽位值）
+     */
+    MCP_TRANSFER_UNSAFE_CONFIG(BAD_REQUEST, COMPONENT, "1186"),
+
+    /**
+     * MCP服务存在进行中的操作（导入/重载/编辑互斥）
+     */
+    MCP_OPERATION_IN_PROGRESS(CONFLICT, COMPONENT, "1187"),
+
+    /**
+     * MCP操作被中断（进程重启/超时回收），用户可重新提交
+     */
+    MCP_OPERATION_INTERRUPTED(SERVICE_UNAVAILABLE, COMPONENT, "1188"),
+
+    /**
+     * MCP操作提交冲突（迟到结果/所有权丢失，禁止无条件覆盖）
+     */
+    MCP_OPERATION_CONFLICT(CONFLICT, COMPONENT, "1189"),
+
+    /**
+     * NPX/UVX目标环境部署能力不可用
+     */
+    MCP_DEPLOYMENT_UNAVAILABLE(SERVICE_UNAVAILABLE, COMPONENT, "1190");
 
 
 
