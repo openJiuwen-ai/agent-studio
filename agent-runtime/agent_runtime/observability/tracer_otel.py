@@ -60,6 +60,17 @@ def setup_otel_tracer() -> None:
         logger.info("OpenTelemetry tracer handlers already registered, skipping")
         return
 
+    # #1713：覆写上游 _explicit_parent_context 缺省 SAMPLED，使 manager
+    # embedded refs 在 OTEL_SAMPLE_RATE=0 时不再静默绕过采样开关。
+    try:
+        from agent_runtime.observability.otel_explicit_parent_bridge import (
+            install_explicit_parent_bridge,
+        )
+
+        install_explicit_parent_bridge()
+    except Exception as bridge_exc:  # noqa: BLE001 — 桥接失败不阻断 OTel 启动
+        logger.warning("otel explicit-parent bridge install failed: %s", bridge_exc)
+
     otel_settings = settings.otel
 
     config = OtelTracerConfig(

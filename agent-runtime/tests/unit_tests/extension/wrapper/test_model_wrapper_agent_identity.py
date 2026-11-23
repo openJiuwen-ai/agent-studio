@@ -437,14 +437,14 @@ class TestParentRefsPassthrough:
                 parent_span_id="cd" * 8,
             )
         )
-        assert _identity_kwargs(captured) == [
-            {
-                "conversation_id": "s1",
-                "parent_trace_id": "ab" * 16,
-                "parent_span_id": "cd" * 8,
-                "message_count": 1,
-            }
-        ]
+        identity = _identity_kwargs(captured)[0]
+        assert identity["conversation_id"] == "s1"
+        assert identity["parent_trace_id"] == "ab" * 16
+        assert identity["parent_span_id"] == "cd" * 8
+        assert identity["message_count"] == 1
+        # #1713：缺省也必须带 flags，避免上游强制 SAMPLED
+        assert "parent_trace_flags" in identity
+        assert identity["parent_trace_flags"] in ("00", "01")
 
     @staticmethod
     def test_partial_refs_dropped(monkeypatch):

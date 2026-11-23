@@ -46,8 +46,9 @@ from agent_runtime.error_contract.factory import is_plugin_response_format_error
 try:
     from opentelemetry import trace as otel_trace
     from opentelemetry import context as otel_context
-    from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+    from opentelemetry.trace import SpanContext, TraceState
     from opentelemetry.trace.span import NonRecordingSpan
+    from agent_runtime.observability.otel_parent_flags import resolve_injected_trace_flags
     _HAS_OTEL = True
 except ImportError:
     _HAS_OTEL = False
@@ -485,11 +486,14 @@ class WorkflowRunner:
                 if saved_trace_id:
                     # Update current OTel context to use saved_trace_id
                     if _HAS_OTEL:
+                        # 与 middleware 一致：父 TraceFlags 跟随 OTEL_SAMPLE_RATE，
+                        # 禁止硬编码 SAMPLED 绕过采样率 0（#1644/#1713）。
+                        _otel_trace_id = _to_otel_trace_id(saved_trace_id)
                         _otel_span_ctx = SpanContext(
-                            trace_id=_to_otel_trace_id(saved_trace_id),
+                            trace_id=_otel_trace_id,
                             span_id=int(uuid.uuid4().hex[:16], 16),
                             is_remote=False,
-                            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                            trace_flags=resolve_injected_trace_flags(_otel_trace_id),
                             trace_state=TraceState(),
                         )
                         _otel_span = NonRecordingSpan(_otel_span_ctx)

@@ -16,6 +16,7 @@ from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
 import agent_runtime.observability.tracer_otel as tracer_otel_mod
 
 _real_import = builtins.__import__
+_EXPLICIT_PARENT_SYM = "_explicit_parent_context"
 
 
 def _block_studio_import(name, gdict=None, ldict=None, fromlist=(), level=0):
@@ -28,11 +29,30 @@ def _block_studio_import(name, gdict=None, ldict=None, fromlist=(), level=0):
     return _real_import(name, gdict, ldict, fromlist, level)
 
 
+def _snapshot_explicit_parent():
+    """保存上游 ``_explicit_parent_context``，setup 可能 monkey-patch 之。"""
+    try:
+        import openjiuwen.extensions.tracer_otel.handler as otel_handler
+    except ImportError:
+        return None, None
+    handler_ns = getattr(otel_handler, "__dict__", {})
+    if _EXPLICIT_PARENT_SYM not in handler_ns:
+        return otel_handler, None
+    return otel_handler, handler_ns[_EXPLICIT_PARENT_SYM]
+
+
+def _restore_explicit_parent(otel_handler, original):
+    if otel_handler is None or original is None:
+        return
+    setattr(otel_handler, _EXPLICIT_PARENT_SYM, original)
+
+
 @pytest.mark.asyncio
 async def test_fallbacks_to_official_handler_when_studio_unavailable(monkeypatch):
     prev_enabled = tracer_otel_mod.settings.otel.enabled
     tracer_otel_mod.settings.otel.enabled = True
     monkeypatch.setattr(builtins, "__import__", _block_studio_import)
+    otel_handler, original_parent = _snapshot_explicit_parent()
     try:
         TracerHandlerRegistry.clear()
         tracer_otel_mod.setup_otel_tracer()
@@ -41,3 +61,4 @@ async def test_fallbacks_to_official_handler_when_studio_unavailable(monkeypatch
     finally:
         tracer_otel_mod.settings.otel.enabled = prev_enabled
         TracerHandlerRegistry.clear()
+        _restore_explicit_parent(otel_handler, original_parent)
