@@ -1149,7 +1149,7 @@ def _register_jiuwen_callbacks() -> None:
     3. notify_start_trace_resolved (regular)
        — 通过 CustomSchema 通知 WorkflowWrapper 发送缓存的 start trace
     4. node_perf_start / node_perf_end (transform+regular)
-       — 记录节点执行耗时，输出 _execute_invokable<node=type_name>|{ms} 性能日志
+       — 记录节点执行耗时，输出 _execute_invokable<node=type_name>|node_id={node_id}|{ms} 性能日志
        — 在节点开始/结束打印 common 日志
     """
     try:
@@ -1401,8 +1401,8 @@ def _register_jiuwen_callbacks() -> None:
         async def node_perf_end(node_id, ability, graph_id, inputs, outputs):
             """Emit per-node execution timing.
 
-            Format: _execute_invokable<node=type_name>|{ms}
-            e.g. _execute_invokable<node=jiuwen.code_代码>|12
+            Format: _execute_invokable<node=type_name>|node_id={node_id}|{ms}
+            e.g. _execute_invokable<node=jiuwen.code_代码>|node_id=node_123|12
             """
             ctx = _node_start_time_ctx.get()
             if ctx is None:
@@ -1428,7 +1428,11 @@ def _register_jiuwen_callbacks() -> None:
                 label = node_name
             else:
                 label = node_id
-            performance_logger.info(f"_execute_invokable<node={label}>|{duration_ms}")
+            # 追加稳定关联键 node_id（与通用日志的 node_id 对齐），耗时仍保持为末段
+            node_id_part = f"|node_id={node_id}" if node_id else ""
+            performance_logger.info(
+                f"_execute_invokable<node={label}>{node_id_part}|{duration_ms}"
+            )
             _node_start_time_ctx.set(None)
     except Exception as e:
         _logger.warning(
