@@ -75,3 +75,19 @@ def test_non_console_formatter_keeps_full_message():
 
     assert not formatter.format(_record("M" * 1000)).endswith("...")
     assert len(formatter.format(_record("M" * 1000))) > 1000
+
+
+@pytest.mark.parametrize("cap", [1, 2])
+def test_tiny_cap_honors_length_contract(monkeypatch, cap):
+    """max 为 1/2 时截断输出也不得超过上限。
+
+    修复前该分支返回固定 "..."（长度 3）会超上限，截断契约在边界被破坏；
+    修复后返回等长截断标记（"." * cap）。
+    """
+    monkeypatch.setenv("LOG_MSG_MAX_LENGTH", str(cap))
+    formatter = MaskingFormatter(fmt=_FMT, truncate_for_console=True)
+
+    out = formatter.format(_record("M" * 1000))
+
+    assert len(out) == cap
+    assert set(out) == {"."}

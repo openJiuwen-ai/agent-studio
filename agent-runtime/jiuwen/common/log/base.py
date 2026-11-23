@@ -581,7 +581,9 @@ class MaskingFormatter(logging.Formatter):
         # 截断并添加省略号
         truncate_length = self.max_msg_length - 3  # 保留3个字符给 "..."
         if truncate_length <= 0:
-            return "..."
+            # max 为 1/2 时 "..."（3 字符）会超上限：返回等长的截断标记，
+            # 保持「输出长度不超过 max_msg_length」的截断契约
+            return "." * self.max_msg_length
 
         return message[:truncate_length] + "..."
 
