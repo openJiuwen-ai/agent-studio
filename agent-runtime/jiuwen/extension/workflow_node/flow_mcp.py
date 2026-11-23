@@ -47,6 +47,74 @@ USER_FIELDS = "userFields"
 
 TAG = " === FLOW_MCP === "
 
+# 病因摘要截断口径：单条消息、子异常条数、解包深度
+_FLATTEN_MSG_MAX = 300
+_FLATTEN_SUBS_MAX = 5
+_FLATTEN_DEPTH_MAX = 3
+
+# 故障侧判定标记：命中任一即判为「外部 MCP 服务侧」（服务不可达 / 返回数据
+# 不合协议 / 协议层报错）；否则视为平台内部异常
+_MCP_SERVICE_SIDE_MARKERS = (
+    "ValidationError",      # pydantic 校验失败：服务返回的工具定义/结果不合 MCP 协议
+    "validation errors",
+    "McpError",             # MCP SDK 协议层错误
+    "ConnectError",         # 连不上外部服务
+    "ConnectionError",
+    "ConnectionRefused",
+    "TimeoutError",         # 连接/读超时
+    "Timeout",
+)
+
+
+def _iter_exception_leaves(error: BaseException):
+    """递归产出 ExceptionGroup 的全部叶子异常（含普通异常自身）。"""
+    if isinstance(error, BaseExceptionGroup) and error.exceptions:
+        for sub in error.exceptions:
+            yield from _iter_exception_leaves(sub)
+    else:
+        yield error
+
+
+def _classify_fault_side(error: BaseException) -> str:
+    """判断故障侧：mcp-service（外部 MCP 服务问题）或 platform（平台内部问题）。
+
+    用户据此一眼定责：mcp-service → 检查外部 MCP 服务的协议合规性/连通性；
+    platform → 平台侧故障，需平台排查。
+    """
+    for leaf in _iter_exception_leaves(error):
+        leaf_name = type(leaf).__name__
+        leaf_msg = str(leaf)[:200]
+        for marker in _MCP_SERVICE_SIDE_MARKERS:
+            if marker in leaf_name or marker in leaf_msg:
+                return "mcp-service"
+    return "platform"
+
+
+def _flatten_exception_group(error: BaseException, depth: int = 0) -> str:
+    """递归解包 ExceptionGroup，输出「类型: 消息」病因摘要。
+
+    MCP 客户端的任务组异常（ExceptionGroup）内部才是真实病因（如 pydantic
+    ValidationError 指明 tools.N.inputSchema 缺字段、连接被拒等）；只报
+    类别名等于把诊断信息扔掉。单条消息与子异常数均截断，避免异常风暴
+    打爆错误消息字段。
+    """
+    if depth > _FLATTEN_DEPTH_MAX:
+        return "..."
+    if isinstance(error, BaseExceptionGroup) and error.exceptions:
+        subs = "; ".join(
+            _flatten_exception_group(sub, depth + 1)
+            for sub in error.exceptions[:_FLATTEN_SUBS_MAX]
+        )
+        more = len(error.exceptions) - _FLATTEN_SUBS_MAX
+        head = f"{type(error).__name__}({len(error.exceptions)} sub): [{subs}"
+        if more > 0:
+            head += f"; ...{more} more"
+        return head + "]"
+    msg = " ".join(str(error).split())
+    if len(msg) > _FLATTEN_MSG_MAX:
+        msg = msg[:_FLATTEN_MSG_MAX] + "..."
+    return f"{type(error).__name__}: {msg}"
+
 
 class FlowMcpStatusCode(Enum):
     """FlowMcp 组件专用错误码"""
@@ -664,15 +732,19 @@ class FlowMcp(WorkflowComponent):
         }
 
     def _create_error_response(self, error: Exception) -> JiuWenBaseException:
-        """创建错误响应"""
-        if isinstance(error, ExceptionGroup):
-            error_type = "ExceptionGroup"
-        else:
-            error_type = "Exception"
+        """创建错误响应
+
+        ExceptionGroup（AnyIO TaskGroup）会包裹真实子异常，仅输出类别名会让
+        用户无从判断故障侧（外部 MCP 服务的协议/schema 问题 vs 平台自身）；
+        此处先打故障侧标签（mcp-service/platform，用户一眼定责），再递归
+        解包携带子异常的类型与消息（截断防日志膨胀）。
+        """
+        fault_side = _classify_fault_side(error)
+        detail = _flatten_exception_group(error)
         return JiuWenBaseException(
             error_code=StatusCode.WORKFLOW_MCP_EXECUTE_ERROR.code,
             message=StatusCode.WORKFLOW_MCP_EXECUTE_ERROR.errmsg.format(
-                error=error_type
+                error=f"[{fault_side}] {detail}"
             ),
         )
 
