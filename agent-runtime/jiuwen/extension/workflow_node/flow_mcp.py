@@ -53,7 +53,7 @@ _FLATTEN_SUBS_MAX = 5
 _FLATTEN_DEPTH_MAX = 3
 
 # 故障侧判定标记：命中任一即判为「外部 MCP 服务侧」（服务不可达 / 返回数据
-# 不合协议 / 协议层报错）；否则视为平台内部异常
+# 不合协议 / 协议层报错 / 服务端 HTTP 错误状态码）；否则视为平台内部异常
 _MCP_SERVICE_SIDE_MARKERS = (
     "ValidationError",      # pydantic 校验失败：服务返回的工具定义/结果不合 MCP 协议
     "validation errors",
@@ -63,6 +63,7 @@ _MCP_SERVICE_SIDE_MARKERS = (
     "ConnectionRefused",
     "TimeoutError",         # 连接/读超时
     "Timeout",
+    "HTTPStatusError",      # 外部服务返回 HTTP 错误状态码（401 鉴权未补配/404/5xx 等）
 )
 
 
