@@ -43,14 +43,16 @@ def remove_redis_workflow_global_vals(store_key):
     # python没有do-while，用字符0进入循环
     cursor = "0"
     deleted_count = 0
+    # 经公共访问器取原生 client（G.CLS.11：不在类外访问 _redis 受保护成员）
+    client = redis_client.get_redis_client()
     try:
         # 使用SCAN命令迭代匹配前缀
         while cursor != 0:
-            cursor, keys = redis_client._redis.scan(
+            cursor, keys = client.scan(
                 cursor=cursor, match=store_key, count=REDIS_SCAN_BATCH_SIZE
             )
             if keys:
-                redis_client._redis.delete(*keys)
+                client.delete(*keys)
                 deleted_count += len(keys)
         logger.info(f"delete {store_key} redis record {deleted_count}")
     except Exception as e:

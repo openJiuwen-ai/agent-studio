@@ -120,11 +120,11 @@ class Memory4CallbackHandler(BaseCallbackHandler, ABC):
             }
             for i in conversations
         ]
-        if conversations and conversation_id and workflow_id and execution_id:
-            [
-                CacheFactory.get_chat_cache().save(f"{workflow_id}:{execution_id}", i)
-                for i in conversations
-            ]
+        # G.CTL.03：多条件收敛为 all()；G.EXP.04：副作用写缓存不用推导式，改循环
+        if all((conversations, conversation_id, workflow_id, execution_id)):
+            chat_cache = CacheFactory.get_chat_cache()
+            for item in conversations:
+                chat_cache.save(f"{workflow_id}:{execution_id}", item)
 
         if (
             convert_to_old_type.get(NodeType.END.value)
@@ -259,13 +259,12 @@ class Memory4CallbackHandler(BaseCallbackHandler, ABC):
     @classmethod
     def _collect_memory_vals(cls, execution_id, user_id, workflow_id, **kwargs):
         history_store_key = f"{REDIS_LTM_CHAT_PREFIX}:{workflow_id}:{user_id}"
-        # 本轮引擎内执行新生成的对话历史
+        # 本轮引擎内执行新生成的对话历史（G.EXP.04：先取源再简单过滤，多行调用不进推导式）
+        chat_items = CacheFactory.get_chat_cache().get_all(
+            f"{workflow_id}:{execution_id}"
+        )
         current_runtime_chat = [
-            x
-            for x in CacheFactory.get_chat_cache().get_all(
-                f"{workflow_id}:{execution_id}"
-            )
-            if workflow_id in x.get("relate_workflows", [])
+            x for x in chat_items if workflow_id in x.get("relate_workflows", [])
         ]
         history_chat = [json.loads(x) for x in redis_client.list_get(history_store_key)]
         history_chat.extend(current_runtime_chat if current_runtime_chat else [])

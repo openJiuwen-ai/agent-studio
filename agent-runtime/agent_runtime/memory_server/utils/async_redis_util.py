@@ -467,7 +467,8 @@ class RedisClient:
             # 防无限循环的安全措施（最多100批）
             if total_batch > 100:
                 logger.warning(
-                    f"delete by pattern over limit batch num（100）, stop it.There maybe some keys exists for: pattern={pattern}"
+                    "delete by pattern over limit batch num(100), stop it. "
+                    f"There maybe some keys exists for: pattern={pattern}"
                 )
                 break
 
