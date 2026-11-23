@@ -363,3 +363,9 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+## Feedback optimization unexpectedly inserts at the beginning
+
+The feedback API uses an optional insertion position to distinguish whole-prompt refinement from insertion. Leave the position unspecified, or use null, for whole-prompt refinement. An explicit zero requests insertion at the beginning.
+
+The Manager request now preserves an unspecified position as null when forwarding it to Builder. Previously, its primitive integer default converted an omitted position into zero, selecting insertion even for a whole-prompt feedback request.
