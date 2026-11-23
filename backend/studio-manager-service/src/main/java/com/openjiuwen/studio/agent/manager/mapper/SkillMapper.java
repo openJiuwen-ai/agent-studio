@@ -72,18 +72,25 @@ public interface SkillMapper {
     SkillDetails searchBySkillId(String skillId);
 
     /**
-     * 根据 skillIds 批量查询 Skills（通用批量查询，不硬编码广场可见性过滤）。
+     * 根据 skillIds 批量查询 Skills（通用批量查询，不硬编码 published_asset='1' 作为唯一过滤）。
      *
-     * <p>隔离语义（issue #1734）：domainId 非空时按"本 domain 全部 + 跨 domain 已上架
-     * （published_asset='1'）"过滤——本 domain 的未上架草稿可见（修复删除前引用确认误报
-     * 资源不存在），跨 domain 仅可见已上架（广场可见语义，堵住跨 domain 未上架草稿的存在性/元数据泄露）。
-     * 粒度与既有契约对齐：getSkillPackageContent / deleteStudioSkill / searchBySkillIdAndDomainId
-     * 均按 domain 校验（同 domain 内跨 workspace/project 预览属于既有契约，不阻断）。
-     * domainId 为空时不过滤（保留全局行为，兼容无法获取 domain 上下文的调用方；
-     * 新调用方应优先传 domainId = RequestContextUtils.getRequestUserDomainId()）。</p>
+     * <p>隔离语义（issue #1734）：按 domainId 隔离，粒度与既有契约对齐
+     * （getSkillPackageContent / deleteStudioSkill / searchBySkillIdAndDomainId 均按 domain 校验；
+     * 同 domain 内跨 workspace/project 预览属于既有契约，不阻断）。
+     *
+     * <p><b>domainId 非空</b>：{@code AND (domain_id=#{domainId} OR published_asset='1')}
+     * ——本 domain 全部（含未上架草稿，修复删除前引用确认误报资源不存在）+ 跨 domain 仅已上架
+     * （广场可见语义，堵住跨 domain 未上架草稿的存在性/元数据泄露）。
+     *
+     * <p><b>domainId 为空/null</b>：fail-closed 到 {@code AND published_asset='1'}（仅已上架可见，
+     * 未上架草稿不跨 domain 泄露），而非退化为无过滤的全量查询。
+     * RequestContextUtils.getRequestUserDomainId() 在无请求上下文（异步/运行时任务）可能返回空，
+     * 此时按 fail-closed 仅返回已上架 Skill——堵泄露优先，代价是这些异常路径下未上架草稿仍当不存在
+     * （当前 9 处共用调用方均为 HTTP 请求同步触发，有 RequestContext，domainId 非空，不受影响）。
+     * 新调用方应传 domainId = RequestContextUtils.getRequestUserDomainId()。</p>
      *
      * @param skillIds skill id 列表
-     * @param domainId 当前 domain id（null=不过滤 domain，保留全局行为）
+     * @param domainId 当前 domain id（null/空 → fail-closed 仅已上架可见）
      */
     List<SkillDetails> searchBySkillIds(@Param("skillIds") List<String> skillIds, @Param("domainId") String domainId);
 
