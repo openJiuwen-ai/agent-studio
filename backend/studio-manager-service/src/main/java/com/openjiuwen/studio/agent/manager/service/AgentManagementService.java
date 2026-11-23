@@ -1825,7 +1825,7 @@ public class AgentManagementService implements IAgentManagementService {
         if (body.getSkills() != null) {
             // 0. 还原版本场景，根据传入的skills，构造List<AgentSkillDetail>
             List<String> skillIds = body.getSkills().stream().map(SkillReference::getSkillId).toList();
-            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds);
+            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds, RequestContextUtils.getRequestUserDomainId());
             List<AgentSkillDetail> agentSkillDetails = new ArrayList<>();
             skillDetails.forEach(skill -> {
                 AgentSkillDetail agentSkillDetail = new AgentSkillDetail().setSkillId(skill.getSkillId())
@@ -2021,7 +2021,7 @@ public class AgentManagementService implements IAgentManagementService {
             .map(AgentSkillDetail::getSkillId)
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, RequestContextUtils.getRequestUserDomainId());
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return new HashMap<>();
         }

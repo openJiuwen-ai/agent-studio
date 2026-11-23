@@ -143,7 +143,14 @@ public class ResourceService {
                 return CommonMeta.fromMemoryRepos((memoryRepoMapper.selectByCondition(projectId, workspaceId, null, ids, null)));
             }
             case SKILL -> {
-                return CommonMeta.fromSkills(skillMapper.searchBySkillIds(ids));
+                // 隔离契约（issue #1734 巡检问题2/3）：SKILL 按 domain_id 隔离（非 workspace_id）——
+                // 与 getSkillPackageContent / deleteStudioSkill / searchBySkillIdAndDomainId 对齐：
+                // 同 domain 内跨 workspace/project 的 Skill 可见属于既有契约
+                // （getSkillPackageContent 明确"不比对 workspaceId / projectId：同 domain 内跨工作区/项目预览属于既有契约"）。
+                // 故此处不复用方法参数 workspaceId，而用 RequestContextUtils.getRequestUserDomainId()，
+                // 与其他资源类型（AGENT/WORKFLOW/TOOL/MCP/MEMORY 按 workspace）的粒度不同是 Skill 契约使然。
+                // validResourceExist 校验的是"资源存在性"，domain 内可见即视为存在。
+                return CommonMeta.fromSkills(skillMapper.searchBySkillIds(ids, RequestContextUtils.getRequestUserDomainId()));
             }
         }
         return null;
