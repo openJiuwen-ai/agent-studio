@@ -43,6 +43,11 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    # 测试用 fakeredis 显式钉版：2.26~2.39 的 aioredis 构造自省
+    # （_get_args_to_warn 触 __closure__）在部分 redis-py 构建上崩
+    # （CI 实挂：method_descriptor 无 __closure__）；2.40.0 已删该代码路径，
+    # 构造性免疫。测试代码 import fakeredis，此前零声明（环境隐式装、版本漂移）。
+    "fakeredis==2.40.0",
 ]
 tracer-otel = [
     "opentelemetry-api>=1.20.0",
