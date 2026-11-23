@@ -130,8 +130,7 @@ export class SkillApi extends JiuwenBaseApi {
           limit,
           resource_type: 'skill',
         },
-        messageConfig,
-      } as any)
+      } as any, messageConfig)
       .pipe(catchError(() => of({ relations: [] })));
   }
 

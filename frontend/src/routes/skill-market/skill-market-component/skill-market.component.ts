@@ -166,22 +166,33 @@ export class SkillMarketComponent {
   }
 
   /**
-   * 构造引用提示文案：引用总数用接口返回的 count（准确，不受 limit 截断），
-   * 名称用 relations 前 3 个 app_name，分隔符走 i18n（zh=、 en=, ）避免硬编码顿号。
+   * 构造引用提示文案：分类计数（workflow/agent，基于 relations）+ count 总数兜底
+   * （count>relations.length 时显示"共 count 个引用"，因 limit 截断时分类计数不全但总数准）
+   * + 名称用 relations 前 3 个 app_name，分隔符走 i18n（zh=、 en=, ）避免硬编码顿号。
    * app_type 实测值为 'agent'/'workflow'（后端 MappingEntity.app_type）。
    */
   private buildReferenceWarningTitle(relations: any[], count: number, ns: { ns: I18nNamespace }): string {
+    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
     const separator = this._i18n.transform('plaza_offshelf_referenced_name_separator', ns);
     const names = relations
       .map(r => r?.app_name)
       .filter((n): n is string => !!n)
       .slice(0, 3)
       .join(separator);
-    const summary = this._i18n.transform('plaza_offshelf_referenced_summary', { ...ns, count });
+    const summary = this._i18n.transform('plaza_offshelf_referenced_summary', {
+      ...ns,
+      workflow: workflowCount,
+      agent: agentCount,
+    });
+    // count>relations.length 说明 relations 被 limit 截断，分类计数不全，补总数兜底
+    const total = count > relations.length
+      ? this._i18n.transform('plaza_offshelf_referenced_total', { ...ns, count })
+      : '';
     const tail = names
       ? this._i18n.transform('plaza_offshelf_referenced_names', { ...ns, names })
       : this._i18n.transform('plaza_offshelf_referenced_no_names', ns);
-    return `${this._i18n.transform('plaza_offshelf_referenced_prefix', ns)}${summary}${tail}`;
+    return `${this._i18n.transform('plaza_offshelf_referenced_prefix', ns)}${summary}${total}${tail}`;
   }
 
   ngAfterViewInit() {

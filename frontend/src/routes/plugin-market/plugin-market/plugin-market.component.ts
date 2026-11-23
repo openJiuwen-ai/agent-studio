@@ -563,7 +563,7 @@ export class PluginMarketComponent implements OnInit {
       resource_type: 'tool',
     };
     this.cardService
-      .selectQuoteList(plugin.plugin_id, param)
+      .selectQuoteList(plugin.plugin_id, param, true)
       .then(res => {
         const relations = (res && res.relations) || [];
         const count = (res && res.count) || 0;
@@ -599,17 +599,26 @@ export class PluginMarketComponent implements OnInit {
   }
 
   private buildPluginReferenceWarningTitle(relations: any[], count: number): string {
+    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
     const separator = this.i18n.transform('plaza_offshelf_referenced_name_separator');
     const names = relations
       .map(r => r?.app_name)
       .filter((n): n is string => !!n)
       .slice(0, 3)
       .join(separator);
-    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', { count });
+    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', {
+      workflow: workflowCount,
+      agent: agentCount,
+    });
+    // count>relations.length 说明 relations 被 limit 截断，分类计数不全，补总数兜底
+    const total = count > relations.length
+      ? this.i18n.transform('plaza_offshelf_referenced_total', { count })
+      : '';
     const tail = names
       ? this.i18n.transform('plaza_offshelf_referenced_names', { names })
       : this.i18n.transform('plaza_offshelf_referenced_no_names');
-    return `${this.i18n.transform('plaza_offshelf_referenced_prefix')}${summary}${tail}`;
+    return `${this.i18n.transform('plaza_offshelf_referenced_prefix')}${summary}${total}${tail}`;
   }
 
   public creatShare() {

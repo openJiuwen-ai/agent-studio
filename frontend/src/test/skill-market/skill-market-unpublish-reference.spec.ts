@@ -6,8 +6,9 @@
  * 会触发 TS2339 编译失败，故不实例化组件，改为独立测 buildReferenceWarningTitle 的聚合算法
  * （与 skill-market.component.ts / plugin-market.component.ts 内实现一致）。
  *
- * 聚合逻辑（巡检修复后）：引用总数用接口返回的 count（准确，不受 limit=100 截断），
- * 名称用 relations 前 3 个 app_name，分隔符走 i18n key（zh=、 en=, ）避免硬编码顿号。
+ * 聚合逻辑（巡检修复后）：分类计数（workflow/agent，基于 relations）+ count 总数兜底
+ * （count>relations.length 时显示「共 count 个引用」，因 limit 截断时分类计数不全但总数准）
+ * + 名称用 relations 前 3 个 app_name，分隔符走 i18n key（zh=、 en=, ）避免硬编码顿号。
  *
  * 组件方法本身的三分支（有引用/无引用/查询失败）由后端引用查询接口已验证
  * （mock-skill-001 count=2 / mock-tool-001 count=1），见 04-changelog。
@@ -25,25 +26,31 @@ function aggregateReferenceSummary(
   count: number,
   t: (key: string, opts?: any) => string,
 ): string {
+  const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+  const agentCount = relations.filter(r => r?.app_type === 'agent').length;
   const separator = t('plaza_offshelf_referenced_name_separator');
   const names = relations
     .map(r => r?.app_name)
     .filter((n): n is string => !!n)
     .slice(0, 3)
     .join(separator);
-  const summary = t('plaza_offshelf_referenced_summary', { count });
+  const summary = t('plaza_offshelf_referenced_summary', { workflow: workflowCount, agent: agentCount });
+  const total = count > relations.length ? t('plaza_offshelf_referenced_total', { count }) : '';
   const tail = names ? t('plaza_offshelf_referenced_names', { names }) : t('plaza_offshelf_referenced_no_names');
-  return `${t('plaza_offshelf_referenced_prefix')}${summary}${tail}`;
+  return `${t('plaza_offshelf_referenced_prefix')}${summary}${total}${tail}`;
 }
 
-describe('bug1733 下架前引用确认 - 引用文案聚合（巡检修复后用 count + separator）', () => {
+describe('bug1733 下架前引用确认 - 引用文案聚合（分类计数 + count 兜底）', () => {
   /** 模拟 i18n.transform：key + 插值变量，返回可断言的结构化串。 */
   const t = (key: string, opts?: any): string => {
     if (key === 'plaza_offshelf_referenced_prefix') {
       return '[prefix]';
     }
     if (key === 'plaza_offshelf_referenced_summary') {
-      return `[summary:count=${opts.count}]`;
+      return `[summary:wf=${opts.workflow},agent=${opts.agent}]`;
+    }
+    if (key === 'plaza_offshelf_referenced_total') {
+      return `[total:${opts.count}]`;
     }
     if (key === 'plaza_offshelf_referenced_names') {
       return `[names:${opts.names}]`;
@@ -57,16 +64,37 @@ describe('bug1733 下架前引用确认 - 引用文案聚合（巡检修复后�
     return `[${key}]`;
   };
 
-  it('引用总数用 count（不受 relations 截断影响）', () => {
-    // relations 只有 3 个（被 limit=100 截断的实际场景），但 count=150（真实总数）
+  it('分类计数 workflow/agent（基于 relations）', () => {
+    const relations: Relation[] = [
+      { app_type: 'workflow', app_name: 'W1' },
+      { app_type: 'workflow', app_name: 'W2' },
+      { app_type: 'agent', app_name: 'A1' },
+    ];
+    const title = aggregateReferenceSummary(relations, 3, t);
+    expect(title).toContain('[summary:wf=2,agent=1]');
+  });
+
+  it('count>relations.length（limit 截断）时显示 total 兜底', () => {
+    // relations 只有 3 个（被 limit 截断），但 count=150（真实总数）
     const relations: Relation[] = [
       { app_type: 'agent', app_name: 'A' },
       { app_type: 'workflow', app_name: 'B' },
       { app_type: 'agent', app_name: 'C' },
     ];
     const title = aggregateReferenceSummary(relations, 150, t);
-    // 总数用 count=150，不是 relations.length=3（巡检修复点：避免 >100 截断误导）
-    expect(title).toContain('[summary:count=150]');
+    // 分类计数基于 relations（截断不全），但 total 用 count=150 兜底（准确）
+    expect(title).toContain('[summary:wf=1,agent=2]');
+    expect(title).toContain('[total:150]');
+  });
+
+  it('count==relations.length（无截断）时不显示 total', () => {
+    const relations: Relation[] = [
+      { app_type: 'agent', app_name: 'A' },
+      { app_type: 'workflow', app_name: 'B' },
+    ];
+    const title = aggregateReferenceSummary(relations, 2, t);
+    expect(title).toContain('[summary:wf=1,agent=1]');
+    expect(title).not.toContain('[total:');
   });
 
   it('names 取前 3 个并用 separator 拼接（不硬编码顿号）', () => {
@@ -77,7 +105,6 @@ describe('bug1733 下架前引用确认 - 引用文案聚合（巡检修复后�
       { app_type: 'agent', app_name: 'D' },
     ];
     const title = aggregateReferenceSummary(relations, 4, t);
-    // 分隔符走 i18n key（此测试桩为 ','），不硬编码 '、'
     expect(title).toContain('[names:A,B,C]');
     expect(title).not.toContain('A、B、C');
     expect(title).not.toContain('D'); // 第 4 个不展示
@@ -94,11 +121,12 @@ describe('bug1733 下架前引用确认 - 引用文案聚合（巡检修复后�
     expect(title).not.toContain('[names:');
   });
 
-  it('count=0 不进入聚合（由 confirmUnpublish 分支走通用确认，不调本函数）', () => {
-    // 本函数仅在 count>0 时被调用；count=0 走 plaza_offshelf_confirm 通用确认
-    // 此用例确认契约：count>0 时正常聚合
-    const title = aggregateReferenceSummary([{ app_type: 'agent', app_name: 'A' }], 1, t);
-    expect(title).toContain('[summary:count=1]');
-    expect(title).toContain('[names:A]');
+  it('未知 app_type 不计入 workflow/agent（容错）', () => {
+    const relations: Relation[] = [
+      { app_type: 'unknown', app_name: 'X' },
+      { app_type: 'agent', app_name: 'A1' },
+    ];
+    const title = aggregateReferenceSummary(relations, 2, t);
+    expect(title).toContain('[summary:wf=0,agent=1]');
   });
 });
