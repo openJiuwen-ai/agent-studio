@@ -40,6 +40,13 @@
         where id = #{id}
     </select>
 
+    <select id="selectByIdAndDeletedFalse" resultMap="mcpServerEntity">
+        SELECT *
+        FROM ws_mcp_server_def
+        where id = #{id}
+          AND deleted = false
+    </select>
+
     <select id="queryServerWithPage" resultMap="mcpServerEntity">
         SELECT
         <include refid="All_Column"/>
