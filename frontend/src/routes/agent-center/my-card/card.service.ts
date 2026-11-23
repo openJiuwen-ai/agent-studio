@@ -79,10 +79,13 @@ export class CardService {
   }
 
   // 引用列表
-  public selectQuoteList(id: any, query: any): Promise<any> {
+  // cancelGlobalError: 跳过 handleError 全局错误 toast，由调用方自行 catch 处理
+  // （下架前引用确认失败走通用确认，不应再弹全局 toast 致双提示）
+  public selectQuoteList(id: any, query: any, cancelGlobalError = false): Promise<any> {
     return this.http.getAsync({
       url: `${this.prefixBase}/agent-manager/relation/resources/${id}`,
       query: query,
+      cancelGlobalError,
     });
   }
 }
