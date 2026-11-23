@@ -554,6 +554,9 @@ export class PluginMarketComponent implements OnInit {
   unpublishPlugin(plugin: any, $event?: Event): void {
     $event?.stopPropagation();
     // 下架前查引用：存量引用会因下架失效，引用确认让用户知情（方案 B，#1733）
+    // 按 plugin_id 查引用：后端 selectByResourceIdAndVersionId 用 `resource_id=#{pluginId}
+    //   OR resource_id like concat(pluginId,'#%')` 匹配，插件引用记录 resource_id 为
+    //   pluginId#toolId，故按 plugin_id 一次查询即可覆盖该插件所有工具引用，无需遍历 tool_id。
     const param = {
       offset: 0,
       limit: 100,

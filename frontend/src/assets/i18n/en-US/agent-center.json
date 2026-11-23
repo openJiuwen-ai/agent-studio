@@ -1447,7 +1447,7 @@
   "plaza_offshelf_confirm": "Unpublish this asset from the Asset Plaza?",
   "plaza_onshelf_success": "Published successfully",
   "plaza_offshelf_success": "Unpublished successfully",
-  "plaza_offshelf_referenced_prefix": "This asset is referenced by the following apps. Existing references may fail to run after unpublishing:",
+  "plaza_offshelf_referenced_prefix": "This asset is referenced by the following apps. Existing references may fail to run after unpublishing: ",
   "plaza_offshelf_referenced_summary": "{{count}} reference(s) in total",
   "plaza_offshelf_referenced_names": " ({{names}}, etc.). Unpublish anyway?",
   "plaza_offshelf_referenced_name_separator": ", ",

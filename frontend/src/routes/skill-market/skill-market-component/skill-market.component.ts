@@ -142,6 +142,7 @@ export class SkillMarketComponent {
    */
   private confirmUnpublish(card: SkillDetail, relations: any[], count: number): void {
     const agentCenterNs = { ns: I18nNamespace.AGENT_CENTER };
+    const commonNs = { ns: I18nNamespace.COMMON };
     const confirmTitle =
       count > 0
         ? this.buildReferenceWarningTitle(relations, count, agentCenterNs)
@@ -149,7 +150,8 @@ export class SkillMarketComponent {
     this.nzModal.confirm({
       nzTitle: confirmTitle,
       nzOkText: this._i18n.transform('plaza_offshelf', agentCenterNs),
-      nzCancelText: this._i18n.transform('cancel'),
+      // cancel 在 common 命名空间，组件 ns 含 common 默认可访问；显式传 ns 防御 ns 解析差异
+      nzCancelText: this._i18n.transform('cancel', commonNs),
       nzOkDanger: true,
       nzOnOk: () => {
         this._skillApi
