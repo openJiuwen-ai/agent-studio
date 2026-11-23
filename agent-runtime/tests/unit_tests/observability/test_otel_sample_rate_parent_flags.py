@@ -31,6 +31,26 @@ class TestResolveInjectedTraceFlags:
             flags = resolve_injected_trace_flags(0xABC123)
             assert int(flags) & TraceFlags.SAMPLED == 0
 
+    @staticmethod
+    def test_fractional_rate_without_sdk_degrades_not_raises():
+        """缺 opentelemetry-sdk 时小数采样率不得 ImportError（避免请求 500）。"""
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _block_sdk(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "opentelemetry.sdk.trace.sampling" or (
+                name == "opentelemetry.sdk.trace" and fromlist and "sampling" in fromlist
+            ):
+                raise ImportError("simulated: opentelemetry-sdk not installed")
+            if name.startswith("opentelemetry.sdk"):
+                raise ImportError("simulated: opentelemetry-sdk not installed")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=_block_sdk):
+            flags = resolve_injected_trace_flags(0xABC123, sample_rate=0.1)
+        assert int(flags) & TraceFlags.SAMPLED == 0
+
 
 class TestParentBasedHonorsInjectedFlags:
     """看守：rate=0 + 按修复后 flags 注入父 → 子决策 DROP。"""

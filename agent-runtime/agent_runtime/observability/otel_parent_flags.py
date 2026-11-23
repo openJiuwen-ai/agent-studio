@@ -31,7 +31,13 @@ def resolve_injected_trace_flags(
     if sample_rate >= 1.0:
         return TraceFlags(TraceFlags.SAMPLED)
 
-    from opentelemetry.sdk.trace.sampling import Decision, TraceIdRatioBased
+    # opentelemetry-sdk 在 tracer-otel extra；基础运行时可能未装。
+    # 缺 SDK 时不可让 middleware 每请求 ImportError → 500。
+    try:
+        from opentelemetry.sdk.trace.sampling import Decision, TraceIdRatioBased
+    except ImportError:
+        # 降级：无法做比例采样时保守不采，避免硬失败
+        return TraceFlags(0x00)
 
     decision = TraceIdRatioBased(rate=sample_rate).should_sample(
         parent_context=None,
