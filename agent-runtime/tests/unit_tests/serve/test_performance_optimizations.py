@@ -162,7 +162,7 @@ async def test_async_ir_load_deduplicates_concurrent_same_path_within_request():
     release = asyncio.Event()
     load_calls = 0
 
-    async def load(_path):
+    async def load(_path, should_refresh_ttl=False):
         nonlocal load_calls
         load_calls += 1
         started.set()
@@ -199,7 +199,7 @@ async def test_async_ir_load_waiter_cancellation_does_not_duplicate_load():
     release = asyncio.Event()
     load_calls = 0
 
-    async def load(_path):
+    async def load(_path, should_refresh_ttl=False):
         nonlocal load_calls
         load_calls += 1
         started.set()

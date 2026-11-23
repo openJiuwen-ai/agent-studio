@@ -65,9 +65,10 @@ def _infra_mocks():
     ), patch(
         "agent_runtime.runner.workflow_runner.TraceIdStore.save", new=AsyncMock()
     ), patch(
-        "agent_runtime.runner.workflow_runner.get_redis_client"
-    ) as _redis_mock:
-        _redis_mock.return_value = AsyncMock()
+        # redis 迁移到 SPI 后 workflow_runner 经 redis_spi.accessor 取客户端
+        #（模块命名空间级 patch，覆盖 accessor.get_redis() 全部调用点）
+        "redis_spi.accessor.get_redis", return_value=AsyncMock()
+    ):
         yield
 
 

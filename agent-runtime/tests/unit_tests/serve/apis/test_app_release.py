@@ -104,7 +104,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.return_value = json.dumps(release_data).encode("utf-8")
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
@@ -121,7 +121,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.return_value = None
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
@@ -138,7 +138,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.side_effect = ConnectionError("Redis down")
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
@@ -155,7 +155,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.return_value = b"not-valid-json"
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
@@ -173,7 +173,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.return_value = json.dumps(release_data).encode("utf-8")
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
@@ -191,7 +191,7 @@ class TestAppReleaseGetReleaseInfo:
         mock_redis.get.return_value = json.dumps(release_data).encode("utf-8")
 
         with patch(
-            "common_utils.redis_manager.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ):
             service = AppRelease()
