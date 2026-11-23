@@ -50,28 +50,34 @@ def get_list_from_env():
 
 
 class TestGetListFromEnvEmptyFallback:
-    def test_unset_uses_default_empty_list(self, get_list_from_env):
+    @staticmethod
+    def test_unset_uses_default_empty_list(get_list_from_env):
         os.environ.pop("LOG_MASKED_PATTERNS", None)
         assert get_list_from_env("LOG_MASKED_PATTERNS") == []
 
-    def test_empty_string_equals_default(self, get_list_from_env):
+    @staticmethod
+    def test_empty_string_equals_default(get_list_from_env):
         """看守用例：已设置空串不得崩溃，等价 []。"""
         os.environ["LOG_MASKED_PATTERNS"] = ""
         assert get_list_from_env("LOG_MASKED_PATTERNS") == []
 
-    def test_whitespace_string_equals_default(self, get_list_from_env):
+    @staticmethod
+    def test_whitespace_string_equals_default(get_list_from_env):
         os.environ["LOG_MASKED_PATTERNS"] = "   "
         assert get_list_from_env("LOG_MASKED_PATTERNS") == []
 
-    def test_valid_json_array_parsed(self, get_list_from_env):
+    @staticmethod
+    def test_valid_json_array_parsed(get_list_from_env):
         os.environ["LOG_MASKED_PATTERNS"] = json.dumps([r"\d+", "secret"])
         assert get_list_from_env("LOG_MASKED_PATTERNS") == [r"\d+", "secret"]
 
-    def test_invalid_json_still_raises(self, get_list_from_env):
+    @staticmethod
+    def test_invalid_json_still_raises(get_list_from_env):
         os.environ["LOG_MASKED_PATTERNS"] = "not-json"
         with pytest.raises(ValueError, match="Invalid JSON format"):
             get_list_from_env("LOG_MASKED_PATTERNS")
 
-    def test_custom_default_when_empty(self, get_list_from_env):
+    @staticmethod
+    def test_custom_default_when_empty(get_list_from_env):
         os.environ["LOG_MASKED_SENS_WORDS"] = ""
         assert get_list_from_env("LOG_MASKED_SENS_WORDS", default='["a"]') == ["a"]

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from opentelemetry.sdk.trace.sampling import Decision, ParentBasedTraceIdRatio
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags, TraceState
 from opentelemetry.trace import set_span_in_context
@@ -15,15 +14,18 @@ from agent_runtime.observability.otel_parent_flags import resolve_injected_trace
 
 
 class TestResolveInjectedTraceFlags:
-    def test_rate_zero_not_sampled(self):
+    @staticmethod
+    def test_rate_zero_not_sampled():
         flags = resolve_injected_trace_flags(0xABC123, sample_rate=0.0)
         assert int(flags) & TraceFlags.SAMPLED == 0
 
-    def test_rate_one_sampled(self):
+    @staticmethod
+    def test_rate_one_sampled():
         flags = resolve_injected_trace_flags(0xABC123, sample_rate=1.0)
         assert int(flags) & TraceFlags.SAMPLED == TraceFlags.SAMPLED
 
-    def test_reads_settings_when_rate_omitted(self):
+    @staticmethod
+    def test_reads_settings_when_rate_omitted():
         with patch("agent_runtime.common.config.settings") as settings:
             settings.otel.sample_rate = 0.0
             flags = resolve_injected_trace_flags(0xABC123)
@@ -49,14 +51,18 @@ class TestParentBasedHonorsInjectedFlags:
             name="chain",
         ).decision
 
-    def test_legacy_forced_sampled_bypasses_rate_zero(self):
+    @staticmethod
+    def test_legacy_forced_sampled_bypasses_rate_zero():
         """修复前对照：硬编码 SAMPLED 父 → 即便 rate=0 仍 RECORD。"""
-        decision = self._child_decision(TraceFlags(TraceFlags.SAMPLED))
+        decision = TestParentBasedHonorsInjectedFlags._child_decision(
+            TraceFlags(TraceFlags.SAMPLED)
+        )
         assert decision == Decision.RECORD_AND_SAMPLE
 
-    def test_rate_zero_flags_drop_child(self):
+    @staticmethod
+    def test_rate_zero_flags_drop_child():
         flags = resolve_injected_trace_flags(0xABC123, sample_rate=0.0)
-        decision = self._child_decision(flags)
+        decision = TestParentBasedHonorsInjectedFlags._child_decision(flags)
         assert decision == Decision.DROP
 
 
