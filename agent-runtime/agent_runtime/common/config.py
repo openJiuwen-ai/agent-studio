@@ -249,6 +249,24 @@ class OtelSettings(BaseSettings):
     schedule_delay_millis: int = Field(
         default=5000, validation_alias="OTEL_SCHEDULE_DELAY_MILLIS"
     )
+
+    @field_validator("sample_rate", mode="after")
+    @classmethod
+    def _validate_sample_rate(cls, v) -> float:
+        """保证有限且落在 [0, 1]；nan/inf 回退默认 1.0，避免 TraceIdRatioBased 抛错。"""
+        import math
+
+        try:
+            rate = float(v)
+        except (TypeError, ValueError):
+            return 1.0
+        if not math.isfinite(rate):
+            return 1.0
+        if rate < 0.0:
+            return 0.0
+        if rate > 1.0:
+            return 1.0
+        return rate
     export_timeout_ms: int = Field(default=30000, validation_alias="OTEL_EXPORT_TIMEOUT_MS")
     max_export_batch_size: int = Field(
         default=512, validation_alias="OTEL_MAX_EXPORT_BATCH_SIZE"

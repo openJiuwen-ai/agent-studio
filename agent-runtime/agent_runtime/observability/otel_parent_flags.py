@@ -9,7 +9,24 @@ Runtime 入口用 NonRecordingSpan 注入业务关联 trace_id 时，若一律
 
 from __future__ import annotations
 
+import math
+
 from opentelemetry.trace import TraceFlags
+
+
+def _normalize_sample_rate(sample_rate: float) -> float:
+    """有限且夹紧到 [0, 1]；nan/inf → 1.0（与 OtelSettings 校验一致）。"""
+    try:
+        rate = float(sample_rate)
+    except (TypeError, ValueError):
+        return 1.0
+    if not math.isfinite(rate):
+        return 1.0
+    if rate < 0.0:
+        return 0.0
+    if rate > 1.0:
+        return 1.0
+    return rate
 
 
 def resolve_injected_trace_flags(
@@ -25,6 +42,8 @@ def resolve_injected_trace_flags(
         from agent_runtime.common.config import settings
 
         sample_rate = float(settings.otel.sample_rate)
+
+    sample_rate = _normalize_sample_rate(sample_rate)
 
     if sample_rate <= 0.0:
         return TraceFlags(0x00)

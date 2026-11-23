@@ -10,7 +10,10 @@
 
 from __future__ import annotations
 
-from agent_runtime.observability.otel_parent_flags import resolve_injected_trace_flags
+from agent_runtime.observability.otel_parent_flags import (
+    _normalize_sample_rate,
+    resolve_injected_trace_flags,
+)
 from openjiuwen.core.common.logging import workflow_logger as logger
 from opentelemetry import trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
@@ -29,6 +32,8 @@ def resolve_explicit_parent_trace_flags(
         from agent_runtime.common.config import settings
 
         sample_rate = float(settings.otel.sample_rate)
+
+    sample_rate = _normalize_sample_rate(sample_rate)
 
     if sample_rate <= 0.0:
         return TraceFlags(0x00)

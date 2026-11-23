@@ -21,10 +21,36 @@ LLM 调用日志 — 通过 callback framework 记录模型请求体和响应内
 """
 
 import json
+from urllib.parse import urlsplit, urlunsplit
 
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.runner.callback.events import LLMCallEvents
 from openjiuwen.core.runner.callback.utils import get_callback_framework
+
+
+def _sanitize_api_url_for_log(api_url) -> str:
+    """日志用下游 URL：保留 scheme/host/port/path，去掉 userinfo/query/fragment。
+
+    api_url 可能来自 ``plugin_url_params`` 解析结果；完整 URL 若带凭据落入
+    ERROR 日志会泄露 secret。解析失败时回退 ``unknown`` / ``redacted``。
+    """
+    if api_url is None:
+        return "unknown"
+    raw = str(api_url).strip()
+    if not raw or raw == "unknown":
+        return "unknown"
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return "redacted"
+    host = parts.hostname or ""
+    if not parts.scheme or not host:
+        # 非绝对 URL：避免把可能含 token 的原文写入日志
+        return "redacted"
+    netloc = host
+    if parts.port is not None:
+        netloc = f"{host}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path or "", "", ""))
 
 # 标记是否已注册，避免重复注册
 _registered: bool = False
@@ -92,7 +118,9 @@ def register_llm_call_logging_callbacks() -> None:
         期望 kwargs 携带 ``api_url`` / ``latency_ms``（由 model_service 失败 trigger
         注入）；缺失时回退为 unknown/N/A，避免回调因字段不全而崩。
         """
-        api_url = kwargs.get("api_url") or kwargs.get("apiUrl") or "unknown"
+        api_url = _sanitize_api_url_for_log(
+            kwargs.get("api_url") or kwargs.get("apiUrl")
+        )
         latency_ms = kwargs.get("latency_ms")
         if latency_ms is None:
             latency_ms = kwargs.get("latency")

@@ -47,6 +47,12 @@ class TestResolveInjectedTraceFlags:
             flags = resolve_injected_trace_flags(0xABC123, sample_rate=0.1)
         assert int(flags) & TraceFlags.SAMPLED == 0
 
+    @staticmethod
+    def test_nan_sample_rate_does_not_raise():
+        """OTEL_SAMPLE_RATE=nan 不得让 TraceIdRatioBased 抛 ValueError。"""
+        flags = resolve_injected_trace_flags(0xABC123, sample_rate=float("nan"))
+        assert int(flags) & TraceFlags.SAMPLED == TraceFlags.SAMPLED
+
 
 class TestParentBasedHonorsInjectedFlags:
     """看守：rate=0 + 按修复后 flags 注入父 → 子决策 DROP。"""

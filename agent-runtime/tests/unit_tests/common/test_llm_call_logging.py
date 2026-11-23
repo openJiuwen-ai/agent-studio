@@ -418,6 +418,47 @@ async def test_error_callback_logs_error(caplog):
 
 
 @pytest.mark.asyncio
+async def test_error_callback_strips_credentials_from_url(caplog):
+    """带 userinfo/query 的 api_url 不得原样进 ERROR 日志。"""
+    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+
+    register_llm_call_logging_callbacks()
+    fw = get_callback_framework()
+
+    dirty = "https://user:s3cret@llm.example.com:8443/v1/chat?api_key=tok#frag"
+    with caplog.at_level(logging.DEBUG, logger="workflow"):
+        await fw.trigger(
+            LLMCallEvents.LLM_CALL_ERROR,
+            model_name="m",
+            model_provider="studio",
+            error=RuntimeError("boom"),
+            api_url=dirty,
+            latency_ms=1,
+        )
+
+    error_msg = next(
+        r.message for r in caplog.records
+        if r.levelno == logging.ERROR and "model call error" in r.message
+    )
+    assert "url=https://llm.example.com:8443/v1/chat" in error_msg
+    assert "s3cret" not in error_msg
+    assert "api_key" not in error_msg
+    assert "user:" not in error_msg
+
+
+def test_sanitize_api_url_for_log_helpers():
+    from agent_runtime.common.llm_call_logging import _sanitize_api_url_for_log
+
+    assert _sanitize_api_url_for_log(None) == "unknown"
+    assert _sanitize_api_url_for_log("") == "unknown"
+    assert (
+        _sanitize_api_url_for_log("http://h/v1?x=1")
+        == "http://h/v1"
+    )
+    assert _sanitize_api_url_for_log("not-a-url") == "redacted"
+
+
+@pytest.mark.asyncio
 async def test_error_callback_logs_fallback_when_url_latency_missing(caplog):
     """trigger 未带 url/latency 时仍可落盘（回退 unknown/N/A）。"""
     from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
