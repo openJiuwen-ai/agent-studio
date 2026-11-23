@@ -42,6 +42,18 @@ public class McpServerDao {
         return mcpServerMapper.selectById(id);
     }
 
+    /**
+     * 按 ID 查询未下架（deleted=false）的服务目录条目，供详情/展示链路使用。
+     *
+     * <p>原方法 {@link #selectById(String)} 不过滤 deleted，保留供下架幂等（需读到下架条目判断是否已下架）与历史审计使用。</p>
+     *
+     * @param id 目录条目ID
+     * @return 未下架条目；不存在或已下架（deleted=true）返回 null
+     */
+    public McpServerEntity selectByIdAndDeletedFalse(String id) {
+        return mcpServerMapper.selectByIdAndDeletedFalse(id);
+    }
+
     public int updateViewTimes(String serverId) {
         return mcpServerMapper.updateViewTimes(serverId);
     }

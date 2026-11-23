@@ -568,8 +568,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
         String tenantId = RequestContextUtils.getRequestUserDomainId();
 
 
-        McpServerEntity serverEntity = serverDao.selectById(serverId);
+        McpServerEntity serverEntity = serverDao.selectByIdAndDeletedFalse(serverId);
         if (serverEntity == null) {
+            // 不存在或已下架（deleted=true）统一返回不存在，下架条目不进入详情/不累加浏览计数（FR-10/AC-14）
             throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
         // 白名单放行：inner 全租户可见；private 仅本租户可见；其余（脏数据孤儿）404

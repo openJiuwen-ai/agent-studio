@@ -26,6 +26,17 @@ public interface McpServerV2Mapper {
 
     McpServerEntity selectById(String id);
 
+    /**
+     * 按 ID 查询未下架（deleted=false）的服务目录条目，供详情/展示链路使用。
+     *
+     * <p>下架采用软删（deleted=true），详情查询需过滤 deleted 以保证"下架即广场不可见"。
+     * 原方法 {@link #selectById(String)} 不过滤 deleted，保留供下架幂等（unpublishServer 需读到下架条目判断是否已下架）与历史审计使用。</p>
+     *
+     * @param id 目录条目ID
+     * @return 未下架条目；不存在或已下架返回 null
+     */
+    McpServerEntity selectByIdAndDeletedFalse(@Param("id") String id);
+
     List<McpServerEntity> selectList(String serverId, String tenantId, String deptCode);
 
     int insert(McpServerEntity serverEntity);

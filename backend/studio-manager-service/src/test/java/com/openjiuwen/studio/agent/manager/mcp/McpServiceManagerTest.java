@@ -758,13 +758,13 @@ class McpServiceManagerTest {
 
     /**
      * 用例描述：查询MCP服务详情时服务不存在，应抛出 MCP_SERVICE_NOT_EXIST 异常
-     * 预制条件：serverDao.selectById 返回 null
+     * 预制条件：serverDao.selectByIdAndDeletedFalse 返回 null
      * 输入参数：projectId=p1, workspaceId=ws1, serverId=server-not-exist
      * 预期结果：抛出 AgentStudioException，错误码为 MCP_SERVICE_NOT_EXIST
      */
     @Test
     void testQueryServerDetail_ServerNotFound_ThrowsException() {
-        when(serverDao.selectById("server-not-exist")).thenReturn(null);
+        when(serverDao.selectByIdAndDeletedFalse("server-not-exist")).thenReturn(null);
 
         AgentStudioException ex = Assertions.assertThrows(AgentStudioException.class,
             () -> mcpServiceManager.queryServerDetail("p1", "ws1", "server-not-exist"));
@@ -786,7 +786,7 @@ class McpServiceManagerTest {
         McpServerDetailInfoDto detailDto = new McpServerDetailInfoDto();
         detailDto.setId("server-1");
 
-        when(serverDao.selectById("server-1")).thenReturn(serverEntity);
+        when(serverDao.selectByIdAndDeletedFalse("server-1")).thenReturn(serverEntity);
         when(mcpUtil.serverEntity2McpServerDetailInfoDto(serverEntity)).thenReturn(detailDto);
         when(mcpServerRatingDao.queryScoreByServerIdAndTenantId("server-1", TENANT_ID)).thenReturn(null);
         when(mcpServerRatingDao.queryScoreByServerId("server-1")).thenReturn(Collections.emptyList());
@@ -815,7 +815,7 @@ class McpServiceManagerTest {
         McpServerDetailInfoDto detailDto = new McpServerDetailInfoDto();
         detailDto.setId("server-private");
 
-        when(serverDao.selectById("server-private")).thenReturn(serverEntity);
+        when(serverDao.selectByIdAndDeletedFalse("server-private")).thenReturn(serverEntity);
         commonUtilMock.when(() -> CommonUtil.getDeptCode()).thenReturn("dept-1");
         when(mcpUtil.serverEntity2McpServerDetailInfoDto(serverEntity)).thenReturn(detailDto);
         when(mcpServerRatingDao.queryScoreByServerIdAndTenantId("server-private", TENANT_ID)).thenReturn(null);
@@ -839,10 +839,25 @@ class McpServiceManagerTest {
         serverEntity.setId("server-invalid");
         serverEntity.setType("public");
 
-        when(serverDao.selectById("server-invalid")).thenReturn(serverEntity);
+        when(serverDao.selectByIdAndDeletedFalse("server-invalid")).thenReturn(serverEntity);
 
         AgentStudioException ex = Assertions.assertThrows(AgentStudioException.class,
             () -> mcpServiceManager.queryServerDetail("p1", "ws1", "server-invalid"));
+        Assertions.assertEquals(StudioError.MCP_SERVICE_NOT_EXIST, ex.getErrorCode());
+    }
+
+    /**
+     * 用例描述：查询MCP服务详情时服务已下架（deleted=true），应抛出 MCP_SERVICE_NOT_EXIST，不返回详情、不累加浏览计数
+     * 预制条件：serverDao.selectByIdAndDeletedFalse 返回 null（SQL 层过滤掉 deleted=true 的下架条目）
+     * 输入参数：projectId=p1, workspaceId=ws1, serverId=server-off-shelf
+     * 预期结果：抛出 AgentStudioException，错误码为 MCP_SERVICE_NOT_EXIST（FR-10/AC-14：下架即广场不可见）
+     */
+    @Test
+    void testQueryServerDetail_OffShelf_Deleted_ThrowsNotExist() {
+        when(serverDao.selectByIdAndDeletedFalse("server-off-shelf")).thenReturn(null);
+
+        AgentStudioException ex = Assertions.assertThrows(AgentStudioException.class,
+            () -> mcpServiceManager.queryServerDetail("p1", "ws1", "server-off-shelf"));
         Assertions.assertEquals(StudioError.MCP_SERVICE_NOT_EXIST, ex.getErrorCode());
     }
 
