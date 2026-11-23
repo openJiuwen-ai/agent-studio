@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Request
 from fastapi.responses import JSONResponse
 from openjiuwen.core.common.logging import workflow_logger
 
+from agent_runtime.context.request_context import update_conversation_id
 from agent_runtime.serve.apis.app_run import (
     _execute_workflow_run,
     _execute_agent_run,
@@ -246,6 +247,9 @@ async def run_web_agent(
     # conversation_id 为空时生成 UUID
     if not conversation_id:
         conversation_id = str(uuid.uuid4())
+    # 查询参数路由不在中间件会话来源矩阵内，解析后回写请求上下文，
+    # 供日志前缀的 conversation_id 关联字段取值
+    update_conversation_id(conversation_id)
 
     workflow_logger.info(
         "Web agent run request: short_code=%s, conversation=%s, workspace=%s, environment=%s",

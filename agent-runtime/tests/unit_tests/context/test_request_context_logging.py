@@ -235,17 +235,18 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             COMMON_LOG_FORMAT,
             "%(asctime)s,%(msecs)03d|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
-            "%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|"
-            "%(message)s",
+            "%(trace_id)s|%(execution_id)s|%(request_id)s|%(conversation_id)s|"
+            "%(levelname)s|%(message)s",
         )
         self.assertEqual(
             PERFORMANCE_LOG_FORMAT,
             "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(execution_id)s|"
-            "%(request_id)s|%(levelname)s|%(message)s",
+            "%(request_id)s|%(conversation_id)s|%(levelname)s|%(message)s",
         )
         self.assertEqual(
             DEFAULT_LOG_FORMAT,
-            "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(levelname)s|%(message)s",
+            "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(conversation_id)s|"
+            "%(levelname)s|%(message)s",
         )
 
     def test_log_format_is_selected_by_log_type(self):
@@ -310,6 +311,108 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
             DefaultLogger("llm", config)._get_formatter()._fmt,
             COMMON_LOG_FORMAT,
         )
+
+    async def test_common_log_format_renders_conversation_id_segment(self):
+        """格式串应把 body 来源的 conversation_id 渲染进前缀（request_id 与 levelname 之间）。"""
+        install_request_id_log_record_factory()
+        from jiuwen.common.log.base import MaskingFormatter
+
+        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
+        captured = {}
+
+        async def call_next(request):
+            record = logging.getLogRecordFactory()(
+                "workflow",
+                logging.INFO,
+                __file__,
+                1,
+                "message",
+                (),
+                None,
+            )
+            # openjiuwen ContextFilter 正常会补 log_type；此处直接补齐以单测格式渲染
+            record.log_type = "workflow"
+            formatter = MaskingFormatter(
+                fmt=COMMON_LOG_FORMAT,
+                sensitive_words=None,
+                sensitive_patterns=None,
+                truncate_for_console=True,
+            )
+            captured["formatted"] = formatter.format(record)
+            return Response("ok")
+
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/orchestration/ir/execute",
+                "headers": [
+                    (b"x-request-id", b"00957491"),
+                    (b"x-execution-id", b"exec-1"),
+                ],
+            },
+            receive=self._body_receiver(
+                b'{"conversationId":"122212412c92-6543-4c40-ac19-2f678995e7e9"}'
+            ),
+        )
+
+        await middleware.dispatch(request, call_next)
+
+        self.assertIn(
+            "|122212412c92-6543-4c40-ac19-2f678995e7e9|INFO|",
+            captured["formatted"],
+        )
+        self.assertIn("|00957491|", captured["formatted"])
+
+    def test_jiuwen_thread_context_filter_injects_conversation_id(self):
+        """jiuwen standalone 路径下 ThreadContextFilter 应注入 conversation_id（防格式化缺字段）。"""
+        from contextvars import ContextVar
+        from unittest.mock import patch
+
+        from jiuwen.common.log.base import ThreadContextFilter
+
+        install_request_id_log_record_factory()
+        real_json = ContextVar("test_request_json", default={})
+        record = logging.getLogRecordFactory()(
+            "common", logging.INFO, __file__, 1, "m", (), None
+        )
+        with patch("jiuwen.common.log.base.request_json", real_json):
+            self.assertTrue(ThreadContextFilter("common").filter(record))
+            self.assertEqual(record.conversation_id, "")
+
+            real_json.set({"conversationId": "conv-thread-filter"})
+            record2 = logging.getLogRecordFactory()(
+                "common", logging.INFO, __file__, 1, "m", (), None
+            )
+            self.assertTrue(ThreadContextFilter("common").filter(record2))
+            self.assertEqual(record2.conversation_id, "conv-thread-filter")
+            self.assertEqual(record2.trace_id, "conv-thread-filter")
+
+    def test_update_conversation_id_backfills_only_when_empty(self):
+        """handler 回写 helper：空则补、非空不覆盖、请求外（默认实例）不写入。"""
+        from agent_runtime.context.request_context import (
+            _DEFAULT_REQUEST_CONTEXT,
+            _request_ctx,
+            update_conversation_id,
+        )
+        from agent_runtime.context.request_context import RequestContext
+
+        token = _request_ctx.set(RequestContext())
+        try:
+            update_conversation_id("conv-backfill")
+            self.assertEqual(_request_ctx.get().conversation_id, "conv-backfill")
+
+            update_conversation_id("conv-other")
+            self.assertEqual(_request_ctx.get().conversation_id, "conv-backfill")
+
+            _request_ctx.set(RequestContext())
+            update_conversation_id("")
+            self.assertEqual(_request_ctx.get().conversation_id, "")
+        finally:
+            _request_ctx.reset(token)
+
+        update_conversation_id("conv-default-pollution")
+        self.assertEqual(_DEFAULT_REQUEST_CONTEXT.conversation_id, "")
 
     @staticmethod
     def _body_receiver(body):
