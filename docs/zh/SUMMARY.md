@@ -9,6 +9,7 @@
   - [Kubernetes 部署](how-to/deploy-k8s.md)
   - [Beta5 升级部署](how-to/upgrade-from-beta4.md)
   - [开发指南](how-to/development-guide.md)
+  - [三方数据库二次开发适配指导](how-to/third-party-db-secondary-dev-guide.md)
   - [自定义插件开发指南](how-to/custom-plugin-development-guide.md)
   - [HTTP 工具 Schema 约定](how-to/http-tool-schema-guide.md)
   - [资产广场预置](how-to/asset-plaza-preset.md)

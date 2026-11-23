@@ -164,7 +164,8 @@ public class MgGlobalExceptionHandler {
         List<String> detailMessages = bindingResult.getFieldErrors().stream()
             .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
             .collect(Collectors.toList());
-        log.error("throw MethodArgumentNotValidException: {}", String.join("; ", detailMessages));
+        // 客户端正常校验拒绝：对齐 BindException，记 WARN（#1653/#1722）
+        log.warn("throw MethodArgumentNotValidException: {}", String.join("; ", detailMessages));
         ErrorDescriptor descriptor = factory.fromValidation(
             StudioError.METHOD_ARGUMENT_NOT_VALID, detailMessages);
         return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
@@ -185,7 +186,8 @@ public class MgGlobalExceptionHandler {
                 return paramName + ": " + violation.getMessage();
             })
             .collect(Collectors.toList());
-        log.error("throw ConstraintViolationException: {}", String.join("; ", detailMessages));
+        // 客户端正常校验拒绝：对齐 BindException，记 WARN（#1653/#1722）
+        log.warn("throw ConstraintViolationException: {}", String.join("; ", detailMessages));
         ErrorDescriptor descriptor = factory.fromValidation(
             StudioError.METHOD_ARGUMENT_NOT_VALID, detailMessages);
         return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
@@ -200,7 +202,8 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleNoResourceFoundException(NoResourceFoundException exception) {
-        log.error("NoResourceFoundException: {}", exception.getMessage());
+        // 客户端 404：对齐 BindException，记 WARN（#1653/#1722）
+        log.warn("NoResourceFoundException: {}", exception.getMessage());
         ErrorDescriptor descriptor = factory.fromStudioError(
             StudioError.STATIC_RESOURCE_NOT_EXIST, exception);
         return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
@@ -272,7 +275,8 @@ public class MgGlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleException(MaxUploadSizeExceededException exception) {
-        log.error("MaxUploadSizeExceededException: {}", exception.getMessage(), exception);
+        // 客户端上传超限：对齐 BindException，记 WARN（#1653/#1722）
+        log.warn("MaxUploadSizeExceededException: {}", exception.getMessage());
         ErrorDescriptor descriptor = factory.fromStudioError(StudioError.MAX_UPLOAD_SIZE_EXCEEDED, exception);
         return safeBuild(descriptor, LanguageUtils.getLanguageLocale());
     }

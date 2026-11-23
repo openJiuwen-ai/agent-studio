@@ -11,6 +11,16 @@ import java.security.cert.Certificate;
 public interface ServiceProvider {
     String getIssuer();
 
+    /**
+     * IdP entityID：SAML Response 的 Issuer 应与该值比较（区别于 SP entityID
+     * 的 {@link #getIssuer()}，后者用于 AuthnRequest 标识自身）
+     *
+     * @return IdP entityID 配置值；未配置返回 {@code null}
+     */
+    default String getIdpIssuer() {
+        return null;
+    }
+
     String getServiceUrl();
 
     PrivateKeyEntry getPrivateKeyEntry();

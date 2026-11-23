@@ -20,6 +20,10 @@ import time
 from typing import AsyncIterator, List, Optional
 
 from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
+)
 from jiuwen.extension.workflow_node.flow_api import (
     EXCEPTIONENABLE,
     EXCEPTIONSUPPRESSION,
@@ -73,7 +77,6 @@ class FlowCustomApi(WorkflowComponent):
         self._api: Optional[CustomPluginTool] = None
         self._outputs: List[dict] = []
         self._user_fields: Optional[dict] = None
-        self._final_stream_output: Optional[dict] = None
 
         if conf:
             self.init(conf)
@@ -240,6 +243,12 @@ class FlowCustomApi(WorkflowComponent):
         )
 
         try:
+            # 执行入口复位末帧通道：上一执行（或同一执行内前一次 stream）的末帧
+            # 不得经 get_stream_output 串入本次 io_state。末帧输出走 ContextVar
+            # 通道（实例跨执行复用，不落实例；引擎 Vertex._post_stream 在
+            # generator 耗尽后读取，故出口不 reset）。
+            set_stream_final_output(None)
+
             inputs_data = inputs.get("userFields", {}) or {}
             api_inputs = await self._format_api_inputs(inputs_data, session=session)
 
@@ -583,7 +592,9 @@ class FlowCustomApi(WorkflowComponent):
             output.get("id"): final_output_dict["final_output"]
             for output in output_definition_list
         }
-        self._final_stream_output = formatted_res
+        # 末帧输出写 ContextVar 通道（保持 userFields 包裹形态：io_state 引用
+        # 路径为 ${node.userFields.field}），供 get_stream_output 写入 io_state
+        set_stream_final_output({USER_FIELDS: formatted_res})
         yield {"userFields": formatted_res, "__stream_metadata__": finish_meta}
 
     def _get_outputs_list_from_conf(self) -> List[dict]:
@@ -591,10 +602,11 @@ class FlowCustomApi(WorkflowComponent):
         return self._conf.get("userFields", {}).get("outputs") or []
 
     def get_stream_output(self) -> Optional[dict]:
-        """流式结束后将最终输出写入 io_state，供非流式下游节点引用。"""
-        if self._final_stream_output is None:
-            return None
-        return {"userFields": self._final_stream_output}
+        """流式结束后将最终输出写入 io_state，供非流式下游节点引用。
+
+        末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+        """
+        return get_stream_final_output()
 
     def get_auth_token(self) -> dict | None:
         """自定义插件不支持 HTTP 认证透传"""

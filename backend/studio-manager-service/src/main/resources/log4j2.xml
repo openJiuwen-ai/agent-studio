@@ -66,6 +66,7 @@
             <FileName>${LOG_PATH}/${PERFORM_FILE}.log</FileName>
             <FilePattern>${LOG_PATH}/${PERFORM_FILE}-%d{yyyy-MM-dd}.%i.zip</FilePattern>
             <PatternLayout pattern="${PERF_LOG_PATTERN}"/>
+            <ImmediateFlush>true</ImmediateFlush>
             <Policies>
                 <SizeBasedTriggeringPolicy size="${PERFORM_FILE_ROLLING_SIZE}" />
             </Policies>
@@ -121,6 +122,11 @@
             <AppenderRef ref="ASYNC_STDOUT" />
             <AppenderRef ref="ASYNC_ROLLING_FILE" />
         </Root>
+
+        <!-- 性能日志 Logger，引用 ASYNC_ROLLING_FILE_PERFORM（#1654/#1723 接线） -->
+        <Logger name="PERFORM_LOGGER" level="info" additivity="false">
+            <AppenderRef ref="ASYNC_ROLLING_FILE_PERFORM"/>
+        </Logger>
 
         <!-- 审计日志 Logger，引用 ASYNC_ROLLING_FILE_TRACE -->
         <Logger name="AUDIT_LOGGER" level="info" additivity="false">

@@ -1948,6 +1948,13 @@ class Questioner(WorkflowComponent):
                 # 通道取（入口已先于懒初始化 set）
                 identity=resolve_trace_identity(self, current_component_exec()[0]),
             )
+            # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token
+            # 由代理在每次调用时按当次请求注入（非 IR 策略原样返回）。
+            from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+            self._model = bind_request_scoped_auth(
+                self._model, llm_comp_config.model_client_config
+            )
             self._initialized = True
         except Exception as e:
             workflow_logger.error(

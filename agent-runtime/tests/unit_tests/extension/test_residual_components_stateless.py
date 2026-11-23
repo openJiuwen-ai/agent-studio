@@ -272,11 +272,16 @@ def _extractor():
 
 
 def _extractor_ready(llm_response='{"name": "小明"}'):
-    """最小可运行 Extractor：绕过懒初始化，注入最小配置与 prompt 桩。"""
+    """最小可运行 Extractor：绕过懒初始化，注入最小配置与 prompt 桩。
+
+    模型解析改为执行内解析（实例不落 ``llm``/``model_map``）：桩掉
+    ``_resolve_llm`` 即可绕过模型构建，保持用例只关注执行期状态隔离。
+    """
     from jiuwen.extension.workflow_node.flow_extractor import ExtractorConfig
 
     ext = _extractor()
-    ext.llm = MagicMock()
+    ext._initialized = True
+    ext._resolve_llm = AsyncMock(return_value=MagicMock())
     ext.extractor_config = ExtractorConfig(
         cn_fields_name={"name": "姓名"},
         key_fields=[{"name": "name", "desc": "名字"}],
@@ -340,6 +345,66 @@ class TestExtractorResidualState:
         assert not hasattr(ext, "inputs")
         assert not hasattr(ext, "user_response")
         assert not hasattr(ext, "node_field")
+
+    @staticmethod
+    def test_no_request_scoped_instance_fields():
+        """chat_manager / model_map / llm_extra_configs / llm 不落实例。
+
+        ``llm_extra_configs`` 是请求级参数（workflow_runner 按请求注入）：
+        实例跨执行复用后，首个请求的 ``model_map`` 固化会让后续执行模型路由
+        错乱；``chat_manager`` 保存首个 session 全局态且无任何读点（死状态，
+        阻断回收）。模型改为执行内按 ``model_map`` 指纹解析并沿调用链传参。
+        """
+        from jiuwen.extension.workflow_node.flow_extractor import Extractor
+
+        src = inspect.getsource(Extractor)
+        assert "self.chat_manager" not in src
+        assert "self.model_map" not in src
+        assert "self._workflow_llm_extra_configs" not in src
+        assert "self.llm" not in src
+
+        ext = _extractor()
+        for attr in (
+            "chat_manager",
+            "model_map",
+            "_workflow_llm_extra_configs",
+            "llm",
+        ):
+            assert not hasattr(ext, attr)
+
+    @pytest.mark.asyncio
+    async def test_model_map_resolved_per_request(self, monkeypatch):
+        """两请求不同 model_map 各自建模型；同 map 命中缓存（判别用例）。
+
+        旧实现 init 时把首个请求的 model_map 固化到实例，第二次执行沿用
+        首个请求的映射（本用例断言 built 出现 map_b 即转红）。
+        """
+        from jiuwen.extension.workflow_node import flow_extractor as fm
+
+        built = []
+
+        def _fake_create(self, session=None, model_map=None):
+            built.append(model_map)
+            return SimpleNamespace(name=f"model-{len(built)}")
+
+        monkeypatch.setattr(fm.Extractor, "_create_llm_instance", _fake_create)
+        monkeypatch.setattr(
+            fm, "get_workflow_param", lambda session, key: session.llm_extra
+        )
+        ext = _extractor()
+
+        map_a = {"m1": {"api_key": "key-a", "api_base": "https://a"}}
+        map_b = {"m1": {"api_key": "key-b", "api_base": "https://b"}}
+        session_a = SimpleNamespace(llm_extra={"model_map": map_a})
+        session_b = SimpleNamespace(llm_extra={"model_map": map_b})
+
+        model_a = await ext._resolve_llm(session_a)
+        model_a_again = await ext._resolve_llm(session_a)
+        model_b = await ext._resolve_llm(session_b)
+
+        assert model_a is model_a_again
+        assert model_a is not model_b
+        assert built == [map_a, map_b]
 
     @pytest.mark.asyncio
     async def test_concurrent_invokes_do_not_cross_read_user_response(self):
@@ -419,7 +484,7 @@ class TestExtractorResidualState:
         """
         responses = ['{"name": "小明"}', '{"city": "北京"}']
 
-        async def _llm_by_order(messages):
+        async def _llm_by_order(messages, llm):
             await asyncio.sleep(0.01)
             return responses.pop(0)
 
@@ -449,7 +514,7 @@ class TestExtractorResidualState:
 
         def _fake_init(conf, session, context):
             calls.append(conf)
-            ext.llm = MagicMock()
+            ext._initialized = True
 
         monkeypatch.setattr(ext, "init", _fake_init)
         lock = ext._init_lock
@@ -470,7 +535,7 @@ class TestExtractorResidualState:
         await asyncio.gather(*tasks)
 
         assert calls == [{"k": 1}]
-        assert ext.llm is not None
+        assert ext._initialized is True
 
 
 # =============================================================================

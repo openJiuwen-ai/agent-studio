@@ -291,6 +291,7 @@ class SingletonLogger:
         jiuwen_log_path = log_config.get("log_path")
         # 仅当某个通道确实落文件时才预建日志目录：默认（全 console）配置下不应在
         # 工作目录里凭空留下一个空的 logs/ 目录。真正写文件时 _get_logger 也会兜底创建。
+        # （目录权限 750 的加固已并入 _ensure_log_dir，与上游一致）
         _ensure_log_dir(log_config, jiuwen_log_path)
         log_file = os.path.join(jiuwen_log_path, log_config.get("log_file"))
         performance_log_file = os.path.join(
@@ -438,7 +439,7 @@ class SingletonLogger:
         if FILE_OUTPUT in output:
             if not os.path.exists(os.path.dirname(log_file)):
                 # 日志文件目录权限为750
-                os.makedirs(os.path.dirname(log_file), mode=0o750)
+                os.makedirs(os.path.dirname(log_file), mode=0o750, exist_ok=True)
             file_handler = SafeRotatingFileHandler(
                 filename=log_file,
                 maxBytes=max_bytes,

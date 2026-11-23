@@ -1037,6 +1037,13 @@ async def _convert_llm_react_node(configs: dict, node_id: str, identity: dict = 
         session_id=DEFINITION_SCOPED_SESSION_ID,
         identity=identity,
     )
+    # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token 由代理
+    # 在每次调用时按当次请求注入（非 IR 策略原样返回）。
+    from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+    model = bind_request_scoped_auth(
+        model, llm_comp_config.model_client_config
+    )
     # LLMReAct 内部 ReAct 循环的每次模型调用经装饰器各产一个带 usage/ttft
     # 的 llm span（首调并入 LLM 类组件壳、后续为壳下子 span，由 core 门控）
 
@@ -4266,9 +4273,18 @@ class IRConverter:
         model_name = model_configs.get("modelName") or model_id
 
         try:
+            from agent_runtime.common.request_scoped_model import (
+                bind_request_scoped_auth,
+            )
+
             model_instance = Model(
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
+            )
+            # IR 策略的 X-Auth-Token 属请求级凭证：注册进 resource_mgr 的
+            # Model 跨执行复用，token 由代理在每次调用时按当次请求注入。
+            model_instance = bind_request_scoped_auth(
+                model_instance, llm_comp_config.model_client_config
             )
         except Exception as exc:
             logger.error(

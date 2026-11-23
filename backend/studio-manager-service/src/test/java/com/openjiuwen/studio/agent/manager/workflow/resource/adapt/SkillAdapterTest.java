@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.bo.SkillDetails;
 import com.openjiuwen.studio.agent.manager.entity.SkillEntity;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
@@ -68,7 +69,10 @@ class SkillAdapterTest {
     @Test
     void test_parseExport_should_return_not_null() throws Exception {
         try (MockedStatic<ResourceAdapter> mockedStaticResourceAdapter = mockStatic(ResourceAdapter.class,
-            RETURNS_DEEP_STUBS)) {
+            RETURNS_DEEP_STUBS);
+             MockedStatic<RequestContextUtils> mockedCtx = mockStatic(RequestContextUtils.class)) {
+            // parseExport 内部 RequestContextUtils.getRequestUserDomainId() 取 domain 隔离（issue #1734）
+            mockedCtx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("test-domain");
             // Given
             Map<String, List<String>> parentIdMap = new HashMap<>();
             List<String> list = new ArrayList<>();
@@ -81,7 +85,7 @@ class SkillAdapterTest {
             List<SkillDetails> skillDetailsList = new ArrayList<>();
             SkillDetails skillDetails = new SkillDetails();
             skillDetailsList.add(skillDetails);
-            when(skillMapper.searchBySkillIds(anyList())).thenReturn(skillDetailsList);
+            when(skillMapper.searchBySkillIds(anyList(), eq("test-domain"))).thenReturn(skillDetailsList);
 
             List<ExportResourceUnit> exportResources = new ArrayList<>();
             ExportResourceUnit exportResourceUnit = new ExportResourceUnit();
