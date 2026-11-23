@@ -38,14 +38,10 @@ class TestResolveInjectedTraceFlags:
 
         real_import = builtins.__import__
 
-        def _block_sdk(name, globals=None, locals=None, fromlist=(), level=0):
-            if name == "opentelemetry.sdk.trace.sampling" or (
-                name == "opentelemetry.sdk.trace" and fromlist and "sampling" in fromlist
-            ):
+        def _block_sdk(name, global_ns=None, local_ns=None, fromlist=(), level=0):
+            if str(name).startswith("opentelemetry.sdk"):
                 raise ImportError("simulated: opentelemetry-sdk not installed")
-            if name.startswith("opentelemetry.sdk"):
-                raise ImportError("simulated: opentelemetry-sdk not installed")
-            return real_import(name, globals, locals, fromlist, level)
+            return real_import(name, global_ns, local_ns, fromlist, level)
 
         with patch("builtins.__import__", side_effect=_block_sdk):
             flags = resolve_injected_trace_flags(0xABC123, sample_rate=0.1)

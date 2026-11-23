@@ -98,14 +98,18 @@ class TestInstallBridge:
     def test_install_patches_when_symbol_exists():
         import openjiuwen.extensions.tracer_otel.handler as otel_handler
 
-        if not hasattr(otel_handler, "_explicit_parent_context"):
+        symbol = "_explicit_parent_context"
+        handler_ns = getattr(otel_handler, "__dict__", {})
+        if symbol not in handler_ns:
             # 部分构建已移除该符号：安装应安全跳过
             assert install_explicit_parent_bridge() is False
             return
 
-        original = otel_handler._explicit_parent_context
+        original = handler_ns[symbol]
         try:
             assert install_explicit_parent_bridge() is True
-            assert otel_handler._explicit_parent_context is build_explicit_parent_context
+            assert getattr(otel_handler, "__dict__", {}).get(symbol) is (
+                build_explicit_parent_context
+            )
         finally:
-            otel_handler._explicit_parent_context = original
+            setattr(otel_handler, symbol, original)

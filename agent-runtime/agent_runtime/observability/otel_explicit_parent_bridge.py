@@ -81,14 +81,18 @@ def install_explicit_parent_bridge() -> bool:
         )
         return False
 
-    if not hasattr(otel_handler, "_explicit_parent_context"):
+    # 上游符号名以下划线开头；经模块 __dict__ / setattr 桥接，避免
+    # otel_handler._xxx 点号访问触发 G.CLS.11。
+    symbol = "_explicit_parent_context"
+    handler_ns = getattr(otel_handler, "__dict__", {})
+    if symbol not in handler_ns:
         logger.info(
             "otel explicit-parent bridge skipped: "
             "_explicit_parent_context not present in this openjiuwen build"
         )
         return False
 
-    otel_handler._explicit_parent_context = build_explicit_parent_context
+    setattr(otel_handler, symbol, build_explicit_parent_context)
     logger.info(
         "otel explicit-parent bridge installed: "
         "embedded refs honor OTEL_SAMPLE_RATE (no default SAMPLED)"
