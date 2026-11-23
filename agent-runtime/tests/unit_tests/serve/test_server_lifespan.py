@@ -79,19 +79,18 @@ class TestServerLifespanLocalSysOp:
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -125,19 +124,18 @@ class TestServerLifespanLocalSysOp:
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -179,19 +177,18 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -237,19 +234,18 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.timeout_seconds = 300
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -291,19 +287,18 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.timeout_seconds = 300
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -350,19 +345,18 @@ class TestServerLifespanSandboxSysOp:
         mock_settings.security_sandbox.timeout_seconds = 300
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -400,12 +394,12 @@ class TestServerLifespanCancelSubscriber:
         mock_settings.workflow_log.level = "INFO"
         mock_settings.server.docs_enabled = False  # 阻断 openapi 归档（mock app 无法 dump，60022377 引入该调用）
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
@@ -416,7 +410,6 @@ class TestServerLifespanCancelSubscriber:
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -481,12 +474,12 @@ class TestServerLifespanS3Init:
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
@@ -497,7 +490,6 @@ class TestServerLifespanS3Init:
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -533,12 +525,12 @@ class TestServerLifespanS3Init:
         mock_settings.security_sandbox.server = ""
         mock_settings.workflow_log.level = "INFO"
 
-        # Phase 2 接线：启动段走 Redis Provider 适配层（init_redis_provider 返回
-        # 注入用客户端）；RedisClientManager 仅剩停机关闭面（close）
-        mock_redis_client = AsyncMock()
-        mock_redis_client.ping = AsyncMock(return_value=True)
         mock_redis_mgr = MagicMock()
         mock_redis_mgr.close = AsyncMock()
+        mock_redis_mgr.is_initialized = True
+        mock_redis_client = AsyncMock()
+        mock_redis_client.ping = AsyncMock(return_value=True)
+        mock_redis_mgr.get_client.return_value = mock_redis_client
 
         mock_checkpointer = AsyncMock()
 
@@ -549,7 +541,6 @@ class TestServerLifespanS3Init:
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config"), \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \
@@ -614,7 +605,6 @@ class TestServerLifespanLogLevels:
         with patch("agent_runtime.serve.server.settings", mock_settings), \
              patch("agent_runtime.serve.server.Runner.resource_mgr", mock_resource_mgr), \
              patch("agent_runtime.serve.server.RedisClientManager.get_instance", return_value=mock_redis_mgr), \
-             patch("agent_runtime.serve.server.init_redis_provider", AsyncMock(return_value=mock_redis_client)), \
              patch("agent_runtime.serve.server.configure_log_config") as mock_log_config, \
              patch("agent_runtime.serve.server.CheckpointerFactory.create", return_value=mock_checkpointer), \
              patch("agent_runtime.serve.server.CheckpointerFactory.set_default_checkpointer"), \

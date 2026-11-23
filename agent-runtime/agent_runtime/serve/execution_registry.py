@@ -18,9 +18,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from openjiuwen.core.common.logging import workflow_logger
-from redis_spi import accessor
-from redis_spi.capabilities import PubSubCapability
-from redis_spi.types import Duration, SetCondition
 
 EXEC_KEY_PREFIX = "exec:"  # hash: instance_id/project_id/agent_id/user_id
 SUSPEND_KEY_PREFIX = "suspend:"  # hash: 挂起归属快照（与 exec 同结构；注销不删）
@@ -72,13 +69,17 @@ class ExecutionRegistry:
 
     @staticmethod
     def _redis():
-        # 惰性获取：客户端由 server lifespan 装配（未初始化时 accessor 抛错）
-        return accessor.get_redis()
+        # 惰性获取：客户端由 server lifespan 初始化（未初始化时 get_redis_client 抛错）
+        from common_utils.redis_manager import get_redis_client
+
+        return get_redis_client()
 
     @staticmethod
-    def _pubsub_cap():
-        # PubSub 能力视图（publish 走业务池；pubsub() 句柄走独立订阅池）
-        return accessor.get_redis().as_capability(PubSubCapability)
+    def _pubsub_client():
+        """获取专用于 pubsub 订阅的客户端（集群模式下为单节点 Redis 连接）。"""
+        from common_utils.redis_manager import get_pubsub_client
+
+        return get_pubsub_client()
 
     async def register(
         self,
@@ -113,22 +114,19 @@ class ExecutionRegistry:
             "entry_type": info.entry_type or "",
         }
         await client.hset(exec_key, mapping=exec_mapping)
-        await client.expire(exec_key, Duration.seconds(EXEC_TTL_SECONDS))
+        await client.expire(exec_key, EXEC_TTL_SECONDS)
         # 挂起归属快照：与 exec 同结构但不随注销删除。挂起会话在飞注册已注销、
         # cancel 无从比对归属时，凭此键校验 project/user 后才允许置位取消标记
         # （否则知道 conversation_id 即可跨项目终止他人挂起会话）；由新执行开始时
         # 顺带清理（workflow_runner 非恢复分支）并随本次 register 重写
         suspend_key = f"{SUSPEND_KEY_PREFIX}{conversation_id}"
         await client.hset(suspend_key, mapping=exec_mapping)
-        await client.expire(suspend_key, Duration.seconds(EXEC_TTL_SECONDS))
+        await client.expire(suspend_key, EXEC_TTL_SECONDS)
         # 初始化取消标记仅在键不存在时执行（nx）：挂起期间被取消的执行先置标记 true
         # 后注销，重发时 register 若无条件覆盖会把 true 抹成 false，workflow_runner
         # 恢复分支（_is_session_cancelled）随即失明，US3"从入口重新执行"失效
         await client.set(
-            f"{CANCEL_KEY_PREFIX}{conversation_id}",
-            "false",
-            duration=Duration.seconds(EXEC_TTL_SECONDS),
-            condition=SetCondition.NX,
+            f"{CANCEL_KEY_PREFIX}{conversation_id}", "false", ex=EXEC_TTL_SECONDS, nx=True
         )
         workflow_logger.info(
             "Execution registered: conv=%s entry=%s instance=%s exec=%s",
@@ -203,12 +201,8 @@ class ExecutionRegistry:
     async def mark_cancelled(self, conversation_id: str) -> None:
         """置协作式取消标记（幂等，TTL 兜底）+ runtime:cancel 频道广播尽力即时取消。"""
         client = self._redis()
-        await client.set(
-            f"{CANCEL_KEY_PREFIX}{conversation_id}",
-            _TRUE_STR,
-            duration=Duration.seconds(EXEC_TTL_SECONDS),
-        )
-        await self._pubsub_cap().publish(CANCEL_CHANNEL, conversation_id)
+        await client.set(f"{CANCEL_KEY_PREFIX}{conversation_id}", _TRUE_STR, ex=EXEC_TTL_SECONDS)
+        await client.publish(CANCEL_CHANNEL, conversation_id)
         workflow_logger.info("Cancel marked: conv=%s", conversation_id)
 
     async def is_cancelled(self, conversation_id: str) -> bool:
@@ -247,7 +241,8 @@ class ExecutionRegistry:
         while True:
             pubsub = None
             try:
-                pubsub = self._pubsub_cap().pubsub()
+                pubsub_client = self._pubsub_client()
+                pubsub = pubsub_client.pubsub()
                 await pubsub.subscribe(CANCEL_CHANNEL)
                 workflow_logger.info(
                     "Subscribed runtime cancel channel: %s (instance=%s)",
@@ -255,11 +250,9 @@ class ExecutionRegistry:
                     self._instance_id,
                 )
                 async for message in pubsub.listen():
-                    # SPI PubSubHandle.listen() 产出 PubSubMessage（含订阅确认类，
-                    # 业务侧只消费 message 类型）
-                    if message.type != "message":
+                    if not isinstance(message, dict) or message.get("type") != "message":
                         continue
-                    data = message.data
+                    data = message.get("data")
                     conversation_id = data.decode() if isinstance(data, bytes) else data
                     if not conversation_id:
                         continue
