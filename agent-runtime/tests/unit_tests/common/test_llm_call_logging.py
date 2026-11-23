@@ -458,6 +458,40 @@ def test_sanitize_api_url_for_log_helpers():
     assert _sanitize_api_url_for_log("not-a-url") == "redacted"
 
 
+def test_sanitize_api_url_illegal_port_returns_redacted():
+    """看守：非法/越界端口不得抛错，避免 _log_error 回调失败。"""
+    from agent_runtime.common.llm_call_logging import _sanitize_api_url_for_log
+
+    assert _sanitize_api_url_for_log("http://host:bad/path") == "redacted"
+    assert _sanitize_api_url_for_log("http://host:99999/v1") == "redacted"
+
+
+@pytest.mark.asyncio
+async def test_error_callback_survives_illegal_port_url(caplog):
+    """非法端口 api_url 仍应打出 model call error，而非 Callback execution failed。"""
+    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+
+    register_llm_call_logging_callbacks()
+    fw = get_callback_framework()
+
+    with caplog.at_level(logging.DEBUG, logger="workflow"):
+        await fw.trigger(
+            LLMCallEvents.LLM_CALL_ERROR,
+            model_name="m",
+            model_provider="studio",
+            error=RuntimeError("boom"),
+            api_url="http://host:bad/v1",
+            latency_ms=3,
+        )
+
+    error_msg = next(
+        r.message for r in caplog.records
+        if r.levelno == logging.ERROR and "model call error" in r.message
+    )
+    assert "url=redacted" in error_msg
+    assert "latency_ms=3" in error_msg
+
+
 @pytest.mark.asyncio
 async def test_error_callback_logs_fallback_when_url_latency_missing(caplog):
     """trigger 未带 url/latency 时仍可落盘（回退 unknown/N/A）。"""

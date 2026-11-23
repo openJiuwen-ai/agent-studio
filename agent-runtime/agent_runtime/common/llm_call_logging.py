@@ -32,7 +32,8 @@ def _sanitize_api_url_for_log(api_url) -> str:
     """日志用下游 URL：保留 scheme/host/port/path，去掉 userinfo/query/fragment。
 
     api_url 可能来自 ``plugin_url_params`` 解析结果；完整 URL 若带凭据落入
-    ERROR 日志会泄露 secret。解析失败时回退 ``unknown`` / ``redacted``。
+    ERROR 日志会泄露 secret。解析失败或非法端口时回退 ``unknown`` / ``redacted``，
+    避免 ``parts.port`` 抛错把 ``_log_error`` 回调本身打挂。
     """
     if api_url is None:
         return "unknown"
@@ -41,16 +42,18 @@ def _sanitize_api_url_for_log(api_url) -> str:
         return "unknown"
     try:
         parts = urlsplit(raw)
+        # hostname/port 属性访问也可能抛 ValueError（如 host:bad、端口越界）
+        host = parts.hostname or ""
+        port = parts.port
+        scheme = parts.scheme
+        path = parts.path or ""
     except ValueError:
         return "redacted"
-    host = parts.hostname or ""
-    if not parts.scheme or not host:
+    if not scheme or not host:
         # 非绝对 URL：避免把可能含 token 的原文写入日志
         return "redacted"
-    netloc = host
-    if parts.port is not None:
-        netloc = f"{host}:{parts.port}"
-    return urlunsplit((parts.scheme, netloc, parts.path or "", "", ""))
+    netloc = host if port is None else f"{host}:{port}"
+    return urlunsplit((scheme, netloc, path, "", ""))
 
 # 标记是否已注册，避免重复注册
 _registered: bool = False
