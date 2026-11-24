@@ -279,25 +279,6 @@ class CacheSettings(BaseSettings):
     mem_cache_ttl_seconds: int = Field(
         default=3600, validation_alias="MEM_CACHE_TTL_SECONDS"
     )
-    # 构建期子 IR 并发预取的单批并发上限（async_ir_load_batch）。
-    # 必须 ≥1：0 会使信号量 acquire 永久阻塞（请求挂起无报错），ge=1
-    # 让非法 env 在启动期即 ValidationError fail-fast。
-    # 注意：这是"每次批量调用"的约束而非全局预算——冷缓存下瞬时 Redis 连接
-    # 需求 ≈ 并发构建请求数 × 本值，需与 REDIS_MAX_CONNECTIONS（共享池，
-    # 默认 50）核算：默认 5 时约 10 个并发冷构建才会触顶（上限 10 时约
-    # 5 个即触顶）；redis-py 池耗尽抛 "Too many connections" 不排队。
-    ir_load_max_concurrency: int = Field(
-        default=5, ge=1, validation_alias="IR_LOAD_MAX_CONCURRENCY"
-    )
-    ir_cache_ttl_seconds: int = Field(
-        default=24 * 60 * 60, validation_alias="IR_CACHE_TTL_SECONDS", ge=1
-    )
-    workflow_cache_ttl_seconds: int = Field(
-        default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
-    )
-    agent_cache_ttl_seconds: int = Field(
-        default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1
-    )
     # Workflow 实例复用（issue #1555）：恒为静态图复用（引擎 reentrant compile
     # + Patch B + LazyWorkflow 保留制缓存）；能力探测失败时进程级自动降级为直建。
     # 注意与 MAX_WORKFLOW_CACHE_NUM 区分：后者是 BPMN spec 缓存队列（jiuwen

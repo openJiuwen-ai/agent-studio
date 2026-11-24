@@ -15,8 +15,7 @@ from agent_runtime.common.model_providers import (
     EnvVarModelConfigProvider,
     IRModelConfigProvider,
 )
-from redis_spi import accessor
-from redis_spi.types import Duration
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.runner.context import create_conversation_context
 from agent_runtime.runner.memory_extraction_context import MemoryExtractionContext
 from agent_runtime.runner.workflow_stream_data_wrapper import WorkflowStreamDataWrapper
@@ -83,10 +82,10 @@ class ExecutionIdStore:
             bool: 是否保存成功
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, exec_id, duration=Duration.seconds(expire))
+            await redis_client.set(key, exec_id, ex=expire)
             workflow_logger.debug("Saved execution_id: key={}, exec_id={}", key, exec_id)
             return True
         except Exception as e:
@@ -105,7 +104,7 @@ class ExecutionIdStore:
             str | None: 保存的 execution_id，不存在或失败时返回 None
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             result = await redis_client.get(key)
             if result is not None:
@@ -131,7 +130,7 @@ class ExecutionIdStore:
             bool: 是否删除成功
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted execution_id: key={}", key)
@@ -163,10 +162,10 @@ class TraceIdStore:
         cls, workflow_id: str, session_id: str, trace_id: str, ttl: int = None
     ) -> bool:
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, trace_id, duration=Duration.seconds(expire))
+            await redis_client.set(key, trace_id, ex=expire)
             workflow_logger.debug("Saved trace_id: key={}, trace_id={}", key, trace_id)
             return True
         except Exception as e:
@@ -176,7 +175,7 @@ class TraceIdStore:
     @classmethod
     async def get(cls, workflow_id: str, session_id: str) -> str | None:
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             trace_id = await redis_client.get(key)
             if trace_id:
@@ -193,7 +192,7 @@ class TraceIdStore:
     @classmethod
     async def delete(cls, workflow_id: str, session_id: str) -> bool:
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted trace_id: key={}", key)
@@ -256,14 +255,14 @@ class WorkflowRunner:
         直读 Redis，不 import serve 层（依赖方向：runner 不依赖 serve）。
         Redis 客户端 decode_responses=False，值为 bytes，按 bytes 语义比较。
         """
-        value = await accessor.get_redis().get(f"cancel:{conversation_id}")
+        value = await get_redis_client().get(f"cancel:{conversation_id}")
         if isinstance(value, bytes):
             return value == b"true"
         return value == "true"
 
     async def _clear_session_cancelled(self, conversation_id: str) -> None:
         """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
-        await accessor.get_redis().delete(f"cancel:{conversation_id}")
+        await get_redis_client().delete(f"cancel:{conversation_id}")
 
     async def run_streaming(
         self,

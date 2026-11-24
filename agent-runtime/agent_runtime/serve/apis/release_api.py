@@ -14,7 +14,6 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from openjiuwen.core.common.logging import workflow_logger
-from redis_spi import accessor
 
 from agent_runtime.serve.apis.app_release import ReleaseInfo, _RELEASE_WEB_REL_KEY
 
@@ -83,7 +82,9 @@ async def create_release_info(
 
     # 3. 写入 Redis
     try:
-        redis_client = accessor.get_redis()
+        from common_utils.redis_manager import get_redis_client
+
+        redis_client = get_redis_client()
         release_data = body.model_dump_json(by_alias=True, exclude_none=True)
         await redis_client.set(release_key, release_data)
         workflow_logger.info("Release info created: key=%s", release_key)
@@ -116,7 +117,9 @@ async def delete_release_info(
 
     # 2. 从 Redis 删除
     try:
-        redis_client = accessor.get_redis()
+        from common_utils.redis_manager import get_redis_client
+
+        redis_client = get_redis_client()
         await redis_client.delete(release_key)
         workflow_logger.info("Release info deleted: key=%s", release_key)
     except Exception as e:

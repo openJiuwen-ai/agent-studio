@@ -36,8 +36,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from redis_spi import accessor
-from redis_spi.types import Duration
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.common.session_state_access import (
     dump_state_info,
     get_state_info,
@@ -126,7 +125,7 @@ class QuestionerTraceStore:
             bool: 是否保存成功
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(session_id, component_id)
             trace_json = json.dumps(trace_data, ensure_ascii=False)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
@@ -134,7 +133,7 @@ class QuestionerTraceStore:
             # 使用 RPUSH 追加到列表
             await redis_client.rpush(key, trace_json)
             # 设置过期时间
-            await redis_client.expire(key, Duration.seconds(expire))
+            await redis_client.expire(key, expire)
 
             workflow_logger.debug("Appended trace data: key={}, data={}", key, trace_data)
             return True
@@ -154,7 +153,7 @@ class QuestionerTraceStore:
             list[dict]: trace 数据列表，失败时返回空列表
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(session_id, component_id)
             result = await redis_client.lrange(key, 0, -1)
 
@@ -182,7 +181,7 @@ class QuestionerTraceStore:
             bool: 是否删除成功
         """
         try:
-            redis_client = accessor.get_redis()
+            redis_client = get_redis_client()
             key = cls._build_key(session_id, component_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted trace data: key={}", key)
