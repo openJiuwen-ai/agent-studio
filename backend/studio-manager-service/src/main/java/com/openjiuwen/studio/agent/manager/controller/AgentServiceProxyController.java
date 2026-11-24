@@ -71,6 +71,7 @@ import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.AppMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.observability.UpstreamOtelHeaders;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
@@ -99,6 +100,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -114,6 +116,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -175,6 +178,31 @@ public class AgentServiceProxyController {
         this.releaseVersionMapper = releaseVersionMapper;
         this.workflowRuntimeService = workflowRuntimeService;
         this.agentRuntimeService = agentRuntimeService;
+    }
+
+    /**
+     * issue 1754：非流式（stream=false）经 Feign 拿到上游 ResponseEntity，透传真实
+     * OTel 响应头（X-OTel-Trace-Id / traceresponse），状态码与 body 原样保留。
+     *
+     * <p>上游未输出（旧版 Runtime / 未启用 OTel）时退化为原来的 body 返回，
+     * 不生成、不推断、不覆盖既有头。
+     */
+    private Object relayUpstreamOtelHeaders(ResponseEntity<Object> upstream) {
+        if (upstream == null) {
+            return null;
+        }
+        Map<String, String> otelHeaders = new LinkedHashMap<>(2);
+        String traceId = upstream.getHeaders().getFirst(UpstreamOtelHeaders.X_OTEL_TRACE_ID);
+        if (StringUtils.isNotBlank(traceId)) {
+            otelHeaders.put(UpstreamOtelHeaders.X_OTEL_TRACE_ID, traceId);
+        }
+        String traceResponse = upstream.getHeaders().getFirst(UpstreamOtelHeaders.TRACERESPONSE);
+        if (StringUtils.isNotBlank(traceResponse)) {
+            otelHeaders.put(UpstreamOtelHeaders.TRACERESPONSE, traceResponse);
+        }
+        HttpHeaders relayed = new HttpHeaders();
+        otelHeaders.forEach(relayed::set);
+        return ResponseEntity.status(upstream.getStatusCode()).headers(relayed).body(upstream.getBody());
     }
 
     /**
@@ -250,11 +278,12 @@ public class AgentServiceProxyController {
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
-                // 非流式 Feign：仅 debug 试运行显式传 cust-userid
-                return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null,
+                // 非流式 Feign：仅 debug 试运行显式传 cust-userid（#1728/#1761）
+                return relayUpstreamOtelHeaders(runtimeClient.runAgentWithConversation(
+                    RequestContextUtils.getRequestAuthToken(), null,
                     RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(httpHeaders), projectId, agentId,
-                    conversationId, workspaceId, agentType, version, type, environmentId, body)
-                    .getBody();
+                    conversationId, workspaceId, agentType, version, type, environmentId, body,
+                    Boolean.FALSE, resolveInvokeMode(httpHeaders)));
             }
         }
     }
@@ -347,6 +376,14 @@ public class AgentServiceProxyController {
             httpHeaders, environmentId);
     }
 
+    /**
+     * 非流式分支同样透传调测头，保证与流式分支行为一致（insight/调试信息）。
+     */
+    private String resolveInvokeMode(HttpHeaders httpHeaders) {
+        List<String> values = httpHeaders.get(Constant.Agent.INVOKE_HEADER_KEY);
+        return values != null && !values.isEmpty() ? values.get(0) : null;
+    }
+
     private Object runAssets(String projectId, String workspaceId, String environmentId, String workflowId,
         String conversationId, String version, Boolean stream, ServiceWorkflowRunReq body, HttpHeaders httpHeaders) {
         // 去掉x-user-profile,以防后续接口使用pdp5鉴权
@@ -399,10 +436,12 @@ public class AgentServiceProxyController {
                 executeParams);
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
-                // 非流式 Feign：仅 debug 试运行显式传 cust-userid
-                return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(),
+                // 非流式 Feign：仅 debug 试运行显式传 cust-userid（#1728/#1761）
+                return relayUpstreamOtelHeaders(runtimeClient.runWorkflowWithConversation(
+                    RequestContextUtils.getRequestAuthToken(),
                     RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(httpHeaders), projectId, workflowId,
-                    conversationId, workspaceId, environmentId, version, body).getBody();
+                    conversationId, workspaceId, environmentId, version, body,
+                    Boolean.FALSE, resolveInvokeMode(httpHeaders)));
             }
         }
     }

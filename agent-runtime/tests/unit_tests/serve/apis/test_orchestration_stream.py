@@ -42,7 +42,7 @@ class _FakeRunner:
     def __init__(self, chunks):
         self._chunks = chunks
 
-    async def run_streaming(self, req, execution_id):  # noqa: D401
+    async def run_streaming(self, req, execution_id, **kwargs):  # noqa: D401
         for chunk in self._chunks:
             yield chunk
 

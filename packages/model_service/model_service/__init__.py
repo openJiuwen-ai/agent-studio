@@ -9,7 +9,7 @@
 
 from .resolver import (
     InterfaceProtocol, ModelServiceBase, ModelServiceDetail, ModelStrategy,
-    ProviderAuth, StrategyType, resolve_strategy,
+    ProviderAuth, StrategyType, query_model_display_name, resolve_strategy,
 )
 from .env_resolver import (
     ENV_PLACEHOLDER_PATTERN, has_env_placeholder, resolve_env_placeholders,
@@ -34,7 +34,7 @@ from .ports import (
 __all__ = [
     # resolver
     "InterfaceProtocol", "ModelServiceBase", "ModelServiceDetail", "ModelStrategy",
-    "ProviderAuth", "StrategyType", "resolve_strategy",
+    "ProviderAuth", "StrategyType", "query_model_display_name", "resolve_strategy",
     # env_resolver
     "ENV_PLACEHOLDER_PATTERN", "has_env_placeholder", "resolve_env_placeholders",
     # authz

@@ -101,6 +101,7 @@ class ControllerRunner:
         self,
         req: ExecutionRequest,
         execution_id: str | None = None,
+        env_scope: dict | None = None,
     ) -> AsyncGenerator[Any]:
         """Execute Controller mode IR and yield SSE bytes (request-root span).
 
@@ -136,11 +137,33 @@ class ControllerRunner:
                 span.set_attribute(
                     "openjiuwen.session.id", str(req.conversation_id or "")
                 )
+                # issue #1755：请求级环境作用域（与 Core semconv 同名值一致），
+                # 空值不写；Controller 根 Span 由 Runtime 自建，故在此写入。
+                for _attr, _key in (
+                    ("openjiuwen.workspace.id", "workspace_id"),
+                    ("openjiuwen.environment.id", "environment_id"),
+                    ("openjiuwen.project.id", "project_id"),
+                ):
+                    _value = (env_scope or {}).get(_key) or ""
+                    if _value:
+                        span.set_attribute(_attr, str(_value))
                 token = otel_context.attach(otel_trace.set_span_in_context(span))
             except Exception as exc:
                 workflow_logger.debug("Failed to start request root span: %s", exc)
                 span = None
                 token = None
+        # issue #1755：把请求级环境作用域绑定到 agent_teams 上下文，
+        # 团队后台任务（IRConverter 内 create_task）继承后由团队 span 写入属性。
+        try:
+            from openjiuwen.agent_teams.context import set_env_scope as _set_team_env_scope
+
+            if env_scope:
+                _set_team_env_scope(env_scope)
+        except Exception as exc:  # noqa: BLE001 - 团队观测不可用时降级但不静默
+            workflow_logger.warning(
+                "agent_teams env scope unavailable, team spans will lack "
+                "workspace/environment/project attributes: %s: %s",
+                type(exc).__name__, exc)
         try:
             async for chunk in self._run_streaming(
                 req, execution_id, span, error_state
@@ -419,7 +442,7 @@ class ControllerRunner:
                 "Failed to trigger memory extraction: %s", e, exc_info=True
             )
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
         """Execute Controller mode IR and return complete result.
 
         run_streaming 正常流产 SSE bytes、错误流产 dict;_parse_controller_stream_chunk
@@ -429,7 +452,7 @@ class ControllerRunner:
         message_parts: list[str] = []
         message_end_answer = ""
         workflow_end_answer = ""
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, env_scope=env_scope):
             if chunk is None:
                 continue
             try:

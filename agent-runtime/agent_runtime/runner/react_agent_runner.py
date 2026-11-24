@@ -708,7 +708,8 @@ class ReActAgentRunner:
         return agent, agent_id
 
     async def run_streaming(
-            self, req: ExecutionRequest, execution_id: str | None = None
+            self, req: ExecutionRequest, execution_id: str | None = None,
+            env_scope: dict | None = None,
     ) -> AsyncGenerator[Dict, None]:
         """流式运行 ReActAgent 并 yield SSE 事件"""
         exec_id = execution_id or req.conversation_id or str(uuid.uuid4())
@@ -821,7 +822,10 @@ class ReActAgentRunner:
 
         try:
             session_id = req.conversation_id or "default_session"
-            session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
+            session = create_agent_session_with_trace(
+                session_id=session_id, card=agent.card,
+                source_metadata=dict(env_scope or {}),
+            )
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
                 await self._seed_conversation_history(
@@ -898,10 +902,10 @@ class ReActAgentRunner:
             if session:
                 await session.post_run()
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
         """运行 ReActAgent 并返回完整的 LLM 响应字符串"""
         result_parts = []
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, env_scope=env_scope):
             if chunk is None:
                 continue
             try:

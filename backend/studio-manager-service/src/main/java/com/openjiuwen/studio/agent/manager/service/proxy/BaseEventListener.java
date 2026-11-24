@@ -22,6 +22,7 @@ import com.openjiuwen.studio.agent.manager.exception.downstream.Transport;
 import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
 import com.openjiuwen.studio.agent.manager.observability.MdcScope;
 import com.openjiuwen.studio.agent.manager.observability.MdcSnapshot;
+import com.openjiuwen.studio.agent.manager.observability.UpstreamOtelHeaders;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -80,6 +81,10 @@ public class BaseEventListener extends EventSourceListener {
     /** COM-04 响应 §5.4: 唯一 pre-frame HTTP 失败响应（标准五字段）。 */
     @Getter
     ResponseEntity<?> errorRsp;
+
+    /** issue 1754：上游真实 OTel 响应头（X-OTel-Trace-Id / traceresponse），onOpen 时抓取。 */
+    @Getter
+    Map<String, String> upstreamOtelHeaders = java.util.Collections.emptyMap();
 
     /** COM-04 响应: SSE error event 检测到的最近 descriptor（供子类业务处理使用稳定码）。 */
     @Getter
@@ -185,6 +190,8 @@ public class BaseEventListener extends EventSourceListener {
     // ============ protected hooks（派生类覆盖） ============
 
     protected void onOpenInternal(@NotNull Response response) {
+        // issue 1754：上游响应头先于首帧到达，此处抓取供 HTTP 层在提交前回写
+        upstreamOtelHeaders = UpstreamOtelHeaders.capture(response);
         // COM-04 响应 §5.4: 只有 beginStreaming 成功时释放 latch（同 COM-03 协议）
         if (terminalGuard.beginStreaming()) {
             latch.countDown();
@@ -470,7 +477,7 @@ public class BaseEventListener extends EventSourceListener {
             return;
         }
         try {
-            sseEmitter.send(SseEmitter.event().data(data).build());
+            sseEmitter.send(SseEmitter.event().data(UpstreamOtelHeaders.decorateFrame(data, upstreamOtelHeaders)).build());
         } catch (Throwable e) {
             log.error("SSE send message fail.", e);
         }

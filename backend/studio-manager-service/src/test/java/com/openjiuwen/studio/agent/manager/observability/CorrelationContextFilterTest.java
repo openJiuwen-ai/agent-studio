@@ -83,6 +83,37 @@ class CorrelationContextFilterTest {
     }
 
     @Test
+    void correlationIdHeader_takesPrecedenceOverLegacyTraceId() throws Exception {
+        MockHttpServletRequest request = request(DispatcherType.REQUEST);
+        request.addHeader(CorrelationContextFilter.REQUEST_ID_HEADER, "req-123");
+        request.addHeader("X-Correlation-Id", "corr-7");
+        request.addHeader(CorrelationContextFilter.TRACE_ID_HEADER, "legacy-9");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        CapturingChain chain = new CapturingChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chain.mdcAtChain.get(MdcKeys.TRACE_ID)).isEqualTo("corr-7");
+        // 响应双写：规范名 + 过渡期兼容名同值
+        assertThat(response.getHeader("X-Correlation-Id")).isEqualTo("corr-7");
+        assertThat(response.getHeader(CorrelationContextFilter.TRACE_ID_HEADER)).isEqualTo("corr-7");
+    }
+
+    @Test
+    void legacyTraceIdHeader_stillAccepted_dualWritten() throws Exception {
+        MockHttpServletRequest request = request(DispatcherType.REQUEST);
+        request.addHeader(CorrelationContextFilter.REQUEST_ID_HEADER, "req-123");
+        request.addHeader(CorrelationContextFilter.TRACE_ID_HEADER, "trace-9");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        CapturingChain chain = new CapturingChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(chain.mdcAtChain.get(MdcKeys.TRACE_ID)).isEqualTo("trace-9");
+        assertThat(response.getHeader("X-Correlation-Id")).isEqualTo("trace-9");
+    }
+
+    @Test
     void missingHeaders_generatesUuidAndTraceFallsBackToRequest() throws Exception {
         MockHttpServletRequest request = request(DispatcherType.REQUEST);
         MockHttpServletResponse response = new MockHttpServletResponse();

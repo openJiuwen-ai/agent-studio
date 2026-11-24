@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.common.dto.ErrorDetail;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.error.PassthroughText;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 
@@ -119,5 +120,48 @@ class ManagerHttpErrorResponseBuilderTest {
             SUGGESTION_KEY, REQ_ID, null, null, null, null);
         ResponseEntity<ErrorRsp> resp = builder.build(d500, Locale.CHINA);
         assertEquals(500, resp.getStatusCode().value());
+    }
+
+    @Test
+    void i18nMissingFallsBackToPassthroughText() {
+        // 检视意见：HTTP 路径与 SSE 一致回退下游受管三段文案
+        PassthroughText passthrough = new PassthroughText(
+            "MCP execution error", "communication failure", "check MCP service");
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 500, MSG_KEY, REASON_KEY,
+            SUGGESTION_KEY, REQ_ID, null, DownstreamService.RUNTIME, "101873", null,
+            passthrough);
+        ManagerHttpErrorResponseBuilder failing = new ManagerHttpErrorResponseBuilder(
+            (key, locale) -> "");
+        ResponseEntity<ErrorRsp> resp = failing.build(d, Locale.CHINA);
+        assertNotNull(resp.getBody());
+        assertEquals("MCP execution error", resp.getBody().getErrorMsg());
+        assertEquals("communication failure", resp.getBody().getErrorReason());
+        assertEquals("check MCP service", resp.getBody().getErrorSuggestion());
+    }
+
+    @Test
+    void i18nMissingWithoutPassthroughThrows() {
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 500, MSG_KEY, REASON_KEY,
+            SUGGESTION_KEY, REQ_ID, null, null, null, null);
+        ManagerHttpErrorResponseBuilder failing = new ManagerHttpErrorResponseBuilder(
+            (key, locale) -> "");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+            () -> failing.build(d, Locale.CHINA));
+    }
+
+    @Test
+    void i18nReturningKeyFallsBackToPassthroughText() {
+        // 检视意见：I18nUtil 缺资源返回 key 本身，也应视为未解析并回退
+        PassthroughText passthrough = new PassthroughText(
+            "MCP execution error", "comm failure", "check MCP");
+        ErrorDescriptor d = new ErrorDescriptor(CODE, 500, MSG_KEY, REASON_KEY,
+            SUGGESTION_KEY, REQ_ID, null, DownstreamService.RUNTIME, "101873", null,
+            passthrough);
+        ManagerHttpErrorResponseBuilder keyEcho = new ManagerHttpErrorResponseBuilder(
+            (key, locale) -> key);
+        ResponseEntity<ErrorRsp> resp = keyEcho.build(d, Locale.CHINA);
+        assertNotNull(resp.getBody());
+        assertEquals("MCP execution error", resp.getBody().getErrorMsg());
+        assertEquals("comm failure", resp.getBody().getErrorReason());
     }
 }

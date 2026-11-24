@@ -149,15 +149,23 @@ class DownstreamErrorParserTest {
         assertNull(f.getDownstreamErrorCode());
     }
 
-    // ---- Runtime 不识别（初始）----
+    // ---- Runtime canonical 码形可信（2026-11-02 修订）----
 
     @Test
-    void parseHttp_runtime_code_not_trusted_initially() {
+    void parseHttp_runtime_canonical_code_is_trusted() {
         byte[] body = body("{\"error_code\":\"openjiuwen.121007\"}");
         DownstreamFailure f = parser.parseHttp(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
             500, null, body, null);
-        assertNull(f.getDownstreamErrorCode());
+        assertEquals("openjiuwen.121007", f.getDownstreamErrorCode());
         assertEquals(DownstreamService.RUNTIME, f.getService());
+    }
+
+    @Test
+    void parseHttp_runtime_builder_canonical_code_not_trusted() {
+        byte[] body = body("{\"error_code\":\"openjiuwen.13100009\"}");
+        DownstreamFailure f = parser.parseHttp(DownstreamService.RUNTIME, Transport.OKHTTP_SSE,
+            500, null, body, null);
+        assertNull(f.getDownstreamErrorCode());
     }
 
     // ---- SSE ----

@@ -962,9 +962,19 @@ async def _convert_llm_react_node(configs: dict, node_id: str):
     provider = _get_model_config_provider()
     adapted_conf = adapt_react_agent_config(configs)
     llm_comp_config = await provider.get_llm_config(adapted_conf)
-    model = SDKModel(
-        model_client_config=llm_comp_config.model_client_config,
-        model_config=llm_comp_config.model_config,
+    from agent_runtime.common.trace_compat import (
+        DEFINITION_SCOPED_SESSION_ID,
+        build_traced_model,
+    )
+
+    # 转换产物是定义级组件（跨执行复用），显式落定义级会话，避免把请求级 id
+    # 盖到复用模型上导致错归属
+    model = build_traced_model(
+        SDKModel(
+            model_client_config=llm_comp_config.model_client_config,
+            model_config=llm_comp_config.model_config,
+        ),
+        session_id=DEFINITION_SCOPED_SESSION_ID,
     )
 
     # ② plugins[] → List[Tool]

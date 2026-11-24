@@ -268,6 +268,7 @@ class WorkflowRunner:
         self,
         req: ExecutionRequest,
         execution_id: str | None = None,
+        env_scope: dict | None = None,
     ) -> AsyncGenerator[dict, None]:
         """执行 IR 工作流并流式返回 OutputSchema
 
@@ -467,14 +468,18 @@ class WorkflowRunner:
                 # QA resume: reuse the trace_id from the first execution of this
                 # round so the OTel handler keeps the cached root context.
                 saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
-                if saved_trace_id:
-                    # Reuse the business trace ID and the SDK handler's actual
-                    # cached root, never manufacture an unexported parent ID.
-                    session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
-                else:
-                    session = create_workflow_session_with_trace(session_id=session_id)
+                # 恢复段复用首段的 exec_id，保证同一次执行的 execution_id 一致
+                saved_exec_id = await ExecutionIdStore.get(workflow_id, session_id)
+                session = create_workflow_session_with_trace(
+                    session_id=session_id,
+                    trace_id=saved_trace_id,
+                    execution_id=saved_exec_id or exec_id,
+                    **(env_scope or {}),
+                )
             else:
-                session = create_workflow_session_with_trace(session_id=session_id)
+                session = create_workflow_session_with_trace(
+                    session_id=session_id, execution_id=exec_id, **(env_scope or {})
+                )
             performance_logger.info(
                 f"session_creation|{round((time.perf_counter() - t_session) * 1000)}"
             )
@@ -773,10 +778,10 @@ class WorkflowRunner:
             if otel_token is not None:
                 otel_context.detach(otel_token)
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
         """执行 IR 工作流并返回完整结果"""
         result_parts = []
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, env_scope=env_scope):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
             if event in ("message", "done"):

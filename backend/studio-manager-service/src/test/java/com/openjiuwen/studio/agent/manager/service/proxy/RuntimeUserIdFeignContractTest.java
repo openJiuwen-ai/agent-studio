@@ -53,8 +53,8 @@ class RuntimeUserIdFeignContractTest {
 
     @Test
     void nonStreamWorkflowFeign_receivesExplicitCustUserId() {
-        when(runtimeClient.runWorkflowWithConversation(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(ResponseEntity.ok().build());
+        when(runtimeClient.runWorkflowWithConversation(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+            any(), any())).thenReturn(ResponseEntity.ok().build());
 
         try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class)) {
             SimpleUser user = new SimpleUser();
@@ -69,12 +69,13 @@ class RuntimeUserIdFeignContractTest {
             runtimeClient.runWorkflowWithConversation(
                 RequestContextUtils.getRequestAuthToken(),
                 RuntimeUserIdPropagator.custUserIdHeaderValue(),
-                "p0", "wf0", "c0", "ws0", "env0", null, body);
+                "p0", "wf0", "c0", "ws0", "env0", null, body, null, null);
 
             ArgumentCaptor<String> custCaptor = ArgumentCaptor.forClass(String.class);
             verify(runtimeClient).runWorkflowWithConversation(
                 eq("login-feign-uid|0"), custCaptor.capture(),
-                eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body));
+                eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body),
+                isNull(), isNull());
             assertThat(custCaptor.getValue()).isEqualTo("login-feign-uid");
             assertThat(body.getUserId()).isEqualTo("login-feign-uid");
             assertThat(headers.getFirst(CommonConstant.CustomModel.CUSTOM_USER_ID)).isEqualTo("login-feign-uid");
@@ -84,7 +85,7 @@ class RuntimeUserIdFeignContractTest {
     @Test
     void nonStreamAgentFeign_receivesExplicitCustUserId() {
         when(runtimeClient.runAgentWithConversation(any(), any(), any(), any(), any(), any(), any(), any(), any(),
-            any(), any(), any())).thenReturn(ResponseEntity.ok().build());
+            any(), any(), any(), any(), any())).thenReturn(ResponseEntity.ok().build());
 
         try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class)) {
             SimpleUser user = new SimpleUser();
@@ -95,12 +96,13 @@ class RuntimeUserIdFeignContractTest {
             runtimeClient.runAgentWithConversation(
                 RequestContextUtils.getRequestAuthToken(), null,
                 RuntimeUserIdPropagator.custUserIdHeaderValue(),
-                "p0", "a0", "c0", "ws0", "agent", null, null, null, Map.of());
+                "p0", "a0", "c0", "ws0", "agent", null, null, null, Map.of(), null, null);
 
             ArgumentCaptor<String> custCaptor = ArgumentCaptor.forClass(String.class);
             verify(runtimeClient).runAgentWithConversation(
                 eq("agent-uid|0"), isNull(), custCaptor.capture(),
-                eq("p0"), eq("a0"), eq("c0"), eq("ws0"), eq("agent"), isNull(), isNull(), isNull(), any());
+                eq("p0"), eq("a0"), eq("c0"), eq("ws0"), eq("agent"), isNull(), isNull(), isNull(), any(),
+                isNull(), isNull());
             assertThat(custCaptor.getValue()).isEqualTo("agent-uid");
         }
     }

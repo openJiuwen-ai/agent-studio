@@ -341,12 +341,12 @@ class TestStreamRegistration:
         def __init__(self, chunks):
             self._chunks = chunks
 
-        async def run_streaming(self, req, execution_id):
+        async def run_streaming(self, req, execution_id, **kwargs):
             for chunk in self._chunks:
                 yield chunk
 
     class _BrokenRunner:
-        async def run_streaming(self, req, execution_id):
+        async def run_streaming(self, req, execution_id, **kwargs):
             raise RuntimeError("boom")
             yield  # pragma: no cover - 不可达但语法必需：无 yield 则为 coroutine，
             # stream_response 的 async for 将抛 TypeError 而非期望的 RuntimeError

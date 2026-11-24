@@ -884,6 +884,42 @@ async def test_unhandled_error_scope_falls_back_to_parent_span_context():
         assert getattr(handler, "_unhandled_error_scope")(COMP_ID) == ROOT_ID  # noqa: B009
 
 
+# --- 4f. 根自身异常/提前收尾：不得跨轮残留（分支→场景反向核对补用例） ------
+
+
+@pytest.mark.asyncio
+async def test_root_exception_does_not_leak_pending_across_rounds():
+    """层根自身异常不记录 pending；同 invoke_id 下一轮 outputs=None 不得被误标。"""
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await handler.on_invoke(ROOT_ID, exception=RuntimeError("root-boom"))
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+    await handler.on_call_done(ROOT_ID, outputs=None)
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+    await _open_root(handler)
+    await handler.on_call_done(ROOT_ID, outputs=None)
+    named_spans = [s for s in exporter.get_finished_spans() if s.name == ROOT_SPAN_NAME]
+    roots = [s for s in named_spans if s.attributes.get("openjiuwen.invoke_id") == ROOT_ID]
+    assert roots[-1].status.status_code == otel_trace.StatusCode.OK
+    assert (roots[-1].status.description or "") == ""
+    assert (roots[-1].attributes or {}).get("openjiuwen.status") == "finish"
+
+
+@pytest.mark.asyncio
+async def test_early_finished_span_clears_pending_on_call_done():
+    """组件 Span 已被异常分支提前收尾时，再次 on_call_done 必须清掉残留标记。"""
+    handler, _ = _new_handler()
+    await _open_root(handler)
+    await _open_component(handler)
+    await handler.on_invoke(COMP_ID, exception=RuntimeError("comp-boom"))
+    assert COMP_ID in getattr(handler, "_unhandled_errors")[ROOT_ID]  # noqa: B009
+
+    await handler.on_call_done(COMP_ID, outputs=None)
+    assert getattr(handler, "_unhandled_errors", {}) == {}
+
+
 # --- 5. 回归：正常组件 on_call_done 行为不变 --------------------------------
 
 

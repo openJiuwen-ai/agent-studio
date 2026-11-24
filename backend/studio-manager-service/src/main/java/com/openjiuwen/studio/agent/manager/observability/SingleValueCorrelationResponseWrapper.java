@@ -37,7 +37,8 @@ public class SingleValueCorrelationResponseWrapper extends HttpServletResponseWr
             return false;
         }
         String lower = name.toLowerCase(Locale.ROOT);
-        return lower.equals("x-request-id") || lower.equals("traceid");
+        return lower.equals("x-request-id") || lower.equals("traceid")
+            || lower.equals("x-correlation-id");
     }
 
     @Override

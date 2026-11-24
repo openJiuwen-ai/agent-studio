@@ -241,6 +241,54 @@ def _wrap(value: Any) -> Any:
     return value
 
 
+class ModelGatewayResponseError(RuntimeError):
+    """网关返回 HTTP 200 但响应体不是 SSE（如 JSON 错误体），流式解析会产出空流。
+
+    issue #1756：部分内部模型网关鉴权失败时返回 200 + `{"code":401,"msg":...}`，
+    OpenAI SDK 按 SSE 解析得到 0 帧且不抛异常，故障被呈现成成功。此处按非流式
+    错误体解析并抛出，带上可读诊断（凭据脱敏、正文截断）。
+    """
+
+
+_MAX_GATEWAY_BODY_PREVIEW = 300
+_MAX_DETAIL_CHARS = 200
+_CREDENTIAL_PATTERN = re.compile(
+    r"(sk-[A-Za-z0-9_\-]{6,}"
+    r"|(?i:bearer)\s+[A-Za-z0-9._\-]+"
+    r"|(?i:(?:api[_-]?key|access[_-]?key|token|secret|password)\s*[:=]\s*)"
+    r"[\"']?[^\s\"',}]{4,}[\"']?)"
+)
+
+
+def _redact(text: str) -> str:
+    return _CREDENTIAL_PATTERN.sub("<redacted>", text)
+
+
+def _gateway_body_for_log(body: bytes) -> str:
+    """日志用预览：脱敏 + 截断（原文只进内部日志，不对外）。"""
+    if not body:
+        return ""
+    return _redact(body.decode("utf-8", "replace").strip()[:_MAX_GATEWAY_BODY_PREVIEW])
+
+
+def _describe_gateway_body(body: bytes) -> str:
+    """对外诊断：只返回白名单字段 code/msg（脱敏+截断），原文/非标准 JSON 不外发。"""
+    if not body:
+        return ""
+    try:
+        obj = json.loads(body.decode("utf-8", "replace"))
+    except Exception:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    err = obj.get("error") if isinstance(obj.get("error"), dict) else {}
+    code = obj.get("code") or err.get("code")
+    msg = obj.get("msg") or obj.get("message") or err.get("message")
+    if not code and not msg:
+        return ""
+    return _redact(f"code={code} {msg}".strip())[:_MAX_DETAIL_CHARS]
+
+
 class StudioModelClient(OpenAIModelClient):
     """注册为 openjiuwen ``llm_studio``（``BaseModelClient.__init_subclass__`` 自动注册）。"""
 
@@ -477,7 +525,34 @@ class StudioModelClient(OpenAIModelClient):
                 openai_params = {k: v for k, v in params.items() if not k.startswith("tracer_")}
 
                 await trigger(LLMCallEvents.LLM_INPUT, is_stream=True, **_input_kwargs, params=params)
-                response_stream = await client.chat.completions.create(**openai_params)
+                # issue #1756：200 + 非 SSE（JSON 错误体）会被 SDK 解析成 0 帧空流，
+                # 先看 Content-Type，非 event-stream 时按错误体解析并抛出，避免故障静默。
+                raw_response = await client.chat.completions.with_raw_response.create(**openai_params)
+                content_type = str(raw_response.headers.get("content-type") or "").lower()
+                # 只对 application/json（网关错误体最常见形态）判失败；其余类型
+                # （text/plain / 无 content-type 等）仍按流处理，避免误杀合法流式网关
+                if "application/json" in content_type:
+                    body = b""
+                    try:
+                        # 先读底层 httpx 响应；SDK 的 read() 在某些流式路径下拿不到正文
+                        http_response = getattr(raw_response, "http_response", None)
+                        if http_response is not None:
+                            body = await http_response.aread()
+                        if not body:
+                            body = await raw_response.read()
+                    except Exception:  # noqa: BLE001 - 读不到正文也要报错
+                        body = b""
+                    detail = _describe_gateway_body(body)
+                    # 原文只进内部日志（脱敏+截断）；对外仅保留 code/msg 白名单摘要
+                    workflow_logger.warning(
+                        "LLM gateway returned non-stream body: content_type=%s body=%s",
+                        content_type or "unknown", _gateway_body_for_log(body))
+                    await client.close()
+                    raise ModelGatewayResponseError(
+                        "模型网关返回了非流式错误响应（Content-Type: %s）：%s"
+                        % (content_type or "unknown", detail or "响应正文为空")
+                    )
+                response_stream = raw_response.parse()
 
                 async def _parsed():
                     final_message = None

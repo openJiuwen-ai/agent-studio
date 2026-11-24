@@ -13,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.exception.contract.ManagerSseErrorEve
 import com.openjiuwen.studio.agent.manager.exception.contract.SseTerminalGuard;
 import com.openjiuwen.studio.agent.manager.observability.MdcScope;
 import com.openjiuwen.studio.agent.manager.observability.MdcSnapshot;
+import com.openjiuwen.studio.agent.manager.observability.UpstreamOtelHeaders;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
@@ -24,6 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
@@ -48,6 +50,10 @@ public class ProxyEventSourceListener extends EventSourceListener {
 
     @Getter
     private ResponseEntity<?> errorRsp;
+
+    /** issue 1754：上游真实 OTel 响应头（X-OTel-Trace-Id / traceresponse）。 */
+    @Getter
+    private Map<String, String> upstreamOtelHeaders = Collections.emptyMap();
 
     private final CountDownLatch latch;
 
@@ -394,6 +400,8 @@ public class ProxyEventSourceListener extends EventSourceListener {
     @Override
     public void onOpen(@NotNull EventSource eventSource, @NotNull Response response) {
         try (MdcScope scope = snapshot.openScope()) {
+            // issue 1754：上游响应头先于首帧到达，抓取供 HTTP 层在提交前回写
+            upstreamOtelHeaders = UpstreamOtelHeaders.capture(response);
             // COM-03 复审7 §3: 只有 beginStreaming 成功时才释放 latch。
             // 若 HTTP_FAILED 已由 onFailure 抢占，onOpen 不得提前 countDown——
             // 首帧前 failure 赢家在 errorRsp 完整写入后才在 finally 释放 latch，

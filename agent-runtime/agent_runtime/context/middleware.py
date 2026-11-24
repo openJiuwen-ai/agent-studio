@@ -140,6 +140,15 @@ def _body_conversation_id(body_json: dict) -> str:
     return ""
 
 
+def _request_conversation_id(request: Request) -> str:
+    """读取 dispatch 阶段解析出的会话 ID（issue 1754 关联 OTel 登记表）。
+
+    异常早退（未走到解析分支）时为空串，下游按“无会话”保守跳过。
+    """
+    value = getattr(request.state, "conversation_id", "")
+    return value if isinstance(value, str) else ""
+
+
 def _conflict_response(request_id: str, language: str = "zh-cn") -> JSONResponse:
     """路径与请求体会话冲突的集中拒绝出口（400，不回显任何原值）。
 
@@ -195,7 +204,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         else:
             request_id, illegal_req = uuid.uuid4().hex, bool(raw_req)
 
-        raw_trace = request.headers.get(TRACE_ID_HEADER)
+        # issue 1754 复审：入站优先规范名 X-Correlation-Id，TraceID 过渡期兼容
+        raw_trace = request.headers.get("X-Correlation-Id")
+        if not _valid_header(raw_trace):
+            raw_trace = request.headers.get(TRACE_ID_HEADER)
         if _valid_header(raw_trace):
             trace_id, illegal_trace = raw_trace, False
         else:
@@ -234,6 +246,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             )
             request_token = _request_ctx.set(ctx)
             trace_token = set_session_id(trace_id)
+            # 业务关联 ID（TraceID 头）：供根 Span 写 openjiuwen.correlation.id。
+            # 仅入站显式携带合法 TraceID 时写入；缺省回退的 request_id 不得冒充
+            # 调用方关联 ID（否则 correlation.id 与 X-Request-Id 语义混淆）。
+            from agent_runtime.common.otel_trace_context import set_business_trace_id
+
+            if _valid_header(raw_trace):
+                set_business_trace_id(trace_id)
 
             # 非法 Header 告警（含替代 ID，不含非法原值）
             if illegal_exec:
@@ -342,6 +361,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             # COM-05: 响应回写本次 X-Request-Id（成功/404/校验/业务响应统一）
             response.headers[X_REQUEST_ID] = request_id
+            # issue 1754：根 Span 已建立（预取早于根 Span），body 尚未发送，
+            # 按 conversation_id 从请求级登记读取真实 OTel trace_id 并补头
+            from agent_runtime.common.otel_trace_context import build_otel_trace_headers_for
+
+            for _otel_key, _otel_value in build_otel_trace_headers_for(
+                _request_conversation_id(request),
+                getattr(request.state, "execution_id", ""),
+            ).items():
+                response.headers[_otel_key] = _otel_value
             return response
         except JiuWenBaseException:
             # 框架业务异常透传至 server.py 的 i18n handler（保 error_code），
@@ -353,6 +381,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             # ContextVar 注入（而非仅拼进 message）；finally 仍逆序 reset
             err_response = build_unhandled_error_response(request, exc)
             err_response.headers[X_REQUEST_ID] = request_id
+            from agent_runtime.common.otel_trace_context import build_otel_trace_headers_for
+
+            for _otel_key, _otel_value in build_otel_trace_headers_for(
+                _request_conversation_id(request),
+                getattr(request.state, "execution_id", ""),
+            ).items():
+                err_response.headers[_otel_key] = _otel_value
             return err_response
         finally:
             # LIFO 逆序、条件 reset：建立期任一 set 抛错时，已得 token 仍尝试恢复

@@ -59,7 +59,7 @@ public final class OkHttpCorrelationHeaderApplier {
     /** 三个关联 Header 名的大小写不敏感判定——供调用方复制入站 Header 时排除。 */
     public static boolean isCorrelationHeader(String name) {
         return "X-Request-Id".equalsIgnoreCase(name) || "TraceID".equalsIgnoreCase(name)
-            || "X-Execution-Id".equalsIgnoreCase(name);
+            || "X-Correlation-Id".equalsIgnoreCase(name) || "X-Execution-Id".equalsIgnoreCase(name);
     }
 
     /**

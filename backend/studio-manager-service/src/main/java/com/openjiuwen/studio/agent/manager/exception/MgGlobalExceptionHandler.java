@@ -4,6 +4,8 @@
 
 package com.openjiuwen.studio.agent.manager.exception;
 
+import com.openjiuwen.studio.agent.common.error.DownstreamService;
+import org.springframework.beans.factory.annotation.Value;
 import com.alibaba.fastjson.JSONException;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
@@ -34,6 +36,8 @@ import com.openjiuwen.studio.agent.common.error.DownstreamService;
 import com.openjiuwen.studio.agent.common.error.ErrorDescriptorDiagnostics;
 
 import feign.FeignException;
+import feign.codec.DecodeException;
+import org.springframework.web.client.UnknownContentTypeException;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -296,17 +300,66 @@ public class MgGlobalExceptionHandler {
      * {@code EXTERNAL} 身份的 {@code DownstreamFailure}，经同一 mapper 一次映射，
      * 满足"HTTP 响应与 transport failure 产生同一种内部结果"。
      */
+    /**
+     * 按 Feign 请求目标判定下行服务身份（检视意见）。
+     *
+     * <p>只有请求 URL 前缀命中 {@code agent_runtime_endpoint} 的 DecodeException 才归
+     * RUNTIME（用于 1750 的 02001134 协议错误分类）；其他 Feign 客户端（Builder/外部）
+     * 的解码失败归 EXTERNAL，避免误写 downstream component 与错误语义。
+     */
+    private DownstreamService resolveDownstreamService(FeignException exception) {
+        if (!(exception instanceof DecodeException)) {
+            return DownstreamService.EXTERNAL;
+        }
+        if (runtimeEndpoint == null || runtimeEndpoint.isBlank()) {
+            return DownstreamService.EXTERNAL;
+        }
+        try {
+            var request = exception.request();
+            String url = request != null ? request.url() : "";
+            String base = runtimeEndpoint.endsWith("/")
+                ? runtimeEndpoint.substring(0, runtimeEndpoint.length() - 1) : runtimeEndpoint;
+            if (!base.isEmpty() && url != null && url.startsWith(base)) {
+                return DownstreamService.RUNTIME;
+            }
+        } catch (RuntimeException ignored) {
+            // 无法取得请求目标时保守归外部，不臆断 RUNTIME
+        }
+        return DownstreamService.EXTERNAL;
+    }
+
+    private String describeContentType(Throwable exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof UnknownContentTypeException) {
+                return "content-type=" + ((UnknownContentTypeException) cause).getContentType();
+            }
+            cause = cause.getCause();
+        }
+        return "content-type=unknown";
+    }
+
+    /** 检视意见：DecodeException 归属需按 Feign 目标判定，不能一律归 RUNTIME。 */
+    @Value("${agent_runtime_endpoint:}")
+    private String runtimeEndpoint;
+
     @ExceptionHandler(FeignException.class)
     @ResponseBody
     public ResponseEntity<ErrorRsp> handleFeignException(FeignException exception) {
         log.error("FeignException: {}", exception.getMessage(), exception);
         int status = exception.status();
+        // 2xx 响应解析失败（如期望 JSON 收到 SSE）归 RUNTIME 协议问题，
+        // 避免误归为外部依赖不可用；日志显式带 content-type 便于定位。
+        DownstreamService service = resolveDownstreamService(exception);
+        if (exception instanceof DecodeException) {
+            log.error("Feign response decode failed, {}", describeContentType(exception));
+        }
         DownstreamFailure failure = status >= 0
             ? DownstreamFailure.httpResponse(
-                DownstreamService.EXTERNAL,
+                service,
                 Transport.FEIGN, status, null, exception)
             : DownstreamFailure.transportFailure(
-                DownstreamService.EXTERNAL,
+                service,
                 Transport.FEIGN, exception);
         return handleDownstreamFailure(new DownstreamFailureException(failure));
     }

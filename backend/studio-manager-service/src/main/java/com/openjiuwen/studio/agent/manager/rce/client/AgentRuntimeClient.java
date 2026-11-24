@@ -76,7 +76,9 @@ public interface AgentRuntimeClient {
         @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
         @RequestParam(value = "version") String version, @RequestParam(value = "type") String type,
         @RequestParam(value = "environment_id", required = false) String environmentId,
-        @RequestBody Object request);
+        @RequestBody Object request,
+        @RequestHeader(value = "stream", required = false) Boolean stream,
+        @RequestHeader(value = "X-Invoke-Mode", required = false) String invokeMode);
 
     /**
      * 运行 agent，带会话 id, 流式
@@ -105,7 +107,9 @@ public interface AgentRuntimeClient {
         @PathVariable(value = "conversation_id") String conversationId,
         @RequestParam(value = "workspace_id") String workspaceId,
         @RequestParam(value = "environment_id") String environmentId, @RequestParam(value = "version") String version,
-        @RequestBody Object request);
+        @RequestBody Object request,
+        @RequestHeader(value = "stream", required = false) Boolean stream,
+        @RequestHeader(value = "X-Invoke-Mode", required = false) String invokeMode);
 
     /**
      * 运行工作流，流式

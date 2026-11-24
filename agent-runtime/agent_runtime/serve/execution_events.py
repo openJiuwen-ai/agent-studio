@@ -3,7 +3,7 @@
 """Private, in-process execution events; never an HTTP response body by itself."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 
@@ -12,6 +12,8 @@ class ExecutionEventStream:
     """Carry prefetched events to EventHandler without an intermediate SSE codec."""
 
     body_iterator: AsyncIterator[Any]
+    # 需要随流下发的响应头（issue 1754：X-OTel-Trace-Id / traceresponse）
+    headers: dict = field(default_factory=dict)
 
 
 def copy_json_event(event: dict) -> dict:

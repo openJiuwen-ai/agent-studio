@@ -38,6 +38,7 @@ import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.observability.ExecutionIdSelector;
 import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
 import com.openjiuwen.studio.agent.manager.observability.MdcScope;
+import com.openjiuwen.studio.agent.manager.observability.UpstreamOtelHeaders;
 import com.openjiuwen.studio.agent.manager.observability.OkHttpCorrelationHeaderApplier;
 import com.openjiuwen.studio.agent.manager.observability.OutboundCorrelationPolicy;
 import com.openjiuwen.studio.agent.manager.dto.*;
@@ -921,7 +922,36 @@ public class AgentServiceProxyService {
         if (listener.getErrorRsp() != null) {
             return listener.getErrorRsp();
         }
+        // issue 1754：上游根 Span 已建立，把真实 OTel 响应头透传到下游（提交前写入）
+        applyUpstreamOtelHeaders(listener);
         return sseEmitter;
+    }
+
+    /**
+     * issue 1754：把上游 X-OTel-Trace-Id / traceresponse 写回当前 HTTP 响应。
+     *
+     * <p>调用点在 Controller 线程、SseEmitter 尚未提交时；Manager 只透传不改写，
+     * 上游未输出时不写（下游据此判断"无 OTel 上下文"而非拿到伪造值）。
+     */
+    private void applyUpstreamOtelHeaders(Object listener) {
+        java.util.Map<String, String> headers;
+        if (listener instanceof BaseEventListener) {
+            headers = ((BaseEventListener) listener).getUpstreamOtelHeaders();
+        } else if (listener instanceof ProxyEventSourceListener) {
+            headers = ((ProxyEventSourceListener) listener).getUpstreamOtelHeaders();
+        } else {
+            return;
+        }
+        if (headers == null || headers.isEmpty()) {
+            return;
+        }
+        org.springframework.web.context.request.RequestAttributes attributes =
+            org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attributes instanceof org.springframework.web.context.request.ServletRequestAttributes) {
+            UpstreamOtelHeaders.apply(
+                ((org.springframework.web.context.request.ServletRequestAttributes) attributes)
+                    .getResponse(), headers);
+        }
     }
 
     /** 命中定制名单 manager.skip-outbound-header-list(大小写不敏感)则跳过透传;名单为空恒 false,保持旧行为。 */
@@ -1002,6 +1032,8 @@ public class AgentServiceProxyService {
             return listener.getErrorRsp();
         }
         if (opened && !listener.isCancelled()) {
+            // issue 1754：上游真实 OTel 响应头透传（SseEmitter 提交前）
+            applyUpstreamOtelHeaders(listener);
             return sseEmitter;
         }
         if (listener.tryAbortBeforeOpen()) {

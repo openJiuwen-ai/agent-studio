@@ -1928,6 +1928,17 @@ class Questioner(WorkflowComponent):
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
+            from agent_runtime.common.trace_compat import (
+                DEFINITION_SCOPED_SESSION_ID,
+                build_traced_model,
+                resolve_trace_identity,
+            )
+
+            self._model = build_traced_model(
+                self._model,
+                session_id=DEFINITION_SCOPED_SESSION_ID,
+                identity=resolve_trace_identity(self, None),
+            )
             self._initialized = True
         except Exception as e:
             workflow_logger.error(

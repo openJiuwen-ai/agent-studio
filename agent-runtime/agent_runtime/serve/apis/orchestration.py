@@ -20,6 +20,13 @@ from agent_runtime.common.ir_interfaces import (
     StorageReadError,
 )
 from agent_runtime.context.request_context import _request_ctx
+from agent_runtime.common.otel_trace_context import (
+    build_otel_trace_headers_for,
+    clear_session_trace,
+    get_session_trace,
+)
+# 预取上限：为让响应头带上真实 trace_id，最多缓冲到根 Span 登记出现。
+_PREFETCH_MAX_EVENTS = 8
 from agent_runtime.serve.execution_events import ExecutionEventStream, copy_json_event
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
@@ -222,7 +229,7 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
     } | req.params.global_variables
     req.params.is_debug = req.headers.get("x-invoke-mode", "").lower() == "debug"
 
-    execution_id = req.headers.get("x-execution-id", "")
+    execution_id = _resolve_execution_id(request, req)
 
     # 只读一次 IR（避免重复读取）
     exec_id = execution_id
@@ -273,6 +280,7 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
 
         gen = stream_response(
             req, execution_id, runner, moderation_engine,
+            env_scope=_env_scope_of(request),
             entry=StreamEntryContext(
                 entry_id=entry_id,
                 project_id=getattr(request.state, "project_id", ""),
@@ -280,11 +288,20 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
             ),
             structured_output=structured_output,
         )
+        # issue 1754：根 Span 在首个事件产出之后才建立；为让响应头带上真实 trace_id，
+        # 最多缓冲 _PREFETCH_MAX_EVENTS(=8) 帧等待登记出现（正常 1~2 帧即命中，
+        # 8 为长首 token 场景的兜底上限：期间 HTTP 头未提交，超限则按空头继续）。
+        _first_events = []
         try:
-            _first_event = await anext(gen)
+            for _ in range(_PREFETCH_MAX_EVENTS):
+                _first_events.append(await anext(gen))
+                # 根 Span 建立前的帧无法带 trace_id；登记出现即停止预取
+                if get_session_trace(req.conversation_id, execution_id):
+                    break
         except StopAsyncIteration:
             # 生成器未产出任何事件——空成功流
-            return StreamingResponse(content=iter([]), media_type="text/event-stream")
+            if not _first_events:
+                return StreamingResponse(content=iter([]), media_type="text/event-stream")
         except Exception as e:
             # COM-03 §3: 首帧前失败 → 标准 HTTP error（HTTP 尚未 commit）
             # P5-R3 Phase 3 决策 A: from_plugin_exception(105015→12100006, 其余→12100004)
@@ -293,21 +310,135 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
             descriptor = error_factory.from_plugin_exception(e, _entry_rid)
             return error_factory.build_json_response(descriptor, _entry_lang)
 
-        prefetched = _prefetched_stream(_first_event, gen)
+        prefetched = _prefetched_stream(_first_events, gen)
+        # issue 1754：根 Span 在 runner 任务内建立（ContextVar 不跨 task），
+        # 按 conversation_id 从进程级登记读取真实 OTel trace_id（头 + SSE 字段）
+        conv_id = req.conversation_id
+        otel_headers = build_otel_trace_headers_for(conv_id, execution_id)
         if structured_output:
-            return ExecutionEventStream(prefetched)
-        return StreamingResponse(content=prefetched, media_type="text/event-stream")
+            return ExecutionEventStream(
+                _inject_otel_ids(prefetched, conv_id, execution_id), headers=otel_headers
+            )
+        return StreamingResponse(
+            content=_inject_otel_ids(prefetched, conv_id, execution_id),
+            media_type="text/event-stream",
+            headers=otel_headers,
+        )
     else:
-        full_text = await runner.run_blocking(req)
+        _blocking_scope = _env_scope_of(request)
+        if _supports_kwarg(runner.run_blocking, "env_scope"):
+            full_text = await runner.run_blocking(req, env_scope=_blocking_scope)
+        else:
+            full_text = await runner.run_blocking(req)
         now_ms = int(time.time() * 1000)
+        conv_id = req.conversation_id
+        otel_trace = get_session_trace(conv_id, execution_id)
+        trace_id, span_id = (otel_trace[0], otel_trace[1]) if otel_trace else ("", "")
+        # 头必须先取：非流式无后续迭代，取完即清理登记（与流式 finally 对称）
+        otel_headers = build_otel_trace_headers_for(conv_id, execution_id)
+        if conv_id:
+            clear_session_trace(conv_id, execution_id)
         return JSONResponse(
             content={
                 "event": "done",
                 "createdTime": now_ms,
                 "executionId": execution_id,
+                "otel_trace_id": trace_id,
+                "otel_span_id": span_id,
                 "data": {"text": full_text},
-            }
+            },
+            headers=otel_headers,
         )
+
+
+def _resolve_execution_id(request, req) -> str:
+    """请求级执行 ID 的唯一来源（issue 1754 复审）。
+
+    中间件已按入站头规范化（非法/缺失则生成）并写入 request.state.execution_id，
+    此处以其为准；绕过中间件直接调用时回退入站头，最后兜底生成。同一个值贯穿
+    登记、响应头、SSE 帧与清理，避免无 X-Execution-Id 的并发直连出现
+    “登记侧用新生成 ID、读取/清理侧用空 ID”而串 trace 或误清他人条目。
+    """
+    return (
+        getattr(request.state, "execution_id", "")
+        or req.headers.get("x-execution-id", "")
+        or str(uuid.uuid4())
+    )
+
+
+async def _inject_otel_ids(chunks, session_id: str = "", execution_id: str = ""):
+    """给 SSE 事件补真实 OTel trace_id/span_id（与响应头同源，issue 1754）。
+
+    首帧预取时根 Span 可能尚未建立，按帧实时读取登记表，出现即补；
+    流结束（含异常/取消）在 finally 清理登记，避免进程级表残留。
+    """
+    try:
+        async for chunk in chunks:
+            otel_trace = get_session_trace(session_id, execution_id) if session_id else None
+            trace_id, span_id = (otel_trace[0], otel_trace[1]) if otel_trace else ("", "")
+            if not trace_id:
+                yield chunk
+                continue
+            if isinstance(chunk, dict):
+                if "event" in chunk or "data" in chunk:
+                    chunk.setdefault("otel_trace_id", trace_id)
+                    chunk.setdefault("otel_span_id", span_id)
+                yield chunk
+                continue
+            if isinstance(chunk, (bytes, bytearray)):
+                try:
+                    text = bytes(chunk).decode("utf-8")
+                    if text.startswith("data: "):
+                        payload = json.loads(text[6:].strip())
+                        if isinstance(payload, dict):
+                            payload.setdefault("otel_trace_id", trace_id)
+                            payload.setdefault("otel_span_id", span_id)
+                            frame = json.dumps(payload, ensure_ascii=False)
+                            yield ("data: " + frame + chr(10) + chr(10)).encode("utf-8")
+                            continue
+                except Exception:  # noqa: BLE001 - 非 JSON 帧原样透传
+                    pass
+            yield chunk
+    finally:
+        if session_id:
+            clear_session_trace(session_id, execution_id)
+
+
+def _supports_kwarg(func, name: str) -> bool:
+    """目标可调用是否接收指定关键字（含 **kwargs）。
+
+    issue 1755 复审：runner 可能是测试替身或第三方实现，未必同步新增
+    env_scope 形参；按能力传参可避免 TypeError 把整条流打成 error 帧。
+    """
+    import inspect as _inspect
+
+    target = getattr(func, "__func__", func)
+    try:
+        params = _inspect.signature(target).parameters
+    except (TypeError, ValueError):
+        return False
+    if name in params:
+        return True
+    return any(p.kind is _inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def _env_scope_of(request) -> dict:
+    """请求级环境作用域（issue 1755）：request.state 优先，ContextVar 兜底。
+
+    runner 可能在独立 task/线程内创建 tracer 会话，ContextVar 不一定可见，
+    故 app_run 入口同时写 request.state；空值不返回（不写占位属性）。
+    """
+    ctx = _request_ctx.get()
+    scope = {}
+    for key in ("workspace_id", "environment_id", "project_id"):
+        value = getattr(getattr(request, "state", None), key, "") or getattr(ctx, key, "")
+        if value:
+            scope[key] = str(value)
+    # 显式播种到执行上下文：装饰器/会话创建在 runner task 内可直接读取
+    from agent_runtime.common.trace_compat import bind_request_env_scope
+
+    bind_request_env_scope(scope)
+    return scope
 
 
 def _stream_event_of(chunk) -> str:
@@ -358,12 +489,16 @@ def _fallback_terminal_done(execution_id: str) -> str:
 
 
 async def _prefetched_stream(_first, _gen):
-    """COM-03 §3: 预取包装生成器——先输出已预取首事件,再透传剩余。
+    """COM-03 §3: 预取包装生成器——先输出已预取事件,再透传剩余。
 
     finally 中安全关闭原生成器,防止客户端取消/发送失败时泄漏。
     """
     try:
-        yield _first
+        if isinstance(_first, (list, tuple)):
+            for _item in _first:
+                yield _item
+        else:
+            yield _first
         async for chunk in _gen:
             yield chunk
     finally:
@@ -397,6 +532,7 @@ async def stream_response(
     entry: Optional[StreamEntryContext] = None,
     *,
     structured_output: bool = False,
+    env_scope: Optional[dict] = None,
 ):
     """
     透传 OutputSchema 格式
@@ -465,7 +601,10 @@ async def stream_response(
         )
         pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
 
-        raw_gen = runner.run_streaming(req, execution_id)
+        if _supports_kwarg(runner.run_streaming, "env_scope"):
+            raw_gen = runner.run_streaming(req, execution_id, env_scope=env_scope)
+        else:
+            raw_gen = runner.run_streaming(req, execution_id)
         moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
 
         async for chunk in moderated_gen:

@@ -76,6 +76,53 @@ _SAFE_REASON_PATTERN = re.compile(r"[A-Za-z0-9 ._\-]{1,64}")
 class StudioOtelWorkflowHandler(OtelWorkflowHandler):
     """在官方 OtelWorkflowHandler 基础上支持 business_error 业务失败标红。"""
 
+    async def on_call_start(
+        self,
+        invoke_id: str,
+        metadata: dict = None,
+        inputs=None,
+        parent_node_id: str = "",
+        **kwargs,
+    ):
+        """层根 Span 建立后暴露真实 OTel trace_id/span_id（issue 1754）。
+
+        HTTP 层（响应头/SSE）在提交前读取请求级上下文，输出
+        X-OTel-Trace-Id / traceresponse；调用方 TraceID 写
+        openjiuwen.correlation.id（与 openjiuwen.trace.id 语义分离）。
+        """
+        await super().on_call_start(
+            invoke_id,
+            metadata=metadata,
+            inputs=inputs,
+            parent_node_id=parent_node_id,
+            **kwargs,
+        )
+        state = self._span_manager.get(invoke_id)
+        if state is None or self._layer_root_spans.get(invoke_id) is not state:
+            return
+        span_ctx = state.span.get_span_context()
+        if span_ctx is None or not span_ctx.is_valid:
+            return
+        from agent_runtime.common.otel_trace_context import (
+            get_business_trace_id,
+            register_session_trace,
+            set_otel_trace_context,
+        )
+
+        correlation_id = get_business_trace_id()
+        trace_hex = format(span_ctx.trace_id, "032x")
+        span_hex = format(span_ctx.span_id, "016x")
+        set_otel_trace_context(trace_hex, span_hex, correlation_id)
+        register_session_trace(
+            str(kwargs.get("session_id") or ""),
+            trace_hex,
+            span_hex,
+            correlation_id,
+            str((metadata or {}).get("execution_id") or ""),
+        )
+        if correlation_id:
+            state.span.set_attribute("openjiuwen.correlation.id", str(correlation_id))
+
     async def on_invoke(
         self,
         invoke_id: str,
@@ -84,11 +131,18 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
         **kwargs,
     ):
         if exception is not None and not isinstance(exception, GraphInterrupt):
-            scope = self._unhandled_error_scope(invoke_id)
-            pending = getattr(self, "_unhandled_errors", None)
-            if pending is None:
-                pending = self._unhandled_errors = {}
-            pending.setdefault(scope, {})[invoke_id] = _build_error_summary(exception)
+            # 只记录组件异常：层根 Span 自身异常会被 Core 在异常分支提前收尾，
+            # 收尾时无法按正常路径清理，若记录会跨轮残留并污染同一 workflow_id
+            # 的下一轮根 Span（根与 layer root 都不在 _component_spans 中）。
+            state = self._span_manager.get(invoke_id)
+            if state is not None and self._component_spans.get(invoke_id) is state:
+                scope = self._unhandled_error_scope(invoke_id)
+                pending = getattr(self, "_unhandled_errors", None)
+                if pending is None:
+                    pending = self._unhandled_errors = {}
+                pending.setdefault(scope, {})[invoke_id] = _build_error_summary(
+                    exception
+                )
         await super().on_invoke(
             invoke_id,
             on_invoke_data=on_invoke_data,
@@ -117,6 +171,9 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
 
             state = self._span_manager.pop(invoke_id)
             if state is None:
+                # Span 已被异常分支提前收尾（重复收尾/根自身异常）：清理该 invoke_id
+                # 的残留标记，避免同一 invoke_id 在下一轮被旧异常误标。
+                self._clear_unhandled_error(invoke_id)
                 return
 
             is_layer_root = self._layer_root_spans.get(invoke_id) is state
