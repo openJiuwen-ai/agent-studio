@@ -69,6 +69,7 @@ import com.openjiuwen.studio.agent.manager.enums.McpNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
+import com.openjiuwen.studio.agent.manager.service.AssetCategoryValidator;
 import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigRequsetDto;
@@ -244,6 +245,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
     @Autowired
     private AssetShelfPermissionValidator shelfPermissionValidator;
+
+    @Autowired
+    private AssetCategoryValidator assetCategoryValidator;
 
     @Resource
     private McpUtil mcpUtil;
@@ -865,6 +869,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
                 req.getServiceId(), service.getFcInstanceStatus(), StringUtils.isBlank(service.getTools()));
             throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
         }
+        // FR-03：行业分类须校验存在于 t_pe_industry（library_type='mcp'），非法值 fail-closed 拒绝，不留半成品；
+        // 缺省（req.category 为空）沿用既有目录值，跳过校验
+        assetCategoryValidator.validateCategoryExists(req.getCategory(), AssetCategoryValidator.LIBRARY_TYPE_MCP);
         // 同一实例重复上架：去重并刷新快照（并发由 source_instance_id 唯一索引兜底）；
         // readme/category 未重新填写时保留既有目录值（避免二次上架把已填内容覆盖清空）
         McpServerEntity existing = serverDao.selectBySourceInstanceId(req.getServiceId());

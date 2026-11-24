@@ -23,6 +23,8 @@ import { i18nProviderValue, I18nService } from '@agentcore/core/i18n.service';
 import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
 import { SpaceTeamManagementService } from '@services/space-team-management.service';
 import { ContextService } from '@services/context.service';
+import { PromptService } from '@services/prompt.service';
+import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
 
 @Component({
   selector: 'skill-market',
@@ -54,40 +56,19 @@ export class SkillMarketComponent {
   cardHovered = '';
   @ViewChild('scrollContainer') scrollContainer: ElementRef;
   resourceConfig = SKILL_RESOURCE_TYPE_CONFIG;
-  tabs = [
+  // 分类由后端 t_pe_industry（library_type='skill'）下发，前端不硬编码 ID（#1731）；
+  // tabs 动态构建：初始仅"全部"，ngAfterViewInit 拉取后端分类追加；skillTagMap 供卡片 tagId→name 展示
+  tabs: { id: string; title: string; active?: boolean }[] = [
     {
       id: SkillResourceType.ALL,
       title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.all.i18key),
       active: true,
     },
-    {
-      id: SkillResourceType.GENERAL,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.general.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.EFFENCY,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.effency.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.TOOL,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.tool.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.DESIGN,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.design.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.CREATE,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.create.i18key),
-      active: false,
-    },
   ];
 
   selectedTab = this.tabs.find(e => e.active) ?? this.tabs[0];
+  // 后端分类 id→分类对象（卡片展示用，替代硬编码 resourceConfig[tagId] 查不到的问题）
+  skillTagMap: Record<string, AssertSquareTagType> = {};
   tags: Array<{ label: string; value: string }> = [];
   searchValue = '';
   cards: SkillDetail[] = [];
@@ -105,7 +86,8 @@ export class SkillMarketComponent {
     private _i18n: I18nService,
     private nzModal: NzModalService,
     private spaceTeamManagementService: SpaceTeamManagementService,
-    private ctxServ: ContextService
+    private ctxServ: ContextService,
+    private promptService: PromptService
   ) {}
 
   openPublishModal(): void {
@@ -199,6 +181,23 @@ export class SkillMarketComponent {
     this.watchLatest();
     this.loadMore();
     this.checkPublishPermission();
+    this.loadSkillTags();
+  }
+
+  /**
+   * 从后端拉取 Skill 分类（t_pe_industry, library_type='skill'），动态追加筛选 tab + 填充 tagId→分类映射。
+   * #1731：前端不硬编码分类 ID；上架写入与筛选查询同源（同一套后端分类 id）。
+   */
+  private loadSkillTags(): void {
+    this.promptService
+      ?.getAssertTagAsync({ library_type: 'skill' })
+      .then((res: AssertSquareTagType[]) => {
+        (res || []).forEach(tag => {
+          this.tabs.push({ id: tag.id, title: tag.name });
+          this.skillTagMap[tag.id] = tag;
+        });
+      })
+      .catch(() => {});
   }
 
   async checkPublishPermission() {
@@ -226,7 +225,7 @@ export class SkillMarketComponent {
         .queryResourceSkill({
           offset: this.cards.length,
           limit: 100,
-          tagId: SKILL_RESOURCE_TYPE_CONFIG[this.selectedTab!.id]?.id,
+          tagId: this.selectedTab?.id === SkillResourceType.ALL ? undefined : this.selectedTab?.id,
           name: this.filter?.name,
           description: this.filter?.description,
         })

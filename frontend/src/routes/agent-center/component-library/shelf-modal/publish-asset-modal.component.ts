@@ -11,7 +11,7 @@ import { PromptService } from '@services/prompt.service';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { I18N_NAMESPACE } from '@agentcore/constants/common';
 import { i18nProviderValue } from '@agentcore/core/i18n.service';
-import { SKILL_RESOURCE_TYPE_CONFIG, SkillResourceType } from '@agentcore/constants/skill.model';
+import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
 
 export type PublishAssetType = 'skill' | 'plugin' | 'mcp';
 
@@ -42,7 +42,7 @@ export class PublishAssetModalComponent implements OnInit {
   showTag = false;
   showReadme = false;
   categoryOptions: any[] = [];
-  skillTags: { id: string; i18key: string }[] = [];
+  skillTags: { id: string; name: string }[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -70,12 +70,13 @@ export class PublishAssetModalComponent implements OnInit {
     this.showCategory = this.assetType === 'plugin';
     this.showReadme = this.assetType === 'mcp';
     if (this.assetType === 'skill') {
-      this.skillTags = (Object.keys(SKILL_RESOURCE_TYPE_CONFIG) as SkillResourceType[])
-        .filter(key => key !== 'all')
-        .map(key => ({
-          id: SKILL_RESOURCE_TYPE_CONFIG[key].id,
-          i18key: SKILL_RESOURCE_TYPE_CONFIG[key].i18key,
-        }));
+      // 分类由后端 t_pe_industry（library_type='skill'）下发，前端不硬编码 ID（#1731）
+      this.promptService
+        ?.getAssertTagAsync({ library_type: 'skill' })
+        .then((res: AssertSquareTagType[]) => {
+          this.skillTags = (res || []).map(tag => ({ id: tag.id, name: tag.name }));
+        })
+        .catch(() => {});
     }
     if (this.assetType === 'plugin') {
       this.promptService

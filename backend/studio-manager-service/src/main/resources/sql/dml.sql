@@ -103,6 +103,13 @@ INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_e
 INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000009', '文案创作', '文案创作', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Content Creation', NULL, 'plugin');
 INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-00000000000a', '生活服务', '生活服务', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'lifestyle services', NULL, 'plugin');
 
+-- Skill 资产广场分类（#1731：前端不再硬编码，由后端 t_pe_industry library_type='skill' 下发）
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000001', '通用', '通用', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'General', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000002', '效率提升', '效率提升', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Productivity', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000003', '自动化工具', '自动化工具', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Automation Tools', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000004', '设计与可视化', '设计与可视化', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Design & Visualization', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000005', '内容创作', '内容创作', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Content Creation', NULL, 'skill');
+
 -- ========================================
 -- 自定义插件：DrawBox 框选与标注插件
 -- 注意：dml.sql 用于平台默认初始化（安装时执行一次）。
