@@ -415,13 +415,14 @@ class LocalStorageProvider(ObjectStorageProvider):
             object_key: 对象 key（如 ir/xxx.json）
 
         Raises:
-            StorageReadError: 文件不存在或读取失败
+            StorageNotFoundError: 文件不存在（StorageReadError 子类，与 S3 实现契约一致）
+            StorageReadError: 读取失败
         """
 
         file_path = self._resolve(object_key)
         if not os.path.exists(file_path):
             workflow_logger.error(f"File not found: {file_path}")
-            raise StorageReadError(f"File not found: {file_path}")
+            raise StorageNotFoundError(f"File not found: {file_path}")
 
         try:
             loop = asyncio.get_running_loop()
@@ -441,12 +442,13 @@ class LocalStorageProvider(ObjectStorageProvider):
             object_key: 对象 key
 
         Raises:
-            StorageReadError: 文件不存在或读取失败
+            StorageNotFoundError: 文件不存在（StorageReadError 子类，与 S3 实现契约一致）
+            StorageReadError: 读取失败
         """
         file_path = self._resolve(object_key)
         if not os.path.exists(file_path):
             workflow_logger.error(f"File not found: {file_path}")
-            raise StorageReadError(f"File not found: {file_path}")
+            raise StorageNotFoundError(f"File not found: {file_path}")
 
         try:
             loop = asyncio.get_running_loop()
