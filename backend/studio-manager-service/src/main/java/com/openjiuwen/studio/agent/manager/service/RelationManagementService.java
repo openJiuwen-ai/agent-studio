@@ -610,12 +610,34 @@ public class RelationManagementService implements IRelationManagementService {
             throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID, List.of(detail), detail);
         }
 
-        SchemaConfig inputSchema = JSON.parseObject(inputSchemaStr, SchemaConfig.class);
-        Set<String> requiredSet = new HashSet<>(inputSchema.getRequired());
+        SchemaConfig inputSchema;
+        try {
+            // input_schema 可能为 tool_id 数组包装格式或损坏 JSON，解析失败统一转成业务异常而非裸 500（issue #1758）
+            inputSchema = JSON.parseObject(inputSchemaStr, SchemaConfig.class);
+        } catch (Exception e) {
+            String detail = "input_schema is invalid; cannot build resource parameter.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID, List.of(detail), detail);
+        }
+        if (inputSchema == null) {
+            String detail = "input_schema is null; cannot build resource parameter.";
+            throw new AgentStudioException(StudioError.TOOL_INPUT_SCHEMA_INVALID, List.of(detail), detail);
+        }
+        // required/properties 为 JSON Schema 可选节点：缺省（如 {"type":"object"}）时按空集合处理，
+        // 避免 new HashSet<>(null) / keySet() NPE（issue #1758）
+        Set<String> requiredSet = inputSchema.getRequired() == null
+                ? Collections.emptySet()
+                : new HashSet<>(inputSchema.getRequired());
+        Map<String, SchemaConfig> schemaProperties = inputSchema.getProperties() == null
+                ? Collections.emptyMap()
+                : inputSchema.getProperties();
 
         List<ResourceParam> toolParams = new ArrayList<>();
-        for (String paramName : inputSchema.getProperties().keySet()) {
-            SchemaConfig property = inputSchema.getProperties().get(paramName);
+        for (String paramName : schemaProperties.keySet()) {
+            SchemaConfig property = schemaProperties.get(paramName);
+            // 属性值为 null（如 {"properties":{"a":null}}）：跳过，避免解析时 NPE（issue #1758）
+            if (property == null) {
+                continue;
+            }
             ResourceParam resourceParam = ResourceParam.builder()
                 .name(paramName)
                 .type(property.getType())
@@ -639,7 +661,8 @@ public class RelationManagementService implements IRelationManagementService {
             if (property.getItems() != null && "array".equals(property.getType())) {
                 Map<String, Object> schema = new HashMap<>();
                 schema.put("type", property.getItems().getType());
-                // <Array<Object>类型
+                // <Array<Object>类型：items 的 object 节点按 JSON Schema 规范 properties 为可选字段，
+                // 缺省（如 {"type":"object"}）时 parseNestedProperties 返回空列表，输出空 schema 列表（issue #1758）
                 if ("object".equals(property.getItems().getType())) {
                     List<Map<String, Object>> schemaList = parseNestedProperties(property.getItems().getProperties());
                     schema.put("schema", schemaList);
@@ -652,7 +675,7 @@ public class RelationManagementService implements IRelationManagementService {
         // 绑定关系由前端参数配置保存进 mapping extends——与 MCP
         // parseMcpInput2ResourceParameter 的追加语义一致）
         IrAdapterService.appendDynamicAuthParamsToResourceParam(
-                resolveDynamicAuthByResource(resourceId), toolParams, inputSchema.getProperties().keySet());
+                resolveDynamicAuthByResource(resourceId), toolParams, schemaProperties.keySet());
         return JSON.toJSONString(toolParams);
     }
 
@@ -676,9 +699,17 @@ public class RelationManagementService implements IRelationManagementService {
      */
     public List<Map<String, Object>> parseNestedProperties(Map<String, SchemaConfig> properties) {
         List<Map<String, Object>> result = new ArrayList<>();
+        // properties 为 JSON Schema 可选节点：null 时返回空列表，避免 entrySet() NPE（issue #1758）
+        if (properties == null) {
+            return result;
+        }
         for (Map.Entry<String, SchemaConfig> entry : properties.entrySet()) {
             String paramName = entry.getKey();
             SchemaConfig property = entry.getValue();
+            // 属性值为 null（如 "properties":{"a":null}）：跳过，避免解析时 NPE（issue #1758）
+            if (property == null) {
+                continue;
+            }
             Map<String, Object> parsedObject = new HashMap<>();
             parsedObject.put("description", property.getDescription());
             parsedObject.put("name", paramName);
@@ -692,7 +723,8 @@ public class RelationManagementService implements IRelationManagementService {
             if (property.getItems() != null && "array".equals(property.getType())) {
                 Map<String, Object> schema = new HashMap<>();
                 schema.put("type", property.getItems().getType());
-                // Array<Object>类型
+                // Array<Object>类型：items 的 object 节点按 JSON Schema 规范 properties 为可选字段，
+                // 缺省（如 {"type":"object"}）时 parseNestedProperties 返回空列表，输出空 schema 列表（issue #1758）
                 if ("object".equals(property.getItems().getType())) {
                     List<Map<String, Object>> schemaList = parseNestedProperties(property.getItems().getProperties());
                     schema.put("schema", schemaList);
