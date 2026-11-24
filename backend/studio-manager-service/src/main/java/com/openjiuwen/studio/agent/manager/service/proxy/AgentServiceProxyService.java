@@ -712,7 +712,7 @@ public class AgentServiceProxyService {
     }
 
     public Object runWebAgent(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
-        Boolean stream, AgentRunReq body) {
+        String conversationId, Boolean stream, AgentRunReq body) {
         // 网页短链入口无鉴权：路径 project_id 与请求 workspace_id 均不可信
         // - 默认环境按 short_code 所属发布通道的 project 解析，与 runtime 侧按 Redis
         //   release_web_rel_{short_code} 中的 project_id 构造执行上下文的做法一致
@@ -729,6 +729,9 @@ public class AgentServiceProxyService {
         }
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
+            if (StringUtils.hasText(conversationId)) {
+                url = url + "&conversation_id=" + conversationId;
+            }
             if (StringUtils.hasText(environmentId)) {
                 url = url + "&environment_id=" + environmentId;
             }
@@ -737,7 +740,7 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
+            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId, conversationId,
                 body).getBody();
         }
     }
