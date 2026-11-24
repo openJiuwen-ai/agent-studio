@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import org.springframework.validation.annotation.Validated;
@@ -33,8 +34,11 @@ public class McpServerShelfReq implements Serializable {
     private String serviceId = null;
 
     @JsonProperty("category")
-    @Schema(description = "行业分类ID，关联 t_pe_industry.id", example = "uuid")
-    @Size(max = 36)
+    @Schema(description = "行业分类ID，关联 t_pe_industry.id 的 UUID", example = "uuid")
+    @Size(max = 36, message = "category length must not exceed 36")
+    // 空串/纯空白=缺省沿用既有目录值（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        message = "category must be a valid UUID")
     private String category = null;
 
     @JsonProperty("readme")

@@ -11,7 +11,7 @@
         >
           <nz-option
             *ngFor="let opt of options"
-            [nzLabel]="opt.i18key | i18nextEager"
+            [nzLabel]="opt.name"
             [nzValue]="opt.id"
           ></nz-option>
         </nz-select>

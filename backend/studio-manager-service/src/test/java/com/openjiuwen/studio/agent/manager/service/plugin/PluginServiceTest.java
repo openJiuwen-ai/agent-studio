@@ -52,6 +52,7 @@ import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.AgentCommonService;
 import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
+import com.openjiuwen.studio.agent.manager.service.AssetCategoryValidator;
 import com.openjiuwen.studio.agent.manager.service.ToolManagementService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginAdapterImpl;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
@@ -122,11 +123,15 @@ class PluginServiceTest {
     @Mock
     private AssetShelfPermissionValidator shelfPermissionValidator;
 
+    @Mock
+    private AssetCategoryValidator assetCategoryValidator;
+
     @InjectMocks
     private PluginService pluginService;
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(pluginService, "assetCategoryValidator", assetCategoryValidator);
         ReflectionTestUtils.setField(pluginService, "opSvcProjectId", "op-project-id");
         ReflectionTestUtils.setField(pluginService, "toolNameBlackList", "blacklisted");
         ReflectionTestUtils.setField(pluginService, "defaultIcon", "default-icon");
@@ -1408,5 +1413,40 @@ class PluginServiceTest {
 
         assertEquals(200, resp.getCode());
         verify(shareScopeMapper, never()).selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString());
+    }
+
+    /**
+     * #1731：publishPlugin 校验 category 存在性——不存在于 t_pe_industry(library_type='plugin')时
+     * 抛 INDUSTRY_ID_NOT_EXIST，fail-closed 不写 category 不写 platform_published，无半成品。
+     * 覆盖 consistency-check 同类入口点：plugin 上架链路也接入了 AssetCategoryValidator。
+     */
+    @Test
+    void testPublishPlugin_NonExistCategory_Rejected() {
+        String pluginId = "p-shelf-001";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+        String nonExistCategory = "bbbb2222-3333-4444-5555-666677778888";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            PluginEntity plugin = new PluginEntity();
+            plugin.setPluginId(pluginId);
+            plugin.setType(ToolType.CUSTOM.type);
+            plugin.setPublished(1); // 已发布，过上架门槛
+            plugin.setCategory("a1020001-0000-4000-8000-000000000001"); // 既有合法分类
+            when(pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId)).thenReturn(plugin);
+            ReleaseVersion latest = new ReleaseVersion();
+            latest.setVersionId("v-1");
+            when(releaseVersionMapper.selectByAppIdWithLimit(pluginId, 1)).thenReturn(List.of(latest));
+            // category 校验失败：抛 INDUSTRY_ID_NOT_EXIST
+            doThrow(new AgentStudioException(StudioError.INDUSTRY_ID_NOT_EXIST, nonExistCategory))
+                .when(assetCategoryValidator).validateCategoryExists(eq(nonExistCategory),
+                eq(AssetCategoryValidator.LIBRARY_TYPE_PLUGIN));
+            PluginShelfReq body = new PluginShelfReq().setCategory(nonExistCategory);
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                pluginService.publishPlugin(projectId, workspaceId, pluginId, body));
+            assertEquals(StudioError.INDUSTRY_ID_NOT_EXIST, ex.getErrorCode());
+            verify(pluginMapper, never()).updateCategoryById(anyString(), anyString(), anyString());
+            verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+        }
     }
 }
