@@ -36,7 +36,8 @@ public class McpServerShelfReq implements Serializable {
     @JsonProperty("category")
     @Schema(description = "行业分类ID，关联 t_pe_industry.id 的 UUID", example = "uuid")
     @Size(max = 36, message = "category length must not exceed 36")
-    @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    // 空串/纯空白=缺省沿用既有目录值（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
         message = "category must be a valid UUID")
     private String category = null;
 

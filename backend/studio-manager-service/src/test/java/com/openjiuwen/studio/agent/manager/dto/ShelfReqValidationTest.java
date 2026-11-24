@@ -53,6 +53,40 @@ class ShelfReqValidationTest {
         assertTrue(violations.isEmpty(), "合法 36 位 UUID 应通过校验，违规: " + violations);
     }
 
+    /** 巡检1：空串/纯空白=缺省沿用既有分类，DTO 须放行（与 Service 层 isBlank 口径一致），不被 @Pattern 拒 400 */
+    @Test
+    void skillShelfReq_BlankTagId_Pass() {
+        // null（前端不传字段）—— jakarta @Pattern 对 null 不校验，放行
+        assertTrue(validator.validate(new SkillShelfReq().setTagId(null)).isEmpty());
+        // 空串（API 直接调用方传 {"tag_id":""}）
+        assertTrue(validator.validate(new SkillShelfReq().setTagId("")).isEmpty(),
+            "空串=缺省应放行，不应被 @Pattern 拒");
+        // 纯空白串（{"tag_id":"   "}，Service 层 isBlank 也判缺省）
+        assertTrue(validator.validate(new SkillShelfReq().setTagId("   ")).isEmpty(),
+            "纯空白=缺省应放行，与 Service 层 isBlank 口径一致");
+    }
+
+    /** 巡检1：Plugin category 空串/纯空白同样放行，保持可选字段传空即保持既有分类语义 */
+    @Test
+    void pluginShelfReq_BlankCategory_Pass() {
+        assertTrue(validator.validate(new PluginShelfReq().setCategory(null)).isEmpty());
+        assertTrue(validator.validate(new PluginShelfReq().setCategory("")).isEmpty(),
+            "空串=缺省应放行");
+        assertTrue(validator.validate(new PluginShelfReq().setCategory("  ")).isEmpty(),
+            "纯空白=缺省应放行");
+    }
+
+    /** 巡检1：MCP category 空串/纯空白同样放行 */
+    @Test
+    void mcpServerShelfReq_BlankCategory_Pass() {
+        McpServerShelfReq req = new McpServerShelfReq().setServiceId("svc-001");
+        assertTrue(validator.validate(new McpServerShelfReq().setServiceId("svc-001").setCategory(null)).isEmpty());
+        assertTrue(validator.validate(new McpServerShelfReq().setServiceId("svc-001").setCategory("")).isEmpty(),
+            "空串=缺省应放行");
+        assertTrue(validator.validate(new McpServerShelfReq().setServiceId("svc-001").setCategory("\t")).isEmpty(),
+            "纯空白=缺省应放行");
+    }
+
     /** C 点：硬编码非法 ID（含 s/t/x 等非十六进制字符）被 @Pattern 拦 */
     @Test
     void skillShelfReq_InvalidUuidFormat_Rejected() {

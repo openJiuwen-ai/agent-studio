@@ -34,7 +34,8 @@ public class PluginShelfReq implements Serializable {
     @Schema(description = "行业分类ID（关联 t_pe_industry.id 的 UUID，用于广场展示行业标签；缺省保持插件既有分类）",
         example = "uuid")
     @Size(max = 36, message = "category length must not exceed 36")
-    @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    // 空串/纯空白=缺省保持既有分类（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
         message = "category must be a valid UUID")
     private String category = null;
 

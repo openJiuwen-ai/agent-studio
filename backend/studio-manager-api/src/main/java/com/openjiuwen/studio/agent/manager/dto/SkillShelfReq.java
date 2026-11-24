@@ -28,7 +28,8 @@ public class SkillShelfReq implements Serializable {
     @Schema(description = "Skill 分类标签ID（关联 t_pe_industry.id 的 UUID，用于广场分类展示；缺省沿用 Skill 既有 tag_id）",
         example = "uuid")
     @Size(max = 36, message = "tag_id length must not exceed 36")
-    @Pattern(regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+    // 空串/纯空白=缺省沿用既有分类（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
         message = "tag_id must be a valid UUID")
     private String tagId = null;
 
