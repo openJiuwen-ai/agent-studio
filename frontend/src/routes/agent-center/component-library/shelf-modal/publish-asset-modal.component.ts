@@ -12,6 +12,7 @@ import { MessageComponent } from '@shared/services/cfdata.service';
 import { I18N_NAMESPACE } from '@agentcore/constants/common';
 import { i18nProviderValue } from '@agentcore/core/i18n.service';
 import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
+import { CommonUtils } from 'src/utils/common.util';
 
 export type PublishAssetType = 'skill' | 'plugin' | 'mcp';
 
@@ -74,7 +75,10 @@ export class PublishAssetModalComponent implements OnInit {
       this.promptService
         ?.getAssertTagAsync({ library_type: 'skill' })
         .then((res: AssertSquareTagType[]) => {
-          this.skillTags = (res || []).map(tag => ({ id: tag.id, name: tag.name }));
+          this.skillTags = (res || []).map(tag => ({
+            id: tag.id,
+            name: this.isZH() ? tag.name : (tag.name_en || tag.name),
+          }));
         })
         .catch(() => {});
     }
@@ -142,6 +146,11 @@ export class PublishAssetModalComponent implements OnInit {
     if (this.assetType === 'skill') return asset.skill_name || asset.name || '';
     if (this.assetType === 'plugin') return asset.plugin_chinese_name || asset.plugin_display_name || '';
     return asset.name || asset.name_en || '';
+  }
+
+  /** 按当前语言取分类名（#1731 巡检2：对齐 plugin-market:320 isZH 口径） */
+  isZH(): boolean {
+    return CommonUtils.getLanguage() === 'zh-cn';
   }
 
   getAssetId(asset: any): string {

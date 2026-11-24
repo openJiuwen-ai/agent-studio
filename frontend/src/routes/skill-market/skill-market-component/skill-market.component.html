@@ -38,8 +38,8 @@
           <div class="ml-[16px]">
             <div class="label mb-[4px]">{{ card.skillName }}</div>
             <div class="flex gap-[4px]">
-              @if (card.tagId && skillTagMap[card.tagId]?.name) {
-                <nz-tag>{{ skillTagMap[card.tagId].name }}</nz-tag>
+              @if (card.tagId && tagNameById(card.tagId)) {
+                <nz-tag>{{ tagNameById(card.tagId) }}</nz-tag>
               }
               @if (card.plazaSource === 'USER') {
                 <nz-tag style="background-color: #e6f7ff; color: #1890ff; border-color: #91d5ff">

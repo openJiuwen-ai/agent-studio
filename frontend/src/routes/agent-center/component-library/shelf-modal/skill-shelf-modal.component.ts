@@ -6,6 +6,7 @@ import { I18N_NAMESPACE } from '@agentcore/constants/common';
 import { i18nProviderValue } from '@agentcore/core/i18n.service';
 import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
 import { PromptService } from '@services/prompt.service';
+import { CommonUtils } from 'src/utils/common.util';
 
 /**
  * Skill 上架到资产广场的分类选择表单（FR-06，资源分类 tag 体系）。
@@ -41,9 +42,17 @@ export class SkillShelfModalComponent implements OnInit {
     this.promptService
       ?.getAssertTagAsync({ library_type: 'skill' })
       .then((res: AssertSquareTagType[]) => {
-        this.options = (res || []).map(tag => ({ id: tag.id, name: tag.name }));
+        this.options = (res || []).map(tag => ({
+          id: tag.id,
+          name: this.isZH() ? tag.name : (tag.name_en || tag.name),
+        }));
       })
       .catch(() => {});
+  }
+
+  /** 按当前语言取分类名（#1731 巡检2：对齐 plugin-market:320 isZH 口径） */
+  isZH(): boolean {
+    return CommonUtils.getLanguage() === 'zh-cn';
   }
 
   onCancel(): void {

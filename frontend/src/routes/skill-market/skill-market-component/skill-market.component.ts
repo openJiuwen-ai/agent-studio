@@ -25,6 +25,7 @@ import { SpaceTeamManagementService } from '@services/space-team-management.serv
 import { ContextService } from '@services/context.service';
 import { PromptService } from '@services/prompt.service';
 import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
+import { CommonUtils } from 'src/utils/common.util';
 
 @Component({
   selector: 'skill-market',
@@ -193,11 +194,31 @@ export class SkillMarketComponent {
       ?.getAssertTagAsync({ library_type: 'skill' })
       .then((res: AssertSquareTagType[]) => {
         (res || []).forEach(tag => {
-          this.tabs.push({ id: tag.id, title: tag.name });
+          this.tabs.push({ id: tag.id, title: this.tagName(tag) });
           this.skillTagMap[tag.id] = tag;
         });
       })
       .catch(() => {});
+  }
+
+  /** 按当前语言取分类名（#1731 巡检2：对齐 plugin-market:320 isZH 口径，name_en 缺失兜底 name） */
+  private tagName(tag: AssertSquareTagType | undefined): string {
+    if (!tag) {
+      return '';
+    }
+    return this.isZH() ? tag.name : (tag.name_en || tag.name);
+  }
+
+  /** 卡片 tagId → 分类名（skillTagMap 存对象，按语言取 name/name_en） */
+  tagNameById(tagId: string | undefined): string {
+    if (!tagId) {
+      return '';
+    }
+    return this.tagName(this.skillTagMap[tagId]);
+  }
+
+  isZH(): boolean {
+    return CommonUtils.getLanguage() === 'zh-cn';
   }
 
   async checkPublishPermission() {
