@@ -68,7 +68,8 @@ class _EndlessScanClient:
         self._batch_size = batch_size
         self.pipeline_calls = 0
 
-    def scan_iter(self, match=None):
+    @staticmethod
+    def scan_iter(match=None):
         key = b"k"
         while True:
             yield key
@@ -78,11 +79,16 @@ class _EndlessScanClient:
         return _StubPipeline(self._batch_size)
 
 
-def test_over_limit_branch_logs_pattern_and_stops(redis_client_cls, caplog):
+def test_over_limit_branch_logs_pattern_and_stops(redis_client_cls, monkeypatch, caplog):
     """超限分支：不抛 NameError、日志带 pattern 值、循环在 101 批终止。"""
     rc = redis_client_cls()
     stub = _EndlessScanClient(batch_size=1000)
-    rc._get_client = lambda: stub
+
+    def _fake_get_client():
+        return stub
+
+    # 按名替换受保护成员（G.CLS.11：不在类外直接访问；monkeypatch 自动还原）
+    monkeypatch.setattr(rc, "_get_client", _fake_get_client)
 
     logger_name = "agent_runtime.memory_server.utils.redis_util"
     with caplog.at_level(logging.WARNING, logger=logger_name):
