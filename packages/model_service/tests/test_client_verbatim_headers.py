@@ -2,13 +2,39 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Unit tests for customer header rename in verbatim headers (enabled config)."""
 
-from model_service.client import _build_verbatim_headers
+from model_service.client import (
+    _build_verbatim_headers,
+    _override_static_cust_userid,
+)
 
 
 class _Conn:
     def __init__(self, api_key="k", custom_headers=None):
         self.api_key = api_key
         self.custom_headers = custom_headers
+
+
+class TestOverrideStaticCustUserid:
+    """#1728/#1761：静态 cust-userid 替换为请求用户。"""
+
+    @staticmethod
+    def test_override_replaces_cust_userid():
+        out = _override_static_cust_userid(
+            {"cust-userid": "static-1", "X-Other": "v"}, "login-42"
+        )
+        assert out["cust-userid"] == "login-42"
+        assert out["X-Other"] == "v"
+
+    @staticmethod
+    def test_override_case_insensitive_key():
+        out = _override_static_cust_userid({"Cust-UserId": "old"}, "u-9")
+        assert out["Cust-UserId"] == "u-9"
+
+    @staticmethod
+    def test_override_noop_without_user_or_headers():
+        assert _override_static_cust_userid({"cust-userid": "1"}, "") == {"cust-userid": "1"}
+        assert _override_static_cust_userid({}, "u") == {}
+        assert _override_static_cust_userid(None, "u") == {}
 
 
 class TestVerbatimHeadersRename:
@@ -64,3 +90,17 @@ class TestVerbatimHeadersRename:
         headers = _build_verbatim_headers(conn, {"extra_headers": {"Z": "1"}})
         assert headers["token"] == "t1"
         assert headers["Z"] == "1"
+
+    @staticmethod
+    def test_static_cust_userid_replaced_by_request_user(reset_common_utils_state, monkeypatch):
+        from common_utils import customer_header
+        import model_service.client as client_mod
+
+        customer_header.set_config(customer_header.CustomerHeaderConfig(
+            enabled=True, mappings={"cust-userid": "userId"},
+        ))
+        monkeypatch.setattr(client_mod, "_effective_request_user_id", lambda: "login-uid")
+        conn = _Conn(custom_headers={"cust-userid": "static-from-model", "X-Other": "v"})
+        headers = _build_verbatim_headers(conn, {})
+        assert headers["userId"] == "login-uid"
+        assert headers["X-Other"] == "v"

@@ -78,6 +78,7 @@ import com.openjiuwen.studio.agent.manager.service.WorkflowRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.observability.MdcScope;
 import com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService;
+import com.openjiuwen.studio.agent.manager.service.proxy.RuntimeUserIdPropagator;
 
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
@@ -192,6 +193,8 @@ public class AgentServiceProxyController {
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
         String conversationId, String version, String type, Boolean stream, ServiceRunAgentReq body,
         HttpHeaders httpHeaders, String environmentId) {
+        // 试运行：把登录用户统一认证号写入 cust-userid，替代模型配置静态值（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         // 默认环境兜底不在本共享方法做：该路由同时服务单智能体与多智能体（IR mode
         // 决定），且被百宝箱试用入口复用；environment_id 由各入口按需解析后传入
         if (stream == null || stream) {
@@ -346,6 +349,8 @@ public class AgentServiceProxyController {
         String conversationId, String version, Boolean stream, ServiceWorkflowRunReq body, HttpHeaders httpHeaders) {
         // 去掉x-user-profile,以防后续接口使用pdp5鉴权
         httpHeaders.remove(X_USER_PROFILE);
+        // 工作流试运行：动态登录用户写入 cust-userid + body.userId（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders, body::setUserId);
 
         if (stream == null || stream) {
             String url = "%s/v1/%s/workflows/%s/conversations/%s?workspace_id=%s";

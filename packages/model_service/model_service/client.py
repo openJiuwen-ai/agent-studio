@@ -123,6 +123,32 @@ def _build_verbatim_body(params: dict) -> dict:
     return body
 
 
+def _effective_request_user_id() -> str:
+    """当前请求有效用户 ID（登录统一认证号）。
+
+    试运行路径优先用请求上下文 user_id，覆盖模型鉴权里写死的 cust-userid
+    （GitHub #1728 / GitCode #1761）。无 agent_runtime 宿主时返回空。
+    """
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+        ctx = _request_ctx.get()
+        if ctx and getattr(ctx, "user_id", None):
+            return str(ctx.user_id)
+    except Exception:
+        return ""
+    return ""
+
+
+def _override_static_cust_userid(custom_headers: dict, user_id: str) -> dict:
+    """用请求用户替换模型配置中的静态 ``cust-userid``（大小写不敏感）。"""
+    if not custom_headers or not user_id:
+        return dict(custom_headers or {})
+    out = {}
+    for key, value in custom_headers.items():
+        out[key] = user_id if key.lower() == "cust-userid" else value
+    return out
+
+
 def _build_verbatim_headers(conn, params: dict) -> dict:
     """verbatim 分支鉴权头（对齐 agent_builder facade ``_auth_headers``）。
 
@@ -134,9 +160,13 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
     if conn.custom_headers:
         cfg = get_config()
         capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        # 无上游 captured 时：静态 cust-userid 换成当前登录用户
+        static_headers = _override_static_cust_userid(
+            conn.custom_headers, _effective_request_user_id()
+        )
         to_rename = {}
         to_pass = {}
-        for k, v in conn.custom_headers.items():
+        for k, v in static_headers.items():
             if k.lower() in capture_keys:
                 to_rename[k] = v
             else:
@@ -341,13 +371,16 @@ class StudioModelClient(OpenAIModelClient):
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
-            # 页面试运行（无上游 captured）：用模型配置静态值做 rename
-            # 非 capture 键（含 CUSTOM_APIKEY 鉴权头）一律透传；功能禁用（_cap 为空）时等价于
-            # 旧的全量透传 params["extra_headers"] = conn.custom_headers，保证向后兼容。
+            # 页面试运行（无上游 captured）：用模型配置静态值做 rename；
+            # 静态 cust-userid 替换为当前请求用户，支撑模型网关按用户统计
+            # （#1728/#1761）。非 capture 键一律透传；功能禁用时等价全量透传。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
+            static_headers = _override_static_cust_userid(
+                conn.custom_headers, _effective_request_user_id()
+            )
             to_rename = {}
             to_pass = {}
-            for k, v in conn.custom_headers.items():
+            for k, v in static_headers.items():
                 if k.lower() in _cap:
                     to_rename[k] = v
                 else:

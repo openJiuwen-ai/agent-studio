@@ -358,6 +358,8 @@ public class AgentServiceProxyService {
         String conversationId, String nodeId, WorkflowRunReq body, HttpHeaders httpHeaders) {
 
         checkWorkflowPermission(projectId, workspaceId, workflowId);
+        // 单节点试运行同样透传登录用户，保证调模型网关用户维度一致（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         String url = "%s/v1/%s/workflows/%s/conversations/%s/node_execute/%s?workspace_id=%s";
         url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, workflowId, conversationId, nodeId,
             workspaceId);
