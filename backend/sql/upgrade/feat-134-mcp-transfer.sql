@@ -6,11 +6,11 @@
 ALTER TABLE ws_mcp_service_def
     ADD COLUMN snapshot_revision BIGINT NOT NULL DEFAULT 0 COMMENT '快照与配置相关写入的并发修订号';
 ALTER TABLE ws_mcp_service_def
-    ADD COLUMN active_mcp_operation_id VARCHAR(64) DEFAULT NULL COMMENT '同服务活动操作声明（与ws_mcp_operation.id对应）';
+    ADD COLUMN active_mcp_operation_id VARCHAR(64) NULL COMMENT '同服务活动操作声明（与ws_mcp_operation.id对应）';
 ALTER TABLE ws_mcp_service_def
     ADD COLUMN import_config_pending TINYINT(1) NOT NULL DEFAULT 0 COMMENT '导入后待补配提示标记（不改鉴权scope）';
 ALTER TABLE ws_mcp_service_def
-    ADD COLUMN import_config_paths TEXT DEFAULT NULL COMMENT '待补配的JSON Pointer路径清单（仅路径不含值）';
+    ADD COLUMN import_config_paths TEXT NULL COMMENT '待补配的JSON Pointer路径清单（仅路径不含值）';
 
 -- 2. 操作主表
 CREATE TABLE IF NOT EXISTS ws_mcp_operation (

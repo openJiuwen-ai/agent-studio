@@ -2010,19 +2010,17 @@ CREATE TABLE ws_mcp_service_def
     third_id                  varchar(128)      null COMMENT '第三方资源ID',
     third_version_id          varchar(128)      null COMMENT '第三方资源版本ID',
     fail_reason               VARCHAR(500) DEFAULT NULL COMMENT '部署失败具体原因/错误信息',
-    is_share                  TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已共享（0=否，1=是)',
-    snapshot_revision         BIGINT NOT NULL DEFAULT 0 COMMENT 'FEAT-134快照与配置相关写入的并发修订号',
-    active_mcp_operation_id  VARCHAR(64) DEFAULT NULL COMMENT 'FEAT-134同服务活动操作声明',
-    import_config_pending     TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'FEAT-134导入后待补配提示标记',
-    import_config_paths       TEXT DEFAULT NULL COMMENT 'FEAT-134待补配的JSON Pointer路径清单'
+    is_share                  TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已共享（0=否，1=是)'
 );
 
--- FEAT-134: 存量库自动补列（与 ddl.sql:1002/1231 同款裸 ALTER 模式；
--- 重复执行时列已存在报错被容忍，首次执行时列被加上）
+-- FEAT-134 新列走 ALTER（CREATE TABLE 不内联，与 ddl.sql:1002/1231 同款既有模式）。
+-- MySQL 无 ADD COLUMN IF NOT EXISTS；重复执行时 Duplicate column 由
+-- application-manager.yml 的 spring.sql.init.continue-on-error: true 容忍（同文件
+-- 预存在的 4 处裸 ALTER 同理）。首次执行（新库或存量库）列被加上。
 ALTER TABLE ws_mcp_service_def ADD COLUMN snapshot_revision BIGINT NOT NULL DEFAULT 0 COMMENT 'FEAT-134快照修订号';
-ALTER TABLE ws_mcp_service_def ADD COLUMN active_mcp_operation_id VARCHAR(64) DEFAULT NULL COMMENT 'FEAT-134活动操作声明';
+ALTER TABLE ws_mcp_service_def ADD COLUMN active_mcp_operation_id VARCHAR(64) NULL COMMENT 'FEAT-134活动操作声明';
 ALTER TABLE ws_mcp_service_def ADD COLUMN import_config_pending TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'FEAT-134导入待补配标记';
-ALTER TABLE ws_mcp_service_def ADD COLUMN import_config_paths TEXT DEFAULT NULL COMMENT 'FEAT-134待补配路径';
+ALTER TABLE ws_mcp_service_def ADD COLUMN import_config_paths TEXT NULL COMMENT 'FEAT-134待补配路径';
 
 CREATE TABLE IF NOT EXISTS ws_mcp_operation
 (

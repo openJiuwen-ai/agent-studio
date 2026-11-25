@@ -1859,19 +1859,16 @@ CREATE TABLE ws_mcp_service_def
     third_id                  varchar(128)      null,
     third_version_id          varchar(128)      null,
     fail_reason               VARCHAR(500) DEFAULT NULL,
-    is_share                  SMALLINT NOT NULL DEFAULT 0,
-    snapshot_revision         BIGINT NOT NULL DEFAULT 0,
-    active_mcp_operation_id  VARCHAR(64) DEFAULT NULL,
-    import_config_pending     SMALLINT NOT NULL DEFAULT 0,
-    import_config_paths       TEXT DEFAULT NULL
+    is_share                  SMALLINT NOT NULL DEFAULT 0
 );
 
--- FEAT-134: 存量库自动补列（幂等，OpenGauss/PostgreSQL 原生支持）
--- 新库走上面的 CREATE TABLE 内联列；已有表走这里的 ADD COLUMN IF NOT EXISTS
+-- FEAT-134 新列统一走 ALTER IF NOT EXISTS（新库/存量库同路径，CREATE TABLE 不内联）
 ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS snapshot_revision BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS active_mcp_operation_id VARCHAR(64) DEFAULT NULL;
-ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_pending SMALLINT NOT NULL DEFAULT 0;
-ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_paths TEXT DEFAULT NULL;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS active_mcp_operation_id VARCHAR(64) NULL;
+-- import_config_pending 用 BOOLEAN（实体是 Boolean，MyBatis setBoolean/getBoolean 直通；
+-- PostgreSQL 无 SMALLINT↔BOOLEAN 隐式转换）
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_pending BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_paths TEXT NULL;
 
 CREATE TABLE IF NOT EXISTS ws_mcp_operation
 (
