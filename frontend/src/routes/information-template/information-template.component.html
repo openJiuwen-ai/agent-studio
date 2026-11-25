@@ -76,8 +76,8 @@
             <td [nzChecked]="checkedList.includes(row)" [nzDisabled]="row.disabled" (nzCheckedChange)="onItemChecked(row, $event)"></td>
             <td nzEllipsis>{{ row.name }}</td>
             <td nzEllipsis>{{ row.content | json }}</td>
-            <td nzEllipsis>{{ row.category }}</td>
-            <td nzEllipsis>{{ row.visibility }}</td>
+            <td nzEllipsis>{{ displayCategory(row.category) }}</td>
+            <td nzEllipsis>{{ displayVisibility(row.visibility) }}</td>
             <td>
               <button nz-button nzType="link" [disabled]="!subscribeBtnStatus" (click)="listAction({ key: 'edit' }, row)" style="padding: 0">
                 {{ 'edit' | i18nextEager }}
@@ -256,8 +256,8 @@
         </td>
         <td nzEllipsis>{{ row.name }}</td>
         <td nzEllipsis>{{ row.content | json }}</td>
-        <td nzEllipsis>{{ row.category }}</td>
-        <td nzEllipsis>{{ row.visibility }}</td>
+        <td nzEllipsis>{{ displayCategory(row.category) }}</td>
+        <td nzEllipsis>{{ displayVisibility(row.visibility) }}</td>
         <td nzEllipsis>{{ row.reason }}</td>
       </tr>
     </tbody>

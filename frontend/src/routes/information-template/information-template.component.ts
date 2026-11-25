@@ -228,6 +228,17 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
     return item.id;
   }
 
+  /** 列表展示：把后端分类业务值映射为当前语言的文案，不改变原始数据 */
+  displayCategory(category: string): string {
+    return category === this.exceptionCategory ? this.messageClassItems[0].text : category;
+  }
+
+  /** 列表展示：把后端可见范围值映射为当前语言的文案，不改变原始数据 */
+  displayVisibility(visibility: string): string {
+    const value = visibilityItemsMap.get(visibility) || visibility;
+    return this.visibilityItems.find(item => item.value === value)?.label || visibility;
+  }
+
   pageUpdate(event) {
     this.currentPage = event.currentPage;
     this.pageSize.size = event.size;
