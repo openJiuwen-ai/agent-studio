@@ -123,6 +123,7 @@ import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.IRUtils;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.McpJsonUtils;
+import com.openjiuwen.studio.agent.manager.utils.McpSchemaUtils;
 import com.openjiuwen.studio.agent.manager.utils.WorkflowUtils;
 import com.openjiuwen.studio.agent.manager.workflow.jiuwen.adapt.IRAdapter;
 import com.openjiuwen.studio.agent.manager.workflow.jiuwen.adapt.PrePluginAuthServiceConfig;
@@ -1468,11 +1469,11 @@ public class IrAdapterService {
         // 请求头解析适配到arguments
         List<Map<String, Object>> argumentsList = parseAgentMcpParams(serviceEntity, true);
         if (!Objects.isNull(serverTool)) {
-            SchemaConfig inputSchema = JSON.parseObject(serverTool.getInput(), SchemaConfig.class);
+            SchemaConfig inputSchema = McpSchemaUtils.parseWorkflowSchema(serverTool.getInput());
             argumentsList.addAll(parseWorkflowPluginParams(inputSchema, false));
             result.put(DESCRIPTION, serverTool.getDescription());
             result.put(CommonConstant.TOOL_NAME, serverTool.getName());
-            SchemaConfig outputSchema = JSON.parseObject(serverTool.getOutput(), SchemaConfig.class);
+            SchemaConfig outputSchema = McpSchemaUtils.parseWorkflowSchema(serverTool.getOutput());
             result.put(RESPONSE, parseWorkflowPluginParams(outputSchema, false));
         }
         // 用户参数（输入参数+请求头）加入arguments
