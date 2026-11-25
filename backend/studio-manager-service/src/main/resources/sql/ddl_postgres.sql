@@ -1859,7 +1859,56 @@ CREATE TABLE ws_mcp_service_def
     third_id                  varchar(128)      null,
     third_version_id          varchar(128)      null,
     fail_reason               VARCHAR(500) DEFAULT NULL,
-    is_share                  SMALLINT NOT NULL DEFAULT 0
+    is_share                  SMALLINT NOT NULL DEFAULT 0,
+    snapshot_revision         BIGINT NOT NULL DEFAULT 0,
+    active_mcp_operation_id  VARCHAR(64) DEFAULT NULL,
+    import_config_pending     SMALLINT NOT NULL DEFAULT 0,
+    import_config_paths       TEXT DEFAULT NULL
+);
+
+-- FEAT-134: 存量库自动补列（幂等，OpenGauss/PostgreSQL 原生支持）
+-- 新库走上面的 CREATE TABLE 内联列；已有表走这里的 ADD COLUMN IF NOT EXISTS
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS snapshot_revision BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS active_mcp_operation_id VARCHAR(64) DEFAULT NULL;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_pending SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_paths TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation
+(
+    id              VARCHAR(64) NOT NULL PRIMARY KEY,
+    operation_type  VARCHAR(16) NOT NULL,
+    tenant_id       VARCHAR(64) NOT NULL,
+    project_id      VARCHAR(64) NOT NULL,
+    workspace_id    VARCHAR(64) NOT NULL,
+    creator_id      VARCHAR(64) NOT NULL,
+    status          VARCHAR(32) NOT NULL,
+    total           INT NOT NULL DEFAULT 0,
+    created_count   INT NOT NULL DEFAULT 0,
+    success_count   INT NOT NULL DEFAULT 0,
+    failed_count    INT NOT NULL DEFAULT 0,
+    created_date    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    deadline_date   TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ws_mcp_operation_ws ON ws_mcp_operation (tenant_id, project_id, workspace_id, created_date);
+CREATE INDEX IF NOT EXISTS idx_ws_mcp_operation_deadline ON ws_mcp_operation (status, deadline_date);
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation_item
+(
+    operation_id    VARCHAR(64) NOT NULL,
+    item_index      INT NOT NULL,
+    service_id      VARCHAR(64) NULL,
+    original_name   VARCHAR(64) NULL,
+    actual_name     VARCHAR(64) NULL,
+    status          VARCHAR(32) NOT NULL,
+    refresh_status  VARCHAR(32) NULL,
+    source_snapshot TEXT NULL,
+    result_json     TEXT NULL,
+    error_code      VARCHAR(64) NULL,
+    safe_reason     VARCHAR(512) NULL,
+    started_date    TIMESTAMP NULL DEFAULT NULL,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (operation_id, item_index)
 );
 
 CREATE TABLE ws_mcp_server_rating
