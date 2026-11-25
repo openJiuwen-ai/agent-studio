@@ -126,8 +126,8 @@ def _build_verbatim_body(params: dict) -> dict:
 def _effective_request_user_id() -> str:
     """当前请求有效用户 ID（登录统一认证号）。
 
-    试运行路径优先用请求上下文 user_id，覆盖模型鉴权里写死的 cust-userid
-    （GitHub #1728 / GitCode #1761）。无 agent_runtime 宿主时返回空。
+    仅作画布试运行兜底；正式发布不得单凭此值覆盖模型鉴权静态
+    ``cust-userid``（GitHub #1728 / GitCode #1761）。无 agent_runtime 宿主时返回空。
     """
     try:
         from agent_runtime.context.request_context import _request_ctx
@@ -139,8 +139,61 @@ def _effective_request_user_id() -> str:
     return ""
 
 
+def _inbound_cust_userid() -> str:
+    """上游（Manager 试运行）已显式传入的 ``cust-userid``。"""
+    try:
+        from model_service import ports as _ports
+        captured = _ports.get_request_customer_headers() or {}
+    except Exception:
+        return ""
+    for key, value in captured.items():
+        if key and key.lower() == "cust-userid" and value:
+            return str(value)
+    return ""
+
+
+def _is_studio_trial_invoke() -> bool:
+    """是否画布试运行/调试（``X-Invoke-Mode=debug``，大小写不敏感）。
+
+    正式 ``PUBLISHED`` 等模式返回 False，避免改写生产网关统计口径。
+    """
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+        ctx = _request_ctx.get()
+        if not ctx:
+            return False
+        platform = getattr(ctx, "platform_headers", None) or {}
+        mode = (
+            platform.get("X-Invoke-Mode")
+            or platform.get("x-invoke-mode")
+            or ""
+        )
+        return str(mode).lower() == "debug"
+    except Exception:
+        return False
+
+
+def _cust_userid_for_static_override() -> str:
+    """决定是否、以及用何值覆盖模型配置中的静态 ``cust-userid``。
+
+    优先级（对齐 #1728/#1761 仅试运行范围）：
+    1. 上游已传 ``cust-userid``（Manager 试运行显式注入）→ 用之；
+    2. 画布 debug 试运行且无入站值 → 用登录 ``user_id`` 兜底；
+    3. 正式发布等其它路径 → 空串，保留模型鉴权静态值。
+    """
+    inbound = _inbound_cust_userid()
+    if inbound:
+        return inbound
+    if _is_studio_trial_invoke():
+        return _effective_request_user_id()
+    return ""
+
+
 def _override_static_cust_userid(custom_headers: dict, user_id: str) -> dict:
-    """用请求用户替换模型配置中的静态 ``cust-userid``（大小写不敏感）。"""
+    """用给定用户替换模型配置中的静态 ``cust-userid``（大小写不敏感）。
+
+    ``user_id`` 为空时不覆盖（正式运行保留静态配置）。
+    """
     if not custom_headers or not user_id:
         return dict(custom_headers or {})
     out = {}
@@ -160,9 +213,9 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
     if conn.custom_headers:
         cfg = get_config()
         capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
-        # 无上游 captured 时：静态 cust-userid 换成当前登录用户
+        # 仅试运行/入站 cust-userid 覆盖静态值；正式发布保留模型配置
         static_headers = _override_static_cust_userid(
-            conn.custom_headers, _effective_request_user_id()
+            conn.custom_headers, _cust_userid_for_static_override()
         )
         to_rename = {}
         to_pass = {}
@@ -371,12 +424,12 @@ class StudioModelClient(OpenAIModelClient):
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
-            # 页面试运行（无上游 captured）：用模型配置静态值做 rename；
-            # 静态 cust-userid 替换为当前请求用户，支撑模型网关按用户统计
-            # （#1728/#1761）。非 capture 键一律透传；功能禁用时等价全量透传。
+            # 无 rename 投影时用模型配置静态值；仅在入站已有 cust-userid
+            # 或画布 debug 试运行时覆盖静态 cust-userid（#1728/#1761），
+            # 正式发布保留鉴权口径。非 capture 键一律透传。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
             static_headers = _override_static_cust_userid(
-                conn.custom_headers, _effective_request_user_id()
+                conn.custom_headers, _cust_userid_for_static_override()
             )
             to_rename = {}
             to_pass = {}
