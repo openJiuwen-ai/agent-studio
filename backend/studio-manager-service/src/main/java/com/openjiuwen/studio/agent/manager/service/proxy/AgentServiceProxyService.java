@@ -1355,8 +1355,8 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
-        // 网页短链试运行同样透传登录用户（#1728/#1761）
-        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
+        // 网页短链无鉴权：不强制注入登录 cust-userid（#1728/#1761 仅画布试运行）。
+        // 匿名访问无 IAM 上下文；若有登录态，下面 Feign 用 safe 取值可选透传。
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
                 + "?workspace_id=" + forwardWorkspaceId;
@@ -1455,8 +1455,8 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
-        // 网页短链试运行同样透传登录用户（#1728/#1761）
-        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
+        // 网页短链无鉴权：流式不写登录 cust-userid，避免匿名无 IAM 时 500
+        // （#1728/#1761 仅画布试运行）。非流式 Feign 用 safe 取值，无上下文则省略。
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {

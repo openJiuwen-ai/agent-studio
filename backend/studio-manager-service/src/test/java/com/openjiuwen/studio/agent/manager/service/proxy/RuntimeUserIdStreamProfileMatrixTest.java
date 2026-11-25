@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
 import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
+import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
@@ -44,6 +45,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -124,6 +126,9 @@ class RuntimeUserIdStreamProfileMatrixTest {
         boolean customerHeaderEnabled) {
         try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class);
              MockedStatic<SpringBeanUtils> spring = org.mockito.Mockito.mockStatic(SpringBeanUtils.class)) {
+            SimpleUser loginUser = new SimpleUser();
+            loginUser.setUserId(LOGIN_UID);
+            mocked.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.of(loginUser));
             mocked.when(RequestContextUtils::getRequestUserId).thenReturn(LOGIN_UID);
             mocked.when(RequestContextUtils::getRequestAuthToken).thenReturn(LOGIN_UID + "|0");
             // propagator 不再读写 ThreadLocal；即使 profile 开着也不依赖

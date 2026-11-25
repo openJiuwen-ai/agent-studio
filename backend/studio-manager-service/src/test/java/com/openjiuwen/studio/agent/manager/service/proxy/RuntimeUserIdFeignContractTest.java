@@ -4,6 +4,7 @@
 
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
+import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.ServiceWorkflowRunReq;
@@ -25,6 +26,7 @@ import org.springframework.http.ResponseEntity;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -55,7 +57,9 @@ class RuntimeUserIdFeignContractTest {
             .thenReturn(ResponseEntity.ok().build());
 
         try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class)) {
-            mocked.when(RequestContextUtils::getRequestUserId).thenReturn("login-feign-uid");
+            SimpleUser user = new SimpleUser();
+            user.setUserId("login-feign-uid");
+            mocked.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.of(user));
             mocked.when(RequestContextUtils::getRequestAuthToken).thenReturn("login-feign-uid|0");
 
             HttpHeaders headers = new HttpHeaders();
@@ -83,7 +87,9 @@ class RuntimeUserIdFeignContractTest {
             any(), any(), any())).thenReturn(ResponseEntity.ok().build());
 
         try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class)) {
-            mocked.when(RequestContextUtils::getRequestUserId).thenReturn("agent-uid");
+            SimpleUser user = new SimpleUser();
+            user.setUserId("agent-uid");
+            mocked.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.of(user));
             mocked.when(RequestContextUtils::getRequestAuthToken).thenReturn("agent-uid|0");
 
             runtimeClient.runAgentWithConversation(
