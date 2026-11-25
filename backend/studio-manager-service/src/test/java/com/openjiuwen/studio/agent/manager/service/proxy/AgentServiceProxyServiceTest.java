@@ -842,7 +842,8 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-owner"), eq(false),
+                eq("env-default"), eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -864,7 +865,8 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-1"), eq(false), isNull(),
+                eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -1065,7 +1067,8 @@ class AgentServiceProxyServiceTest {
 
             WorkflowRunReq body = new WorkflowRunReq();
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebWorkflow("token", "code-1", "conv-1", "ws-owner", "env-default", body, false))
+            when(runtimeClient.runWebWorkflow(eq("token"), any(), eq("code-1"), eq("conv-1"), eq("ws-owner"),
+                eq("env-default"), eq(body), eq(false)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", false,

@@ -631,6 +631,8 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链试运行同样透传登录用户（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
                 + "?workspace_id=" + forwardWorkspaceId;
@@ -642,8 +644,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId,
-                environmentId, body, false).getBody();
+            return runtimeClient.runWebWorkflow(getToken(), RuntimeUserIdPropagator.custUserIdHeaderValue(), shortCode,
+                conversationId, forwardWorkspaceId, environmentId, body, false).getBody();
         }
     }
 
@@ -729,6 +731,8 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链试运行同样透传登录用户（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {
@@ -739,8 +743,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
-                body).getBody();
+            return runtimeClient.runWebAgent(getToken(), RuntimeUserIdPropagator.custUserIdHeaderValue(), shortCode,
+                forwardWorkspaceId, false, environmentId, body).getBody();
         }
     }
 
