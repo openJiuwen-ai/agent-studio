@@ -148,7 +148,7 @@ def _load_customer_header_profile() -> None:
 
 
 def _register_customer_header_provider() -> None:
-    """注册 customer Header provider 到 model_service ports"""
+    """注册 customer Header / 试运行用户与 invoke-mode 到 model_service ports。"""
     from model_service import ports
     from agent_runtime.context.request_context import _request_ctx
 
@@ -156,7 +156,20 @@ def _register_customer_header_provider() -> None:
         ctx = _request_ctx.get()
         return ctx.customer_headers if ctx else {}
 
+    def _get_request_user_id():
+        ctx = _request_ctx.get()
+        return (ctx.user_id if ctx else "") or ""
+
+    def _get_invoke_mode():
+        ctx = _request_ctx.get()
+        if not ctx:
+            return ""
+        platform = getattr(ctx, "platform_headers", None) or {}
+        return platform.get("X-Invoke-Mode") or platform.get("x-invoke-mode") or ""
+
     ports.set_request_customer_headers(_get_customer_headers)
+    ports.set_request_user_id(_get_request_user_id)
+    ports.set_invoke_mode(_get_invoke_mode)
 
 
 def _build_log_config(

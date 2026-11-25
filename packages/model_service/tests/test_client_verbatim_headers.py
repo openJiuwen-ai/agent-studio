@@ -39,24 +39,40 @@ class TestOverrideStaticCustUserid:
 
 
 class TestCustUseridForStaticOverride:
-    """覆盖范围：入站 cust-userid 或 debug 试运行；正式发布不覆盖。"""
+    """仅 debug + 登录 user_id；入站伪造 header 永不覆盖。"""
 
     @staticmethod
-    def test_prefers_inbound_cust_userid(monkeypatch, reset_model_service_ports):
+    def test_published_with_forged_inbound_does_not_override(
+        monkeypatch, reset_model_service_ports
+    ):
         from model_service import ports
-        ports.set_request_customer_headers(lambda: {"cust-userid": "from-manager"})
+        ports.set_request_customer_headers(lambda: {"cust-userid": "forged-client"})
+        ports.set_invoke_mode(lambda: "PUBLISHED")
+        ports.set_request_user_id(lambda: "login-uid")
         monkeypatch.setattr(
-            "model_service.client._is_studio_trial_invoke", lambda: False
+            "model_service.client._is_studio_trial_invoke",
+            lambda: False,
+        )
+        assert _cust_userid_for_static_override() == ""
+
+    @staticmethod
+    def test_trial_uses_login_user_not_inbound(
+        monkeypatch, reset_model_service_ports
+    ):
+        from model_service import ports
+        ports.set_request_customer_headers(lambda: {"cust-userid": "forged-or-stale"})
+        ports.set_invoke_mode(lambda: "debug")
+        ports.set_request_user_id(lambda: "login-uid")
+        monkeypatch.setattr(
+            "model_service.client._is_studio_trial_invoke", lambda: True
         )
         monkeypatch.setattr(
             "model_service.client._effective_request_user_id", lambda: "login-uid"
         )
-        assert _cust_userid_for_static_override() == "from-manager"
+        assert _cust_userid_for_static_override() == "login-uid"
 
     @staticmethod
     def test_trial_debug_falls_back_to_login_user(monkeypatch, reset_model_service_ports):
-        from model_service import ports
-        ports.set_request_customer_headers(lambda: {})
         monkeypatch.setattr(
             "model_service.client._is_studio_trial_invoke", lambda: True
         )
@@ -67,14 +83,21 @@ class TestCustUseridForStaticOverride:
 
     @staticmethod
     def test_published_keeps_static_without_inbound(monkeypatch, reset_model_service_ports):
-        from model_service import ports
-        ports.set_request_customer_headers(lambda: {})
         monkeypatch.setattr(
             "model_service.client._is_studio_trial_invoke", lambda: False
         )
         monkeypatch.setattr(
             "model_service.client._effective_request_user_id", lambda: "login-uid"
         )
+        assert _cust_userid_for_static_override() == ""
+
+    @staticmethod
+    def test_ports_drive_trial_and_user_id(reset_model_service_ports):
+        from model_service import ports
+        ports.set_invoke_mode(lambda: "debug")
+        ports.set_request_user_id(lambda: "uid-from-port")
+        assert _cust_userid_for_static_override() == "uid-from-port"
+        ports.set_invoke_mode(lambda: "PUBLISHED")
         assert _cust_userid_for_static_override() == ""
 
 

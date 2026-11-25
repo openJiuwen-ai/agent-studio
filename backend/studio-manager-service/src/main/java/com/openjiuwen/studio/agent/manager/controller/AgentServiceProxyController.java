@@ -193,8 +193,8 @@ public class AgentServiceProxyController {
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
         String conversationId, String version, String type, Boolean stream, ServiceRunAgentReq body,
         HttpHeaders httpHeaders, String environmentId) {
-        // 试运行：把登录用户统一认证号写入 cust-userid，替代模型配置静态值（#1728/#1761）
-        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
+        // 仅画布 debug 试运行注入登录 cust-userid；百宝箱试用 / PUBLISHED 不改口径（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUserForCanvasTrial(httpHeaders);
         // 默认环境兜底不在本共享方法做：该路由同时服务单智能体与多智能体（IR mode
         // 决定），且被百宝箱试用入口复用；environment_id 由各入口按需解析后传入
         if (stream == null || stream) {
@@ -250,10 +250,10 @@ public class AgentServiceProxyController {
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
-                // 非流式 Feign：显式传 cust-userid，不依赖 CustomerHeader ThreadLocal
+                // 非流式 Feign：仅 debug 试运行显式传 cust-userid
                 return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null,
-                    RuntimeUserIdPropagator.custUserIdHeaderValue(), projectId, agentId, conversationId, workspaceId,
-                    agentType, version, type, environmentId, body)
+                    RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(httpHeaders), projectId, agentId,
+                    conversationId, workspaceId, agentType, version, type, environmentId, body)
                     .getBody();
             }
         }
@@ -351,8 +351,8 @@ public class AgentServiceProxyController {
         String conversationId, String version, Boolean stream, ServiceWorkflowRunReq body, HttpHeaders httpHeaders) {
         // 去掉x-user-profile,以防后续接口使用pdp5鉴权
         httpHeaders.remove(X_USER_PROFILE);
-        // 工作流试运行：动态登录用户写入 cust-userid + body.userId（#1728/#1761）
-        RuntimeUserIdPropagator.applyLoginUser(httpHeaders, body::setUserId);
+        // 仅画布 debug：动态登录用户写入 cust-userid + body.userId（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUserForCanvasTrial(httpHeaders, body::setUserId);
 
         if (stream == null || stream) {
             String url = "%s/v1/%s/workflows/%s/conversations/%s?workspace_id=%s";
@@ -399,10 +399,10 @@ public class AgentServiceProxyController {
                 executeParams);
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
-                // 非流式 Feign：显式传 cust-userid，不依赖 CustomerHeader ThreadLocal
+                // 非流式 Feign：仅 debug 试运行显式传 cust-userid
                 return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(),
-                    RuntimeUserIdPropagator.custUserIdHeaderValue(), projectId, workflowId, conversationId, workspaceId,
-                    environmentId, version, body).getBody();
+                    RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(httpHeaders), projectId, workflowId,
+                    conversationId, workspaceId, environmentId, version, body).getBody();
             }
         }
     }

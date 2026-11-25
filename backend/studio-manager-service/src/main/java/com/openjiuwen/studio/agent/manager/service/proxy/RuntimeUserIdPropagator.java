@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.service.proxy;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpHeaders;
@@ -15,15 +16,16 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * 试运行调用 Runtime 时，把登录用户统一认证号写入出站参数。
+ * 画布试运行调用 Runtime 时，把登录用户统一认证号写入出站参数。
  *
  * <p>替代模型鉴权里写死的 {@code cust-userid}，支撑模型网关按用户维度统计 token。
- * 对应 GitHub #1728 / GitCode #1761。
+ * 对应 GitHub #1728 / GitCode #1761。仅 {@code X-Invoke-Mode=debug} 的画布试运行
+ * （及单节点试运行等专用入口）应调用；百宝箱试用 / PUBLISHED / 网页短链勿用。
  *
  * <p>出站方式：
  * <ul>
  *   <li>流式 OkHttp：写入 {@link HttpHeaders}，由 stream 调用直接转发</li>
- *   <li>非流式 Feign：调用方把 {@link #custUserIdHeaderValue()} 作为
+ *   <li>非流式 Feign：调用方把 {@link #custUserIdHeaderValueForCanvasTrial} 作为
  *       {@code @RequestHeader(cust-userid)} 显式传入（不依赖
  *       CustomerHeaderFeignInterceptor / ThreadLocal；默认
  *       {@code customer-header.enabled=false} 时拦截器不会透传）</li>
@@ -36,8 +38,19 @@ public final class RuntimeUserIdPropagator {
     }
 
     /**
+     * 是否画布试运行/调试：{@code X-Invoke-Mode=debug}（大小写不敏感）。
+     */
+    public static boolean isCanvasTrialInvoke(HttpHeaders headers) {
+        if (headers == null) {
+            return false;
+        }
+        String mode = headers.getFirst(Constant.Agent.INVOKE_HEADER_KEY);
+        return Constant.Common.INVOKE_MOD_DEBUG.equalsIgnoreCase(mode);
+    }
+
+    /**
      * 当前登录用户统一认证号；无 IAM 上下文或空白时返回 {@code null}
-     * （Feign {@code required=false} 时省略 header；网页短链匿名访问可安全调用）。
+     * （Feign {@code required=false} 时省略 header）。
      *
      * <p>使用 {@link RequestContextUtils#getRequestIamCtxOptional()}，避免
      * {@code getRequestUserId()} 在无上下文时抛未捕获异常。
@@ -49,6 +62,13 @@ public final class RuntimeUserIdPropagator {
         }
         String userId = ctx.get().getUserId();
         return StringUtils.isBlank(userId) ? null : userId;
+    }
+
+    /**
+     * 仅画布试运行时返回登录用户；否则 {@code null}（不改正式/试用发布口径）。
+     */
+    public static String custUserIdHeaderValueForCanvasTrial(HttpHeaders headers) {
+        return isCanvasTrialInvoke(headers) ? custUserIdHeaderValue() : null;
     }
 
     /**
@@ -80,5 +100,20 @@ public final class RuntimeUserIdPropagator {
     /** 仅写入 Header（Agent 试运行等无 body.userId 字段的场景）。 */
     public static void applyLoginUser(HttpHeaders headers) {
         applyLoginUser(headers, null);
+    }
+
+    /**
+     * 仅在 {@code X-Invoke-Mode=debug} 时写入登录用户；正式 / 百宝箱试用等跳过。
+     */
+    public static void applyLoginUserForCanvasTrial(HttpHeaders headers, Consumer<String> setBodyUserId) {
+        if (!isCanvasTrialInvoke(headers)) {
+            return;
+        }
+        applyLoginUser(headers, setBodyUserId);
+    }
+
+    /** {@link #applyLoginUserForCanvasTrial(HttpHeaders, Consumer)} 仅 Header 重载。 */
+    public static void applyLoginUserForCanvasTrial(HttpHeaders headers) {
+        applyLoginUserForCanvasTrial(headers, null);
     }
 }

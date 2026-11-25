@@ -1355,8 +1355,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
-        // 网页短链无鉴权：不强制注入登录 cust-userid（#1728/#1761 仅画布试运行）。
-        // 匿名访问无 IAM 上下文；若有登录态，下面 Feign 用 safe 取值可选透传。
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
                 + "?workspace_id=" + forwardWorkspaceId;
@@ -1368,8 +1367,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebWorkflow(getToken(), RuntimeUserIdPropagator.custUserIdHeaderValue(), shortCode,
-                conversationId, forwardWorkspaceId, environmentId, body, false).getBody();
+            return runtimeClient.runWebWorkflow(getToken(), null, shortCode, conversationId, forwardWorkspaceId,
+                environmentId, body, false).getBody();
         }
     }
 
@@ -1455,8 +1454,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
-        // 网页短链无鉴权：流式不写登录 cust-userid，避免匿名无 IAM 时 500
-        // （#1728/#1761 仅画布试运行）。非流式 Feign 用 safe 取值，无上下文则省略。
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {
@@ -1467,8 +1465,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebAgent(getToken(), RuntimeUserIdPropagator.custUserIdHeaderValue(), shortCode,
-                forwardWorkspaceId, false, environmentId, body).getBody();
+            return runtimeClient.runWebAgent(getToken(), null, shortCode, forwardWorkspaceId, false, environmentId, body)
+                .getBody();
         }
     }
 
