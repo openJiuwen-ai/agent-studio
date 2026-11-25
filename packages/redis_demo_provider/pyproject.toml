@@ -5,7 +5,7 @@ description = "openJiuwen Redis 自研 Provider 演示/样板（fakeredis 形态
 requires-python = ">=3.11"
 dependencies = [
     "redis-spi",
-    "fakeredis>=2.26",
+    "fakeredis>=2.37",
 ]
 
 [project.optional-dependencies]
