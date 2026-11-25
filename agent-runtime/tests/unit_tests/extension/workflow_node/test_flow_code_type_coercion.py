@@ -337,6 +337,75 @@ class TestCoerceInputs:
         result = _coerce_inputs(user_fields, schema)
         assert result["config"] == {}
 
+    def test_none_object_input_populates_schema_like_legacy_engine(self):
+        """空 object 应先按 {} 应用 schema，兼容旧架构的代码入参。"""
+        user_fields = {"env_input2": None}
+        schema = [
+            {
+                "id": "env_input2",
+                "type": "object",
+                "required": True,
+                "schema": [
+                    {"id": key, "type": "string", "required": True}
+                    for key in "abcde"
+                ],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"env_input2": {key: "" for key in "abcde"}}
+        assert result["env_input2"]["a"] == ""
+
+    def test_none_object_nested_defaults_match_legacy_engine(self):
+        """只补齐当前 object 的直接子字段，不额外递归物化嵌套 object。"""
+        user_fields = {"config": None}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [
+                    {"id": "text", "type": "string"},
+                    {"id": "count", "type": "integer"},
+                    {"id": "items", "type": "array", "schema": {"type": "string"}},
+                    {
+                        "id": "nested",
+                        "type": "object",
+                        "schema": [{"id": "deep", "type": "string"}],
+                    },
+                ],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {
+            "config": {
+                "text": "",
+                "count": None,
+                "items": None,
+                "nested": None,
+            }
+        }
+
+    def test_existing_object_input_is_not_rewritten(self):
+        """已有 object 仍由上游通用转换处理，FlowCode 不重复改写。"""
+        user_fields = {"config": {"a": "configured"}}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [
+                    {"id": "a", "type": "string"},
+                    {"id": "b", "type": "string"},
+                ],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"config": {"a": "configured"}}
+
     def test_reproduce_array_none_bug(self):
         """复现本次 bug：payCardList=None 导致 len(None) 报 TypeError"""
         user_fields = {"payCardList": None}
