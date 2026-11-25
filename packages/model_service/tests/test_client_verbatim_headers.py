@@ -4,6 +4,7 @@
 
 from model_service.client import (
     _build_verbatim_headers,
+    _cust_userid_for_static_override,
     _override_static_cust_userid,
 )
 
@@ -35,6 +36,46 @@ class TestOverrideStaticCustUserid:
         assert _override_static_cust_userid({"cust-userid": "1"}, "") == {"cust-userid": "1"}
         assert _override_static_cust_userid({}, "u") == {}
         assert _override_static_cust_userid(None, "u") == {}
+
+
+class TestCustUseridForStaticOverride:
+    """覆盖范围：入站 cust-userid 或 debug 试运行；正式发布不覆盖。"""
+
+    @staticmethod
+    def test_prefers_inbound_cust_userid(monkeypatch, reset_model_service_ports):
+        from model_service import ports
+        ports.set_request_customer_headers(lambda: {"cust-userid": "from-manager"})
+        monkeypatch.setattr(
+            "model_service.client._is_studio_trial_invoke", lambda: False
+        )
+        monkeypatch.setattr(
+            "model_service.client._effective_request_user_id", lambda: "login-uid"
+        )
+        assert _cust_userid_for_static_override() == "from-manager"
+
+    @staticmethod
+    def test_trial_debug_falls_back_to_login_user(monkeypatch, reset_model_service_ports):
+        from model_service import ports
+        ports.set_request_customer_headers(lambda: {})
+        monkeypatch.setattr(
+            "model_service.client._is_studio_trial_invoke", lambda: True
+        )
+        monkeypatch.setattr(
+            "model_service.client._effective_request_user_id", lambda: "login-uid"
+        )
+        assert _cust_userid_for_static_override() == "login-uid"
+
+    @staticmethod
+    def test_published_keeps_static_without_inbound(monkeypatch, reset_model_service_ports):
+        from model_service import ports
+        ports.set_request_customer_headers(lambda: {})
+        monkeypatch.setattr(
+            "model_service.client._is_studio_trial_invoke", lambda: False
+        )
+        monkeypatch.setattr(
+            "model_service.client._effective_request_user_id", lambda: "login-uid"
+        )
+        assert _cust_userid_for_static_override() == ""
 
 
 class TestVerbatimHeadersRename:
@@ -92,15 +133,34 @@ class TestVerbatimHeadersRename:
         assert headers["Z"] == "1"
 
     @staticmethod
-    def test_static_cust_userid_replaced_by_request_user(reset_common_utils_state, monkeypatch):
+    def test_static_cust_userid_replaced_on_trial_debug(
+        reset_common_utils_state, monkeypatch
+    ):
         from common_utils import customer_header
         import model_service.client as client_mod
 
         customer_header.set_config(customer_header.CustomerHeaderConfig(
             enabled=True, mappings={"cust-userid": "userId"},
         ))
-        monkeypatch.setattr(client_mod, "_effective_request_user_id", lambda: "login-uid")
+        monkeypatch.setattr(client_mod, "_cust_userid_for_static_override", lambda: "login-uid")
         conn = _Conn(custom_headers={"cust-userid": "static-from-model", "X-Other": "v"})
         headers = _build_verbatim_headers(conn, {})
         assert headers["userId"] == "login-uid"
+        assert headers["X-Other"] == "v"
+
+    @staticmethod
+    def test_published_keeps_static_cust_userid(
+        reset_common_utils_state, monkeypatch
+    ):
+        from common_utils import customer_header
+        import model_service.client as client_mod
+
+        customer_header.set_config(customer_header.CustomerHeaderConfig(
+            enabled=True, mappings={"cust-userid": "userId"},
+        ))
+        monkeypatch.setattr(client_mod, "_cust_userid_for_static_override", lambda: "")
+        monkeypatch.setattr(client_mod, "_effective_request_user_id", lambda: "login-uid")
+        conn = _Conn(custom_headers={"cust-userid": "static-from-model", "X-Other": "v"})
+        headers = _build_verbatim_headers(conn, {})
+        assert headers["userId"] == "static-from-model"
         assert headers["X-Other"] == "v"

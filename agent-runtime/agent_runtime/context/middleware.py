@@ -97,17 +97,25 @@ def _to_otel_trace_id(trace_id_str: str) -> int:
 
 
 def _capture_customer_headers(request: Request) -> dict[str, str]:
-    """按白名单捕获客户 header（cust-*，不含 x-auth-token）"""
-    cfg = get_config()
-    if not cfg.enabled:
-        return {}
+    """按白名单捕获客户 header（cust-*，不含 x-auth-token）。
 
-    allow_list = get_capture_keys()
-    result = {}
-    for name in allow_list:
-        value = request.headers.get(name) or request.headers.get(name.lower())
-        if value:
-            result[name.lower()] = value
+    #1728/#1761：无论 customer-header 总开关是否开启，都保留入站
+    ``cust-userid``（若有）。Manager 试运行显式注入时，模型出站可优先于
+    鉴权静态值；正式发布未传该 header 则不影响静态配置。
+    """
+    cfg = get_config()
+    result: dict[str, str] = {}
+    if cfg.enabled:
+        allow_list = get_capture_keys()
+        for name in allow_list:
+            value = request.headers.get(name) or request.headers.get(name.lower())
+            if value:
+                result[name.lower()] = value
+
+    if "cust-userid" not in result:
+        inbound = request.headers.get("cust-userid") or request.headers.get("Cust-UserId")
+        if inbound:
+            result["cust-userid"] = inbound
     return result
 
 
