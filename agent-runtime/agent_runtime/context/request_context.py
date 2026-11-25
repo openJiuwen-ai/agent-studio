@@ -47,9 +47,26 @@ class RequestContext:
     ir_load_cache: dict[str, Any] | None = None
 
 
+_DEFAULT_REQUEST_CONTEXT = RequestContext()
+
 _request_ctx: ContextVar[RequestContext] = ContextVar(
-    "request_ctx", default=RequestContext()
+    "request_ctx", default=_DEFAULT_REQUEST_CONTEXT
 )
+
+
+def update_conversation_id(conversation_id: str) -> None:
+    """请求处理器内补充会话 ID（矩阵未覆盖的会话路由，如查询参数路由）。
+
+    仅在请求上下文内且当前 conversation_id 为空时写入，不覆盖中间件
+    声明式矩阵已解析的权威值；ContextVar 默认实例（请求外）不写入，
+    避免共享默认实例被污染。
+    """
+    if not conversation_id:
+        return
+    ctx = _request_ctx.get()
+    if ctx is _DEFAULT_REQUEST_CONTEXT or ctx.conversation_id:
+        return
+    ctx.conversation_id = conversation_id
 
 
 # D-02（SYNC-01 P3.4）：W3C traceparent 第三方注入已移除（老分支无此函数；

@@ -2,7 +2,7 @@ logging:
   level: INFO  # The logging level can be set to one of the following: DEBUG, INFO, WARNING, ERROR, CRITICAL. The default value is WARNING.
   backup_count: 20  # The number of retained logs is set to a default value of 20. This configuration option takes effect when the output is set to "log".
   max_bytes: 20971520 # The default size of the log file is 20 MB. This configuration option takes effect when the output is set to "log".
-  format: '%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|%(message)s'
+  format: '%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|%(trace_id)s|%(execution_id)s|%(request_id)s|%(conversation_id)s|%(levelname)s|%(message)s'
   log_file: "run/jiuwen.log"  # Log file path setting. This configuration option takes effect when the output is set to "log".
   output: console # output type, including: console and log. Supports simultaneous configuration: console,log.
   interface_log_file: "interface/jiuwen_interface.log" # Request logging, used to record HTTP or HTTPS request information.

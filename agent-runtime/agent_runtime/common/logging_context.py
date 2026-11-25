@@ -8,13 +8,17 @@ from agent_runtime.context.request_context import _request_ctx
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s,%(msecs)03d|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
-    "%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|%(message)s"
+    "%(trace_id)s|%(execution_id)s|%(request_id)s|%(conversation_id)s|"
+    "%(levelname)s|%(message)s"
 )
 PERFORMANCE_LOG_FORMAT = (
     "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(execution_id)s|%(request_id)s|"
+    "%(conversation_id)s|%(levelname)s|%(message)s"
+)
+DEFAULT_LOG_FORMAT = (
+    "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(conversation_id)s|"
     "%(levelname)s|%(message)s"
 )
-DEFAULT_LOG_FORMAT = "%(asctime)s,%(msecs)03d|%(log_type)s|%(trace_id)s|%(levelname)s|%(message)s"
 
 _INSTALLED = False
 _FORMATTER_PATCH_INSTALLED = False

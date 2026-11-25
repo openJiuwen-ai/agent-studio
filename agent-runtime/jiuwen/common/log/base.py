@@ -73,13 +73,15 @@ ENV_MAX_BYTES = os.environ.get(JIUWEN_LOG_MAX_BYTES_KEY)
 
 COMMON_LOG_FORMAT = (
     "%(asctime)s|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
-    "%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|%(message)s"
+    "%(trace_id)s|%(execution_id)s|%(request_id)s|%(conversation_id)s|%(levelname)s|%(message)s"
 )
 PERFORMANCE_LOG_FORMAT = (
     "%(asctime)s|%(log_type)s|%(trace_id)s|%(execution_id)s|%(request_id)s|"
-    "%(levelname)s|%(message)s"
+    "%(conversation_id)s|%(levelname)s|%(message)s"
 )
-DEFAULT_LOG_FORMAT = "%(asctime)s|%(log_type)s|%(trace_id)s|%(levelname)s|%(message)s"
+DEFAULT_LOG_FORMAT = (
+    "%(asctime)s|%(log_type)s|%(trace_id)s|%(conversation_id)s|%(levelname)s|%(message)s"
+)
 
 # 使用方式，在需要注入session_id的参数地方，使用：thread_local_data.trace_id = trace_id
 _thread_log_instance = threading.local()
@@ -445,6 +447,7 @@ class ThreadContextFilter(logging.Filter):
         # 搜寻线程本地存储以获取 trace_id 如果存在的话
         trace_id = getattr(_thread_log_instance, "trace_id", "")
         record.trace_id = trace_id or request_json.get().get("conversationId", "")
+        record.conversation_id = request_json.get().get("conversationId", "")
         if self.log_type in ["common", "performance"]:
             record.request_id = get_x_request_id()
             record.execution_id = get_x_execution_id()
