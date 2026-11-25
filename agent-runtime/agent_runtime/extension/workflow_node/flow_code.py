@@ -15,6 +15,7 @@ from typing import AsyncIterator, Optional, Union
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
+from jiuwen.orchestration.flow.utils import force_convert
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
@@ -187,11 +188,24 @@ def _coerce_outputs(result_dict: dict, outputs_schema: list[dict]) -> dict:
     return coerced
 
 
+def _coerce_empty_object_input(field_def: dict) -> dict:
+    """按旧架构语义转换空 object，补齐其直接子字段的默认值。"""
+    field_id = field_def["id"]
+    converted, errors = force_convert({field_id: {}}, [field_def])
+    if errors:
+        raise ValueError(
+            f"Code input object schema conversion failed for '{field_id}': {errors}"
+        )
+    return converted[field_id]
+
+
 def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     """根据 input schema 对 Code 节点的输入做类型转换（含 None 默认值填充）。
 
     当上游节点未提供值导致输入为 None 时，根据 schema 类型做合理默认值填充：
     - string 类型: None → ""
+    - array 类型: None → []
+    - object 类型: 先按 {} 应用嵌套 schema，兼容旧架构代码入参
     - 其他类型: 保持 None 不变
 
     Args:
@@ -205,11 +219,14 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
         return user_fields
 
     type_map: dict[str, str] = {}
+    field_map: dict[str, dict] = {}
     for field_def in inputs_schema:
         if isinstance(field_def, dict) and "id" in field_def:
             resolved = _resolve_field_type(field_def)
             if resolved:
-                type_map[field_def["id"]] = resolved
+                field_id = field_def["id"]
+                type_map[field_id] = resolved
+                field_map[field_id] = field_def
 
     if not type_map:
         return user_fields
@@ -217,7 +234,9 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     coerced = {}
     for key, value in user_fields.items():
         target_type = type_map.get(key)
-        if target_type:
+        if value is None and target_type == "object":
+            coerced[key] = _coerce_empty_object_input(field_map[key])
+        elif target_type:
             coerced[key] = _coerce_value(value, target_type, input_mode=True)
         else:
             coerced[key] = value
