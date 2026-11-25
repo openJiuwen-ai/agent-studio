@@ -250,8 +250,10 @@ public class AgentServiceProxyController {
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
+                // 非流式 Feign：显式传 cust-userid，不依赖 CustomerHeader ThreadLocal
                 return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null,
-                    projectId, agentId, conversationId, workspaceId, agentType, version, type, environmentId, body)
+                    RuntimeUserIdPropagator.custUserIdHeaderValue(), projectId, agentId, conversationId, workspaceId,
+                    agentType, version, type, environmentId, body)
                     .getBody();
             }
         }
@@ -397,8 +399,10 @@ public class AgentServiceProxyController {
                 executeParams);
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
-                return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(), projectId,
-                    workflowId, conversationId, workspaceId, environmentId, version, body).getBody();
+                // 非流式 Feign：显式传 cust-userid，不依赖 CustomerHeader ThreadLocal
+                return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(),
+                    RuntimeUserIdPropagator.custUserIdHeaderValue(), projectId, workflowId, conversationId, workspaceId,
+                    environmentId, version, body).getBody();
             }
         }
     }
