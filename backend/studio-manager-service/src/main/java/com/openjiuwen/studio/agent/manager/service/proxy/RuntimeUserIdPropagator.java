@@ -5,11 +5,13 @@
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
 import com.openjiuwen.studio.agent.common.constant.Constants;
+import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpHeaders;
 
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -34,10 +36,18 @@ public final class RuntimeUserIdPropagator {
     }
 
     /**
-     * 当前登录用户统一认证号；空白时返回 {@code null}（Feign required=false 时省略 header）。
+     * 当前登录用户统一认证号；无 IAM 上下文或空白时返回 {@code null}
+     * （Feign {@code required=false} 时省略 header；网页短链匿名访问可安全调用）。
+     *
+     * <p>使用 {@link RequestContextUtils#getRequestIamCtxOptional()}，避免
+     * {@code getRequestUserId()} 在无上下文时抛未捕获异常。
      */
     public static String custUserIdHeaderValue() {
-        String userId = RequestContextUtils.getRequestUserId();
+        Optional<SimpleUser> ctx = RequestContextUtils.getRequestIamCtxOptional();
+        if (ctx == null || ctx.isEmpty()) {
+            return null;
+        }
+        String userId = ctx.get().getUserId();
         return StringUtils.isBlank(userId) ? null : userId;
     }
 

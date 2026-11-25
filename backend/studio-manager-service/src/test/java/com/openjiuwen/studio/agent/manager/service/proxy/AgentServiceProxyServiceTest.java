@@ -52,6 +52,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -834,6 +835,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
@@ -859,6 +861,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamNoDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
@@ -1059,6 +1062,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebWorkflow_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
