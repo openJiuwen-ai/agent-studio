@@ -47,6 +47,9 @@ dev = [
     "fakeredis==2.41.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    # fakeredis 2.41.0 已移除构造自省崩溃代码（_get_args_to_warn），
+    # 与任何 redis-py 版本组合均无 __closure__/FakeWriter 崩溃
+    "fakeredis==2.41.0",
 ]
 tracer-otel = [
     "opentelemetry-api>=1.20.0",
