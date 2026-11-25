@@ -145,7 +145,7 @@
             <label
               nz-radio-button
               *ngFor="let item of messageClassItems"
-              [nzValue]="item.text"
+              [nzValue]="item.value"
               [nzDisabled]="item.disabled"
               [nz-tooltip]="item.tipContent"
               [nzTooltipPlacement]="item.tipPosition || 'top'"
@@ -153,7 +153,7 @@
               {{ item.text }}
             </label>
           </nz-radio-group>
-          <div *ngIf="messageClassSelectedText === ('exception' | i18nextEager)" class="exception-tip mt-2 text-gray-500">
+          <div *ngIf="messageClassSelectedText === exceptionCategory" class="exception-tip mt-2 text-gray-500">
             {{ 'exception_referenced_tip' | i18nextEager }}
           </div>
         </nz-form-control>
