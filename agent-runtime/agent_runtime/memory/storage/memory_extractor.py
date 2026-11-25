@@ -140,9 +140,9 @@ class UserProfileMemoryExtractor:
 
     def __init__(self):
         if not self._initialized:
-            from redis_spi import accessor
+            from common_utils.redis_manager import RedisClientManager
 
-            self._redis_client = accessor.get_redis()
+            self._redis_client = RedisClientManager.get_instance().get_client()
             self._initialized = True
             logger.info(
                 f"Init user profile memory extractor with enable:{self._user_profile_enable}, "

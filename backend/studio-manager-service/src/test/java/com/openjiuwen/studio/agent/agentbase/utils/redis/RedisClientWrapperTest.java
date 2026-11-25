@@ -26,6 +26,7 @@ import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.redisson.client.codec.Codec;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -74,12 +75,14 @@ class RedisClientWrapperTest {
     }
 
     @Test
-    void test_getRaw_should_equal_result() throws Exception {
+    void test_get1_should_equal_result() throws Exception {
         // Given
-        when(redisClient.getRaw(anyString())).thenReturn("not_empty");
+        when(redisClient.get(anyString(), any(Codec.class))).thenReturn("not_empty");
+
+        Codec codec = mock(Codec.class, Answers.RETURNS_DEEP_STUBS);
 
         // When
-        String result = redisClientWrapper.getRaw("not_empty");
+        String result = redisClientWrapper.get("not_empty", codec);
 
         // Then
         assertEquals("not_empty", result);

@@ -13,8 +13,6 @@ import time
 import traceback
 
 from openjiuwen.core.common.logging import workflow_logger
-from redis_spi.types import Duration
-
 from agent_runtime.common.config import settings
 from agent_runtime.event_handler.base.trace import Trace
 
@@ -31,10 +29,10 @@ DEFAULT_TTL = settings.conversation_variable.conversation_ttl_seconds
 def _get_redis_client():
     """获取 Redis 客户端，不可用则返回 None."""
     try:
-        from redis_spi import accessor
-
-        if accessor.is_initialized():
-            return accessor.get_redis()
+        from common_utils.redis_manager import RedisClientManager
+        mgr = RedisClientManager.get_instance()
+        if mgr.is_initialized:
+            return mgr.get_client()
     except Exception as e:
         workflow_logger.error(f"Failed to get Redis client: {e}")
     return None
@@ -109,7 +107,7 @@ class ConversationManager:
                     if isinstance(conversation, str):
                         conversation = json.loads(conversation)
                     # 刷新TTL
-                    await redis.expire(key, Duration.seconds(DEFAULT_TTL))
+                    await redis.expire(key, DEFAULT_TTL)
                     return conversation
                 return _new_conversation()
             return _new_conversation()
@@ -206,11 +204,7 @@ class ConversationManager:
                 conversation["dialogueCount"] = conversation.get("dialogueCount", 1) + 1
 
             # 写回Redis并设置TTL
-            await redis.set(
-                key,
-                json.dumps(conversation, ensure_ascii=False),
-                duration=Duration.seconds(DEFAULT_TTL),
-            )
+            await redis.set(key, json.dumps(conversation, ensure_ascii=False), ex=DEFAULT_TTL)
             workflow_logger.info(
                 f"update: conversationId={trace.conversation_id}, messagesSize={len(message_list)}"
             )

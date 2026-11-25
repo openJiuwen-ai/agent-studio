@@ -358,6 +358,18 @@
             <artifactId>jsqlparser</artifactId>
         </dependency>
         <dependency>
+            <artifactId>redisson</artifactId>
+            <groupId>org.redisson</groupId>
+            <version>${redisson.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>snakeyaml</artifactId>
+                    <groupId>org.yaml</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi</artifactId>
         </dependency>
@@ -474,18 +486,6 @@
                 <exclusion>
                     <groupId>org.apache.avro</groupId>
                     <artifactId>avro</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <!-- Redis 默认实现（Redisson）与单点装配 -->
-        <dependency>
-            <artifactId>redisson</artifactId>
-            <groupId>org.redisson</groupId>
-            <version>${redisson.version}</version>
-            <exclusions>
-                <exclusion>
-                    <artifactId>snakeyaml</artifactId>
-                    <groupId>org.yaml</groupId>
                 </exclusion>
             </exclusions>
         </dependency>

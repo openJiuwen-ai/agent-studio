@@ -41,7 +41,6 @@ from agent_runtime.common.llm_call_logging import register_llm_call_logging_call
 from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
 from common_utils.redis_manager import RedisClientManager
 from agent_runtime.serve.execution_registry import get_execution_registry
-from agent_runtime.serve.redis_bootstrap import init_redis_provider
 from agent_runtime.context.middleware import RequestContextMiddleware
 from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm
@@ -115,7 +114,7 @@ def _load_customer_header_profile() -> None:
 
 
 def _register_customer_header_provider() -> None:
-    """注册 customer Header provider 到 model_service ports"""
+    """注册 customer Header / 试运行用户与 invoke-mode 到 model_service ports。"""
     from model_service import ports
     from agent_runtime.context.request_context import _request_ctx
 
@@ -123,7 +122,20 @@ def _register_customer_header_provider() -> None:
         ctx = _request_ctx.get()
         return ctx.customer_headers if ctx else {}
 
+    def _get_request_user_id():
+        ctx = _request_ctx.get()
+        return (ctx.user_id if ctx else "") or ""
+
+    def _get_invoke_mode():
+        ctx = _request_ctx.get()
+        if not ctx:
+            return ""
+        platform = getattr(ctx, "platform_headers", None) or {}
+        return platform.get("X-Invoke-Mode") or platform.get("x-invoke-mode") or ""
+
     ports.set_request_customer_headers(_get_customer_headers)
+    ports.set_request_user_id(_get_request_user_id)
+    ports.set_invoke_mode(_get_invoke_mode)
 
 
 @asynccontextmanager
@@ -166,16 +178,17 @@ async def lifespan(_app: FastAPI):
     _load_customer_header_profile()
     _register_customer_header_provider()
 
-    # 初始化 Redis 客户端（Redis Provider 适配层，Phase 2 过渡接线；
-    # 缺省 native = redis-py 直连，返回主池 redis-py 客户端供既有注入点消费）
-    redis_client = await init_redis_provider()
+    # 初始化 Redis 客户端
+    redis_mgr = RedisClientManager.get_instance()
+    redis_mgr.init()
 
     # 检查 Redis 连接是否正常
-    if redis_client is None:
+    if not redis_mgr.is_initialized:
         raise RuntimeError(
             "Redis client initialization failed, please check REDIS_* configuration"
         )
 
+    redis_client = redis_mgr.get_client()
     try:
         await redis_client.ping()
         logger.info("Redis connection check passed")
@@ -299,8 +312,8 @@ async def lifespan(_app: FastAPI):
         except Exception as e:
             logger.warning(f"S3 storage client close failed (non-critical): {e}")
 
-        # 关闭 Redis 客户端（Provider 适配层 + legacy 单例，manager.close 幂等收口）
-        await RedisClientManager.get_instance().close()
+        # 关闭 Redis 客户端
+        await redis_mgr.close()
         logger.info("Redis client closed")
         logger.info("OLE shutdown")
 

@@ -14,8 +14,7 @@ Value: JSON 序列化的 Conversation { messageList: [{role, content, createTime
 import json
 import logging
 
-from redis_spi import accessor
-
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.context.request_context import _request_ctx
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ class ConversationReader:
         try:
             user_id = self._get_user_id()
             key = self.build_key(conversation_id, resource_id, version_id, user_id)
-            client = accessor.get_redis()
+            client = get_redis_client()
             data = await client.get(key)
             if not data:
                 logger.info(
