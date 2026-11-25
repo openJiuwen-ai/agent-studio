@@ -97,7 +97,11 @@ def _to_otel_trace_id(trace_id_str: str) -> int:
 
 
 def _capture_customer_headers(request: Request) -> dict[str, str]:
-    """按白名单捕获客户 header（cust-*，不含 x-auth-token）"""
+    """按白名单捕获客户 header（cust-*，不含 x-auth-token）。
+
+    受 customer-header 总开关约束：关闭时返回空，避免公开网页/短链接口
+    伪造入站 cust-userid 写入 customer_headers（#1728/#1761）。
+    """
     cfg = get_config()
     if not cfg.enabled:
         return {}

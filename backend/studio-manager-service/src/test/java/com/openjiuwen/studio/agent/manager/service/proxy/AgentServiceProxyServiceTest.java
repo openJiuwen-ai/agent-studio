@@ -52,6 +52,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -834,6 +835,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
@@ -842,7 +844,8 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-owner"), eq(false),
+                eq("env-default"), eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -858,13 +861,15 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamNoDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-1"), eq(false), isNull(),
+                eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -1057,6 +1062,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebWorkflow_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
@@ -1065,7 +1071,8 @@ class AgentServiceProxyServiceTest {
 
             WorkflowRunReq body = new WorkflowRunReq();
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebWorkflow("token", "code-1", "conv-1", "ws-owner", "env-default", body, false))
+            when(runtimeClient.runWebWorkflow(eq("token"), any(), eq("code-1"), eq("conv-1"), eq("ws-owner"),
+                eq("env-default"), eq(body), eq(false)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", false,

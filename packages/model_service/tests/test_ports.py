@@ -131,6 +131,27 @@ class TestCustomerHeaders:
         assert ports.get_request_customer_headers() == {}
 
 
+class TestRequestUserIdAndInvokeMode:
+    @staticmethod
+    def test_unregistered_returns_empty(reset_model_service_ports):
+        assert ports.get_request_user_id() == ""
+        assert ports.get_invoke_mode() == ""
+
+    @staticmethod
+    def test_set_then_get(reset_model_service_ports):
+        ports.set_request_user_id(lambda: "u-1")
+        ports.set_invoke_mode(lambda: "debug")
+        assert ports.get_request_user_id() == "u-1"
+        assert ports.get_invoke_mode() == "debug"
+
+    @staticmethod
+    def test_factory_exception_swallowed(reset_model_service_ports):
+        ports.set_request_user_id(lambda: (_ for _ in ()).throw(RuntimeError("x")))
+        ports.set_invoke_mode(lambda: (_ for _ in ()).throw(RuntimeError("y")))
+        assert ports.get_request_user_id() == ""
+        assert ports.get_invoke_mode() == ""
+
+
 class TestCacheQueues:
     @staticmethod
     def test_default_returns_none_or_fallback(reset_model_service_ports):

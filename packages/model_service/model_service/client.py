@@ -103,6 +103,58 @@ def _build_verbatim_body(params: dict) -> dict:
     return body
 
 
+def _effective_request_user_id() -> str:
+    """当前请求登录用户 ID（经 ``model_service.ports`` 注入，不直连宿主私有 ContextVar）。
+
+    仅作画布试运行覆盖静态 ``cust-userid``（#1728/#1761）；未注入或异常返回空。
+    """
+    try:
+        from model_service import ports as _ports
+        return str(_ports.get_request_user_id() or "").strip()
+    except Exception as exc:
+        logger.debug("request user_id port unavailable: %s", exc)
+        return ""
+
+
+def _is_studio_trial_invoke() -> bool:
+    """是否画布试运行/调试（ports 注入的 ``X-Invoke-Mode=debug``，大小写不敏感）。
+
+    正式 ``PUBLISHED`` 等返回 False。不直连 ``agent_runtime`` 私有 ``_request_ctx``。
+    """
+    try:
+        from model_service import ports as _ports
+        mode = _ports.get_invoke_mode() or ""
+        return str(mode).lower() == "debug"
+    except Exception as exc:
+        logger.debug("invoke_mode port unavailable: %s", exc)
+        return False
+
+
+def _cust_userid_for_static_override() -> str:
+    """决定是否、以及用何值覆盖模型配置中的静态 ``cust-userid``。
+
+    仅画布试运行（``X-Invoke-Mode=debug``）才覆盖，且**只取已认证登录 user_id**，
+    不信任入站 ``cust-userid`` header（防公开路径伪造，#1728/#1761）。
+    Manager 试运行出站注入走 OkHttp/Feign 显式 header，不依赖本兜底信任客户端。
+    """
+    if not _is_studio_trial_invoke():
+        return ""
+    return _effective_request_user_id()
+
+
+def _override_static_cust_userid(custom_headers: dict, user_id: str) -> dict:
+    """用给定用户替换模型配置中的静态 ``cust-userid``（大小写不敏感）。
+
+    ``user_id`` 为空时不覆盖（正式运行保留静态配置）。
+    """
+    if not custom_headers or not user_id:
+        return dict(custom_headers or {})
+    out = {}
+    for key, value in custom_headers.items():
+        out[key] = user_id if key.lower() == "cust-userid" else value
+    return out
+
+
 def _build_verbatim_headers(conn, params: dict) -> dict:
     """verbatim 分支鉴权头（对齐 agent_builder facade ``_auth_headers``）。
 
@@ -114,9 +166,13 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
     if conn.custom_headers:
         cfg = get_config()
         capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        # 仅 debug 试运行用登录 user_id 覆盖静态值；正式发布保留模型配置
+        static_headers = _override_static_cust_userid(
+            conn.custom_headers, _cust_userid_for_static_override()
+        )
         to_rename = {}
         to_pass = {}
-        for k, v in conn.custom_headers.items():
+        for k, v in static_headers.items():
             if k.lower() in capture_keys:
                 to_rename[k] = v
             else:
@@ -321,13 +377,15 @@ class StudioModelClient(OpenAIModelClient):
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
-            # 页面试运行（无上游 captured）：用模型配置静态值做 rename
-            # 非 capture 键（含 CUSTOM_APIKEY 鉴权头）一律透传；功能禁用（_cap 为空）时等价于
-            # 旧的全量透传 params["extra_headers"] = conn.custom_headers，保证向后兼容。
+            # 无 rename 投影时用模型配置静态值；仅画布 debug 用登录
+            # user_id 覆盖静态 cust-userid（#1728/#1761），不信任入站 header。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
+            static_headers = _override_static_cust_userid(
+                conn.custom_headers, _cust_userid_for_static_override()
+            )
             to_rename = {}
             to_pass = {}
-            for k, v in conn.custom_headers.items():
+            for k, v in static_headers.items():
                 if k.lower() in _cap:
                     to_rename[k] = v
                 else:
