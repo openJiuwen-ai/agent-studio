@@ -104,69 +104,42 @@ def _build_verbatim_body(params: dict) -> dict:
 
 
 def _effective_request_user_id() -> str:
-    """当前请求有效用户 ID（登录统一认证号）。
+    """当前请求登录用户 ID（经 ``model_service.ports`` 注入，不直连宿主私有 ContextVar）。
 
-    仅作画布试运行兜底；正式发布不得单凭此值覆盖模型鉴权静态
-    ``cust-userid``（GitHub #1728 / GitCode #1761）。无 agent_runtime 宿主时返回空。
+    仅作画布试运行覆盖静态 ``cust-userid``（#1728/#1761）；未注入或异常返回空。
     """
     try:
-        from agent_runtime.context.request_context import _request_ctx
-        ctx = _request_ctx.get()
-        if ctx and getattr(ctx, "user_id", None):
-            return str(ctx.user_id)
-    except Exception:
-        return ""
-    return ""
-
-
-def _inbound_cust_userid() -> str:
-    """上游（Manager 试运行）已显式传入的 ``cust-userid``。"""
-    try:
         from model_service import ports as _ports
-        captured = _ports.get_request_customer_headers() or {}
-    except Exception:
+        return str(_ports.get_request_user_id() or "").strip()
+    except Exception as exc:
+        logger.debug("request user_id port unavailable: %s", exc)
         return ""
-    for key, value in captured.items():
-        if key and key.lower() == "cust-userid" and value:
-            return str(value)
-    return ""
 
 
 def _is_studio_trial_invoke() -> bool:
-    """是否画布试运行/调试（``X-Invoke-Mode=debug``，大小写不敏感）。
+    """是否画布试运行/调试（ports 注入的 ``X-Invoke-Mode=debug``，大小写不敏感）。
 
-    正式 ``PUBLISHED`` 等模式返回 False，避免改写生产网关统计口径。
+    正式 ``PUBLISHED`` 等返回 False。不直连 ``agent_runtime`` 私有 ``_request_ctx``。
     """
     try:
-        from agent_runtime.context.request_context import _request_ctx
-        ctx = _request_ctx.get()
-        if not ctx:
-            return False
-        platform = getattr(ctx, "platform_headers", None) or {}
-        mode = (
-            platform.get("X-Invoke-Mode")
-            or platform.get("x-invoke-mode")
-            or ""
-        )
+        from model_service import ports as _ports
+        mode = _ports.get_invoke_mode() or ""
         return str(mode).lower() == "debug"
-    except Exception:
+    except Exception as exc:
+        logger.debug("invoke_mode port unavailable: %s", exc)
         return False
 
 
 def _cust_userid_for_static_override() -> str:
     """决定是否、以及用何值覆盖模型配置中的静态 ``cust-userid``。
 
-    优先级（对齐 #1728/#1761 仅试运行范围）：
-    1. 上游已传 ``cust-userid``（Manager 试运行显式注入）→ 用之；
-    2. 画布 debug 试运行且无入站值 → 用登录 ``user_id`` 兜底；
-    3. 正式发布等其它路径 → 空串，保留模型鉴权静态值。
+    仅画布试运行（``X-Invoke-Mode=debug``）才覆盖，且**只取已认证登录 user_id**，
+    不信任入站 ``cust-userid`` header（防公开路径伪造，#1728/#1761）。
+    Manager 试运行出站注入走 OkHttp/Feign 显式 header，不依赖本兜底信任客户端。
     """
-    inbound = _inbound_cust_userid()
-    if inbound:
-        return inbound
-    if _is_studio_trial_invoke():
-        return _effective_request_user_id()
-    return ""
+    if not _is_studio_trial_invoke():
+        return ""
+    return _effective_request_user_id()
 
 
 def _override_static_cust_userid(custom_headers: dict, user_id: str) -> dict:
@@ -193,7 +166,7 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
     if conn.custom_headers:
         cfg = get_config()
         capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
-        # 仅试运行/入站 cust-userid 覆盖静态值；正式发布保留模型配置
+        # 仅 debug 试运行用登录 user_id 覆盖静态值；正式发布保留模型配置
         static_headers = _override_static_cust_userid(
             conn.custom_headers, _cust_userid_for_static_override()
         )
@@ -404,9 +377,8 @@ class StudioModelClient(OpenAIModelClient):
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
-            # 无 rename 投影时用模型配置静态值；仅在入站已有 cust-userid
-            # 或画布 debug 试运行时覆盖静态 cust-userid（#1728/#1761），
-            # 正式发布保留鉴权口径。非 capture 键一律透传。
+            # 无 rename 投影时用模型配置静态值；仅画布 debug 用登录
+            # user_id 覆盖静态 cust-userid（#1728/#1761），不信任入站 header。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
             static_headers = _override_static_cust_userid(
                 conn.custom_headers, _cust_userid_for_static_override()

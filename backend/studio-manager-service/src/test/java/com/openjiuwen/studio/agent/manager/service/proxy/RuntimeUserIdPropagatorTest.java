@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.manager.service.proxy;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -130,6 +131,33 @@ class RuntimeUserIdPropagatorTest {
             RuntimeUserIdPropagator.applyLoginUser(null, bodyUserId::set);
 
             assertThat(bodyUserId.get()).isEqualTo("body-only-uid");
+        }
+    }
+
+    @Test
+    void canvasTrialGate_onlyAppliesWhenInvokeModeDebug() {
+        HttpHeaders debugHeaders = new HttpHeaders();
+        debugHeaders.set(Constant.Agent.INVOKE_HEADER_KEY, Constant.Common.INVOKE_MOD_DEBUG);
+        HttpHeaders publishedHeaders = new HttpHeaders();
+        publishedHeaders.set(Constant.Agent.INVOKE_HEADER_KEY, "PUBLISHED");
+        AtomicReference<String> bodyUserId = new AtomicReference<>("unchanged");
+
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class)) {
+            stubUserId(mocked, "login-uid");
+
+            assertThat(RuntimeUserIdPropagator.isCanvasTrialInvoke(debugHeaders)).isTrue();
+            assertThat(RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(debugHeaders))
+                .isEqualTo("login-uid");
+            RuntimeUserIdPropagator.applyLoginUserForCanvasTrial(debugHeaders, bodyUserId::set);
+            assertThat(debugHeaders.getFirst(Constants.CustomModel.CUSTOM_USER_ID)).isEqualTo("login-uid");
+            assertThat(bodyUserId.get()).isEqualTo("login-uid");
+
+            bodyUserId.set("unchanged");
+            assertThat(RuntimeUserIdPropagator.isCanvasTrialInvoke(publishedHeaders)).isFalse();
+            assertThat(RuntimeUserIdPropagator.custUserIdHeaderValueForCanvasTrial(publishedHeaders)).isNull();
+            RuntimeUserIdPropagator.applyLoginUserForCanvasTrial(publishedHeaders, bodyUserId::set);
+            assertThat(publishedHeaders.containsKey(Constants.CustomModel.CUSTOM_USER_ID)).isFalse();
+            assertThat(bodyUserId.get()).isEqualTo("unchanged");
         }
     }
 }

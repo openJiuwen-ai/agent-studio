@@ -10,6 +10,7 @@ import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.dto.ServiceWorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
@@ -138,6 +139,8 @@ class RuntimeUserIdStreamProfileMatrixTest {
             assertInterceptorRespectsProfile(customerHeaderEnabled, spring, mocked);
 
             HttpHeaders inbound = new HttpHeaders();
+            // 画布试运行：仅 debug 才注入登录 cust-userid
+            inbound.set(Constant.Agent.INVOKE_HEADER_KEY, Constant.Common.INVOKE_MOD_DEBUG);
             ServiceWorkflowRunReq body = new ServiceWorkflowRunReq();
 
             if (stream) {
@@ -173,6 +176,38 @@ class RuntimeUserIdStreamProfileMatrixTest {
                 // 入站 headers 同样被写入（与流式一致），供可观测/后续扩展
                 assertThat(inbound.getFirst(CommonConstant.CustomModel.CUSTOM_USER_ID)).isEqualTo(LOGIN_UID);
             }
+        }
+    }
+
+    @org.junit.jupiter.api.Test
+    void publishedInvoke_doesNotOverrideCustUseridEvenWithLoginContext() {
+        try (MockedStatic<RequestContextUtils> mocked = org.mockito.Mockito.mockStatic(RequestContextUtils.class)) {
+            SimpleUser loginUser = new SimpleUser();
+            loginUser.setUserId(LOGIN_UID);
+            mocked.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.of(loginUser));
+            mocked.when(RequestContextUtils::getRequestUserId).thenReturn(LOGIN_UID);
+            mocked.when(RequestContextUtils::getRequestAuthToken).thenReturn(LOGIN_UID + "|0");
+
+            HttpHeaders inbound = new HttpHeaders();
+            inbound.set(Constant.Agent.INVOKE_HEADER_KEY, "PUBLISHED");
+            inbound.set(CommonConstant.CustomModel.CUSTOM_USER_ID, "client-forged");
+            ServiceWorkflowRunReq body = new ServiceWorkflowRunReq();
+
+            MdcScope scope = mock(MdcScope.class);
+            when(agentServiceProxyService.establishExecutionScope(any(HttpHeaders.class))).thenReturn(scope);
+            when(runtimeClient.runWorkflowWithConversation(any(), any(), any(), any(), any(), any(), any(), any(),
+                any())).thenReturn(ResponseEntity.ok("feign-ok"));
+
+            controller.runWorkflowWithConversation("p0", "ws0", "env0", "wf0", "c0", null, false, body, inbound);
+
+            ArgumentCaptor<String> custCaptor = ArgumentCaptor.forClass(String.class);
+            verify(runtimeClient).runWorkflowWithConversation(
+                eq(LOGIN_UID + "|0"), custCaptor.capture(),
+                eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body));
+            assertThat(custCaptor.getValue()).isNull();
+            assertThat(body.getUserId()).isNull();
+            // 不得用登录用户覆盖客户端伪造/静态值
+            assertThat(inbound.getFirst(CommonConstant.CustomModel.CUSTOM_USER_ID)).isEqualTo("client-forged");
         }
     }
 
