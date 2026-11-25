@@ -248,7 +248,8 @@ public class AgentServiceProxyController {
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
                 return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), null,
-                    projectId, agentId, conversationId, workspaceId, agentType, version, type, environmentId, body)
+                    projectId, agentId, conversationId, workspaceId, agentType, version, type, environmentId, false,
+                    body)
                     .getBody();
             }
         }
@@ -393,7 +394,7 @@ public class AgentServiceProxyController {
         } else {
             try (MdcScope scope = agentServiceProxyService.establishExecutionScope(httpHeaders)) {
                 return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(), projectId,
-                    workflowId, conversationId, workspaceId, environmentId, version, body).getBody();
+                    workflowId, conversationId, workspaceId, environmentId, version, false, body).getBody();
             }
         }
     }
