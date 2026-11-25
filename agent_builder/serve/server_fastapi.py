@@ -139,9 +139,13 @@ def _register_model_service_ports() -> None:
     ports.set_env_variables(get_env_variables)
     # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
     ports.set_request_customer_headers(get_request_customer_headers)
+    # builder 无画布试运行 IAM/user_id；空实现保持 ports 契约，避免 client 回退私有 ctx
+    ports.set_request_user_id(lambda: "")
+    ports.set_invoke_mode(lambda: "")
     ports.set_cache_queues(None, None)
     logger.info(
-        "model_service ports registered (storage/llm/request-headers/customer-headers/env-variables; cache disabled)"
+        "model_service ports registered (storage/llm/request-headers/customer-headers/"
+        "user-id/invoke-mode/env-variables; cache disabled)"
     )
 
 
