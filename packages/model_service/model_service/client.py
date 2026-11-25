@@ -35,6 +35,26 @@ from . import authz, dispatch, env_resolver, policy, resolver
 logger = logging.getLogger(__name__)
 
 
+def _llm_call_error_kwargs(
+    *,
+    is_stream: bool,
+    model_name,
+    model_provider,
+    error,
+    api_url: str,
+    start_mono: float,
+) -> dict:
+    """组装 ``LLM_CALL_ERROR`` trigger 参数（#1642/#1711：补 url + 失败耗时）。"""
+    return {
+        "is_stream": is_stream,
+        "model_name": model_name,
+        "model_provider": model_provider,
+        "error": error,
+        "api_url": api_url or "",
+        "latency_ms": int((time.monotonic() - start_mono) * 1000),
+    }
+
+
 @dataclass
 class _ResolveInputs:
     model_service_id: str
@@ -382,6 +402,7 @@ class StudioModelClient(OpenAIModelClient):
         }
         _model_name = params.get("model")
         _provider = self.model_client_config.client_provider
+        _api_url = detail.model.api_url or ""
         _input_kwargs = dict(
             model_name=_model_name, model_provider=_provider,
             messages=params.get("messages"), tools=params.get("tools"),
@@ -406,6 +427,8 @@ class StudioModelClient(OpenAIModelClient):
             max_retries=0,   # 单层重试：failover 由 policy 循环负责，避免 SDK 嵌套重试
         )
 
+        # 失败耗时：从即将发出下游请求起算（#1642/#1711）。
+        call_start = time.monotonic()
         try:
             if stream:
                 # 对应父类 stream 分支，补 include_usage。
@@ -435,8 +458,17 @@ class StudioModelClient(OpenAIModelClient):
                                     final_message = parsed if final_message is None else final_message + parsed
                                     yield parsed
                     except Exception as e:
-                        await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=True,
-                                      model_name=_model_name, model_provider=_provider, error=e)
+                        await trigger(
+                            LLMCallEvents.LLM_CALL_ERROR,
+                            **_llm_call_error_kwargs(
+                                is_stream=True,
+                                model_name=_model_name,
+                                model_provider=_provider,
+                                error=e,
+                                api_url=_api_url,
+                                start_mono=call_start,
+                            ),
+                        )
                         raise
                     else:
                         if final_message is not None:
@@ -465,8 +497,17 @@ class StudioModelClient(OpenAIModelClient):
         except Exception as e:
             # 覆盖非流 create/parse 失败与流 create 失败；流中途错误已在 _parsed 内触发。
             await client.close()
-            await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
-                          model_name=_model_name, model_provider=_provider, error=e)
+            await trigger(
+                LLMCallEvents.LLM_CALL_ERROR,
+                **_llm_call_error_kwargs(
+                    is_stream=stream,
+                    model_name=_model_name,
+                    model_provider=_provider,
+                    error=e,
+                    api_url=_api_url,
+                    start_mono=call_start,
+                ),
+            )
             raise
 
     async def _invoke_verbatim(self, detail, conn, call):
@@ -493,6 +534,8 @@ class StudioModelClient(OpenAIModelClient):
         client = dispatch.build_httpx_client(
             url, conn.verify_ssl, self.model_client_config.ssl_cert)
 
+        # 失败耗时：从即将发出下游请求起算（#1642/#1711）。
+        call_start = time.monotonic()
         try:
             if stream:
                 # 对齐父类 stream 分支：补 include_usage。
@@ -545,9 +588,17 @@ class StudioModelClient(OpenAIModelClient):
                                 )
                                 yield parsed
                     except Exception as e:
-                        await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=True,
-                                      model_name=_model_name, model_provider=_provider,
-                                      error=e)
+                        await trigger(
+                            LLMCallEvents.LLM_CALL_ERROR,
+                            **_llm_call_error_kwargs(
+                                is_stream=True,
+                                model_name=_model_name,
+                                model_provider=_provider,
+                                error=e,
+                                api_url=url,
+                                start_mono=call_start,
+                            ),
+                        )
                         raise
                     else:
                         if final_message is not None:
@@ -589,8 +640,17 @@ class StudioModelClient(OpenAIModelClient):
         except Exception as e:
             # 覆盖非流 post/parse/状态码失败与流 send/状态码失败；流中途错误已在 _parsed 内触发。
             await client.aclose()
-            await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
-                          model_name=_model_name, model_provider=_provider, error=e)
+            await trigger(
+                LLMCallEvents.LLM_CALL_ERROR,
+                **_llm_call_error_kwargs(
+                    is_stream=stream,
+                    model_name=_model_name,
+                    model_provider=_provider,
+                    error=e,
+                    api_url=url,
+                    start_mono=call_start,
+                ),
+            )
             raise
 
     # 审计填充

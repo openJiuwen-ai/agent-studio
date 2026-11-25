@@ -114,6 +114,28 @@ class TestLocalStorageProvider:
         asyncio.run(_run())
 
     @staticmethod
+    def test_get_content_missing_file_raises_not_found(tmp_path):
+        """缺失文件须抛 StorageNotFoundError（与 S3 实现一致，上层据此区分"未配置"）。"""
+        p = LocalStorageProvider(base_path=str(tmp_path), bucket="bkt")
+
+        async def _run():
+            with pytest.raises(StorageNotFoundError):
+                await p.get_content("nope.txt")
+
+        asyncio.run(_run())
+
+    @staticmethod
+    def test_get_object_bytes_missing_file_raises_not_found(tmp_path):
+        """get_object_bytes 同契约。"""
+        p = LocalStorageProvider(base_path=str(tmp_path), bucket="bkt")
+
+        async def _run():
+            with pytest.raises(StorageNotFoundError):
+                await p.get_object_bytes("nope.txt")
+
+        asyncio.run(_run())
+
+    @staticmethod
     def test_get_content_reads_file(tmp_path):
         (tmp_path / "bkt").mkdir()
         (tmp_path / "bkt" / "a.txt").write_text("hello", encoding="utf-8")

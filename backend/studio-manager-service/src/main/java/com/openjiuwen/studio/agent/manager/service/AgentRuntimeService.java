@@ -36,7 +36,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -90,6 +92,10 @@ public class AgentRuntimeService {
 
     @Autowired
     private ControllerDebuggingMgmtService controllerDebuggingMgmtService;
+
+    @Autowired
+    @Qualifier("requestDerivedAsyncExecutor")
+    private ThreadPoolTaskExecutor requestDerivedAsyncExecutor;
 
     // ============ 查询方法 ============
 
@@ -536,7 +542,8 @@ public class AgentRuntimeService {
     }
 
     private void clearAgentExecutionRecordsAsync(String userId, List<ExecutionQuery> needDeleteInfos) {
-        CompletableFuture.runAsync(() -> clearAgentExecutionRecords(userId, needDeleteInfos));
+        CompletableFuture.runAsync(() -> clearAgentExecutionRecords(userId, needDeleteInfos),
+            requestDerivedAsyncExecutor);
     }
 
     /**
@@ -569,7 +576,7 @@ public class AgentRuntimeService {
                 }
             }
             log.info("success clear agent conversation records. {}", agentId);
-        });
+        }, requestDerivedAsyncExecutor);
     }
 
     // ============ 私有方法 ============

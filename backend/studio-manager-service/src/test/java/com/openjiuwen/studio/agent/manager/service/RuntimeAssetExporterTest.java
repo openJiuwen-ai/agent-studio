@@ -49,6 +49,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -467,7 +468,7 @@ class RuntimeAssetExporterTest {
         // skill 归属当前 workspace（isOwnedSkillPath 查 SkillMapper.searchBySkillIds）
         SkillDetails skillDetail = new SkillDetails();
         skillDetail.setWorkspaceId(WORKSPACE_ID);
-        when(skillMapper.searchBySkillIds(List.of("sk-1"))).thenReturn(List.of(skillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-1")), any())).thenReturn(List.of(skillDetail));
         try (MockedStatic<RequestContextUtils> mocked = Mockito.mockStatic(RequestContextUtils.class)) {
             mocked.when(RequestContextUtils::getRequestProjectId).thenReturn(PROJECT_ID);
             mocked.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
@@ -539,8 +540,8 @@ class RuntimeAssetExporterTest {
         oldSkillDetail.setWorkspaceId(WORKSPACE_ID);
         SkillDetails newSkillDetail = new SkillDetails();
         newSkillDetail.setWorkspaceId(WORKSPACE_ID);
-        when(skillMapper.searchBySkillIds(List.of("sk-old"))).thenReturn(List.of(oldSkillDetail));
-        when(skillMapper.searchBySkillIds(List.of("sk-new"))).thenReturn(List.of(newSkillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-old")), any())).thenReturn(List.of(oldSkillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-new")), any())).thenReturn(List.of(newSkillDetail));
         try (MockedStatic<RequestContextUtils> mocked = Mockito.mockStatic(RequestContextUtils.class)) {
             mocked.when(RequestContextUtils::getRequestProjectId).thenReturn(PROJECT_ID);
             mocked.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
@@ -692,7 +693,7 @@ class RuntimeAssetExporterTest {
         // 巡检 #5：skill 归属校验改 workspace 级（SkillMapper.searchBySkillIds 查 workspaceId）
         SkillDetails skillDetail = new SkillDetails();
         skillDetail.setWorkspaceId(WORKSPACE_ID);
-        when(skillMapper.searchBySkillIds(List.of("sk-grd"))).thenReturn(List.of(skillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-grd")), any())).thenReturn(List.of(skillDetail));
         try (MockedStatic<RequestContextUtils> mocked = Mockito.mockStatic(RequestContextUtils.class)) {
             mocked.when(RequestContextUtils::getRequestProjectId).thenReturn(PROJECT_ID);
             mocked.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
@@ -947,7 +948,7 @@ class RuntimeAssetExporterTest {
         // skill 归属当前 workspace（searchBySkillIds 返回 workspaceId 匹配）→ 放行
         SkillDetails skillDetail = new SkillDetails();
         skillDetail.setWorkspaceId(WORKSPACE_ID);
-        when(skillMapper.searchBySkillIds(List.of("sk-shared"))).thenReturn(List.of(skillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-shared")), any())).thenReturn(List.of(skillDetail));
         try (MockedStatic<RequestContextUtils> mocked = Mockito.mockStatic(RequestContextUtils.class)) {
             mocked.when(RequestContextUtils::getRequestProjectId).thenReturn(PROJECT_ID);
             mocked.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
@@ -969,7 +970,7 @@ class RuntimeAssetExporterTest {
         // skill 属于其他 workspace → isOwnedSkillPath 返回 false → 跳过
         SkillDetails skillDetail = new SkillDetails();
         skillDetail.setWorkspaceId("other-workspace");
-        when(skillMapper.searchBySkillIds(List.of("sk-other-ws"))).thenReturn(List.of(skillDetail));
+        when(skillMapper.searchBySkillIds(eq(List.of("sk-other-ws")), any())).thenReturn(List.of(skillDetail));
         try (MockedStatic<RequestContextUtils> mocked = Mockito.mockStatic(RequestContextUtils.class)) {
             mocked.when(RequestContextUtils::getRequestProjectId).thenReturn(PROJECT_ID);
             mocked.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);

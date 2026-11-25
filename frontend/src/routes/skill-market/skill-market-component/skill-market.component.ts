@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { I18NEXT_NAMESPACE } from 'angular-i18next';
+import { I18nNamespace } from '@i18n';
 import { finalize, fromEvent, sampleTime, Subscription, tap } from 'rxjs';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzTagModule } from 'ng-zorro-antd/tag';
@@ -22,6 +23,9 @@ import { i18nProviderValue, I18nService } from '@agentcore/core/i18n.service';
 import { I18nPipe } from '@agentcore/shared/pipes/i18n.pipe';
 import { SpaceTeamManagementService } from '@services/space-team-management.service';
 import { ContextService } from '@services/context.service';
+import { PromptService } from '@services/prompt.service';
+import { AssertSquareTagType } from '@routes/agent-center/app-agent/common-logic-agent';
+import { CommonUtils } from 'src/utils/common.util';
 
 @Component({
   selector: 'skill-market',
@@ -53,40 +57,19 @@ export class SkillMarketComponent {
   cardHovered = '';
   @ViewChild('scrollContainer') scrollContainer: ElementRef;
   resourceConfig = SKILL_RESOURCE_TYPE_CONFIG;
-  tabs = [
+  // 分类由后端 t_pe_industry（library_type='skill'）下发，前端不硬编码 ID（#1731）；
+  // tabs 动态构建：初始仅"全部"，ngAfterViewInit 拉取后端分类追加；skillTagMap 供卡片 tagId→name 展示
+  tabs: { id: string; title: string; active?: boolean }[] = [
     {
       id: SkillResourceType.ALL,
       title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.all.i18key),
       active: true,
     },
-    {
-      id: SkillResourceType.GENERAL,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.general.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.EFFENCY,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.effency.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.TOOL,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.tool.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.DESIGN,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.design.i18key),
-      active: false,
-    },
-    {
-      id: SkillResourceType.CREATE,
-      title: this._i18n.transform(SKILL_RESOURCE_TYPE_CONFIG.create.i18key),
-      active: false,
-    },
   ];
 
   selectedTab = this.tabs.find(e => e.active) ?? this.tabs[0];
+  // 后端分类 id→分类对象（卡片展示用，替代硬编码 resourceConfig[tagId] 查不到的问题）
+  skillTagMap: Record<string, AssertSquareTagType> = {};
   tags: Array<{ label: string; value: string }> = [];
   searchValue = '';
   cards: SkillDetail[] = [];
@@ -104,7 +87,8 @@ export class SkillMarketComponent {
     private _i18n: I18nService,
     private nzModal: NzModalService,
     private spaceTeamManagementService: SpaceTeamManagementService,
-    private ctxServ: ContextService
+    private ctxServ: ContextService,
+    private promptService: PromptService
   ) {}
 
   openPublishModal(): void {
@@ -126,8 +110,32 @@ export class SkillMarketComponent {
   }
 
   unpublishSkill(card: SkillDetail): void {
+    // 下架前查引用：存量引用会因下架失效，引用确认让用户知情（方案 B，#1733）
+    // queryReference 默认 catchError 吞错返空，故查询失败时 count=0 走无引用通用确认，不阻塞下架
+    this._skillApi
+      .queryReference(card.skillId, 0, 100, { showFailMessage: false })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((res: any) => this.confirmUnpublish(card, res?.relations || [], res?.count || 0));
+  }
+
+  /**
+   * 下架二次确认：有引用时动态文案展示引用方数量与名称，无引用走通用确认。
+   * 下架是全局生效（published_asset=0 后存量引用解析失败），故引用数量须在下架前展示。
+   * 组件 ns 限定 skill/common，plaza_* 文案在 agent-center 命名空间，故显式传 ns。
+   */
+  private confirmUnpublish(card: SkillDetail, relations: any[], count: number): void {
+    const agentCenterNs = { ns: I18nNamespace.AGENT_CENTER };
+    const commonNs = { ns: I18nNamespace.COMMON };
+    const confirmTitle =
+      count > 0
+        ? this.buildReferenceWarningTitle(relations, count, agentCenterNs)
+        : this._i18n.transform('plaza_offshelf_confirm', agentCenterNs);
     this.nzModal.confirm({
-      nzTitle: this._i18n.transform('skill.detail.plaza.unpublish.confirm'),
+      nzTitle: confirmTitle,
+      nzOkText: this._i18n.transform('plaza_offshelf', agentCenterNs),
+      // cancel 在 common 命名空间，组件 ns 含 common 默认可访问；显式传 ns 防御 ns 解析差异
+      nzCancelText: this._i18n.transform('cancel', commonNs),
+      nzOkDanger: true,
       nzOnOk: () => {
         this._skillApi
           .unpublishSkill(card.skillId)
@@ -140,10 +148,77 @@ export class SkillMarketComponent {
     });
   }
 
+  /**
+   * 构造引用提示文案：分类计数（workflow/agent，基于 relations）+ count 总数兜底
+   * （count>relations.length 时显示"共 count 个引用"，因 limit 截断时分类计数不全但总数准）
+   * + 名称用 relations 前 3 个 app_name，分隔符走 i18n（zh=、 en=, ）避免硬编码顿号。
+   * app_type 实测值为 'agent'/'workflow'（后端 MappingEntity.app_type）。
+   */
+  private buildReferenceWarningTitle(relations: any[], count: number, ns: { ns: I18nNamespace }): string {
+    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
+    const separator = this._i18n.transform('plaza_offshelf_referenced_name_separator', ns);
+    const names = relations
+      .map(r => r?.app_name)
+      .filter((n): n is string => !!n)
+      .slice(0, 3)
+      .join(separator);
+    const summary = this._i18n.transform('plaza_offshelf_referenced_summary', {
+      ...ns,
+      workflow: workflowCount,
+      agent: agentCount,
+    });
+    // count>relations.length 说明 relations 被 limit 截断，分类计数不全，补总数兜底
+    const total = count > relations.length
+      ? this._i18n.transform('plaza_offshelf_referenced_total', { ...ns, count })
+      : '';
+    const tail = names
+      ? this._i18n.transform('plaza_offshelf_referenced_names', { ...ns, names })
+      : this._i18n.transform('plaza_offshelf_referenced_no_names', ns);
+    return `${this._i18n.transform('plaza_offshelf_referenced_prefix', ns)}${summary}${total}${tail}`;
+  }
+
   ngAfterViewInit() {
     this.watchLatest();
     this.loadMore();
     this.checkPublishPermission();
+    this.loadSkillTags();
+  }
+
+  /**
+   * 从后端拉取 Skill 分类（t_pe_industry, library_type='skill'），动态追加筛选 tab + 填充 tagId→分类映射。
+   * #1731：前端不硬编码分类 ID；上架写入与筛选查询同源（同一套后端分类 id）。
+   */
+  private loadSkillTags(): void {
+    this.promptService
+      ?.getAssertTagAsync({ library_type: 'skill' })
+      .then((res: AssertSquareTagType[]) => {
+        (res || []).forEach(tag => {
+          this.tabs.push({ id: tag.id, title: this.tagName(tag) });
+          this.skillTagMap[tag.id] = tag;
+        });
+      })
+      .catch(() => {});
+  }
+
+  /** 按当前语言取分类名（#1731 巡检2：对齐 plugin-market:320 isZH 口径，name_en 缺失兜底 name） */
+  private tagName(tag: AssertSquareTagType | undefined): string {
+    if (!tag) {
+      return '';
+    }
+    return this.isZH() ? tag.name : (tag.name_en || tag.name);
+  }
+
+  /** 卡片 tagId → 分类名（skillTagMap 存对象，按语言取 name/name_en） */
+  tagNameById(tagId: string | undefined): string {
+    if (!tagId) {
+      return '';
+    }
+    return this.tagName(this.skillTagMap[tagId]);
+  }
+
+  isZH(): boolean {
+    return CommonUtils.getLanguage() === 'zh-cn';
   }
 
   async checkPublishPermission() {
@@ -171,7 +246,7 @@ export class SkillMarketComponent {
         .queryResourceSkill({
           offset: this.cards.length,
           limit: 100,
-          tagId: SKILL_RESOURCE_TYPE_CONFIG[this.selectedTab!.id]?.id,
+          tagId: this.selectedTab?.id === SkillResourceType.ALL ? undefined : this.selectedTab?.id,
           name: this.filter?.name,
           description: this.filter?.description,
         })

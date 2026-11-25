@@ -81,6 +81,9 @@ public class SkillManagementService implements ISkillManagementService {
     @Autowired
     private AssetShelfPermissionValidator shelfPermissionValidator;
 
+    @Autowired
+    private AssetCategoryValidator assetCategoryValidator;
+
     public SkillManagementService(SkillMapper skillMapper, SkillVersionMapper sKillVersionMapper) {
         this.skillMapper = skillMapper;
         this.skillVersionMapper = sKillVersionMapper;
@@ -166,7 +169,9 @@ public class SkillManagementService implements ISkillManagementService {
             throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
         }
         // 上架时可补充广场分类标签（tag_id，缺省沿用既有分类）
+        // FR-03：分类标签须校验存在于 t_pe_industry（library_type='skill'），非法值 fail-closed 拒绝，不留半成品
         String tagId = body == null ? null : body.getTagId();
+        assetCategoryValidator.validateCategoryExists(tagId, AssetCategoryValidator.LIBRARY_TYPE_SKILL);
         if (StringUtils.hasText(tagId)) {
             skillMapper.updateTagById(skillId, tagId, System.currentTimeMillis());
         }

@@ -130,6 +130,12 @@ def test_non_stream_failure_emits_call_error_not_output(
     assert LLMCallEvents.LLM_CALL_ERROR in events
     assert LLMCallEvents.LLM_OUTPUT not in events   # 失败路径不应有 LLM_OUTPUT
 
+    # #1642/#1711：失败 trigger 须带下游 URL 与失败耗时
+    err_call = next(c for c in calls if c.args[0] == LLMCallEvents.LLM_CALL_ERROR)
+    assert err_call.kwargs.get("api_url") == "http://x/v1/chat/completions"
+    assert isinstance(err_call.kwargs.get("latency_ms"), int)
+    assert err_call.kwargs["latency_ms"] >= 0
+
 
 # ----------------------------- verbatim 分支 -----------------------------
 
@@ -249,3 +255,8 @@ def test_verbatim_non_stream_non2xx_raises_model_service_error(
     assert events[0] == LLMCallEvents.LLM_INPUT
     assert LLMCallEvents.LLM_CALL_ERROR in events
     assert LLMCallEvents.LLM_OUTPUT not in events
+
+    err_call = next(c for c in calls if c.args[0] == LLMCallEvents.LLM_CALL_ERROR)
+    assert err_call.kwargs.get("api_url") == "http://mock/xxx/yyy"
+    assert isinstance(err_call.kwargs.get("latency_ms"), int)
+    assert err_call.kwargs["latency_ms"] >= 0

@@ -128,15 +128,36 @@ class OptimizeInfoValidator:
 
     @classmethod
     def _validate_early_stop_score(cls, optimize_info: Dict[str, Any]) -> None:
-        """validate iteration num"""
-        early_stop_score = validate_parameter(
-            optimize_info, "early_stop_score", float, required=False
-        )
+        """validate early_stop_score"""
+        # JSON 整数（0/1）解码为 int，isinstance(int, float) 为 False，
+        # 共享的 validate_parameter(float) 会误拒合法整数值；此处手写取值
+        # 与类型检查：int/float 均接受（bool 是 int 子类，显式排除），统一
+        # 归一化为 float 后做范围校验
+        early_stop_score = optimize_info.get("early_stop_score")
         if early_stop_score is None:
             return
-        if (
-            early_stop_score < TuneConstant.MIN_EARLY_STOPPING_SCORE
-            or early_stop_score > TuneConstant.MAX_EARLY_STOPPING_SCORE
+        if isinstance(early_stop_score, bool) or not isinstance(
+            early_stop_score, (int, float)
+        ):
+            raise TaskParamsValidationException(
+                "'early_stop_score' must be float-type"
+            )
+        # 超出 float 表示范围的超大 int 会让 float() 抛 OverflowError，
+        # 使非法参数以 500 而非参数校验错误暴露——捕获后归一到越界分支
+        try:
+            early_stop_score = float(early_stop_score)
+        except OverflowError as exc:
+            raise TaskParamsValidationException(
+                f"early_stop_score must be in range "
+                f"[{TuneConstant.MIN_EARLY_STOPPING_SCORE},"
+                f"{TuneConstant.MAX_EARLY_STOPPING_SCORE}]"
+            ) from exc
+        # NaN 与任何值比较均为 False，"或"式越界判断会放行 NaN——改用
+        # 区间包含判断的否定式，NaN 同样落入拒绝分支
+        if not (
+            TuneConstant.MIN_EARLY_STOPPING_SCORE
+            <= early_stop_score
+            <= TuneConstant.MAX_EARLY_STOPPING_SCORE
         ):
             raise TaskParamsValidationException(
                 f"early_stop_score must be in range "

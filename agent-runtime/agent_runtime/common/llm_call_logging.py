@@ -21,10 +21,39 @@ LLM 调用日志 — 通过 callback framework 记录模型请求体和响应内
 """
 
 import json
+from urllib.parse import urlsplit, urlunsplit
 
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.runner.callback.events import LLMCallEvents
 from openjiuwen.core.runner.callback.utils import get_callback_framework
+
+
+def _sanitize_api_url_for_log(api_url) -> str:
+    """日志用下游 URL：保留 scheme/host/port/path，去掉 userinfo/query/fragment。
+
+    api_url 可能来自 ``plugin_url_params`` 解析结果；完整 URL 若带凭据落入
+    ERROR 日志会泄露 secret。解析失败或非法端口时回退 ``unknown`` / ``redacted``，
+    避免 ``parts.port`` 抛错把 ``_log_error`` 回调本身打挂。
+    """
+    if api_url is None:
+        return "unknown"
+    raw = str(api_url).strip()
+    if not raw or raw == "unknown":
+        return "unknown"
+    try:
+        parts = urlsplit(raw)
+        # hostname/port 属性访问也可能抛 ValueError（如 host:bad、端口越界）
+        host = parts.hostname or ""
+        port = parts.port
+        scheme = parts.scheme
+        path = parts.path or ""
+    except ValueError:
+        return "redacted"
+    if not scheme or not host:
+        # 非绝对 URL：避免把可能含 token 的原文写入日志
+        return "redacted"
+    netloc = host if port is None else f"{host}:{port}"
+    return urlunsplit((scheme, netloc, path, "", ""))
 
 # 标记是否已注册，避免重复注册
 _registered: bool = False
@@ -87,12 +116,26 @@ def register_llm_call_logging_callbacks() -> None:
     # 错误回调无条件注册：低频（仅出错时触发）、高重要，不应受级别门控
     @fw.on(LLMCallEvents.LLM_CALL_ERROR)
     async def _log_error(model_name=None, model_provider=None, error=None, **kwargs):
-        """打印模型调用错误"""
+        """打印模型调用错误（#1642/#1711：含下游 URL 与失败耗时）。
+
+        期望 kwargs 携带 ``api_url`` / ``latency_ms``（由 model_service 失败 trigger
+        注入）；缺失时回退为 unknown/N/A，避免回调因字段不全而崩。
+        """
+        api_url = _sanitize_api_url_for_log(
+            kwargs.get("api_url") or kwargs.get("apiUrl")
+        )
+        latency_ms = kwargs.get("latency_ms")
+        if latency_ms is None:
+            latency_ms = kwargs.get("latency")
+        latency_display = "N/A" if latency_ms is None else latency_ms
         workflow_logger.error(
-            "model call error, model=%s, provider=%s, is_stream=%s, error=%s",
+            "model call error, model=%s, provider=%s, is_stream=%s, "
+            "url=%s, latency_ms=%s, error=%s",
             model_name or "unknown",
             model_provider or "unknown",
             kwargs.get("is_stream", False),
+            api_url,
+            latency_display,
             error,
         )
 

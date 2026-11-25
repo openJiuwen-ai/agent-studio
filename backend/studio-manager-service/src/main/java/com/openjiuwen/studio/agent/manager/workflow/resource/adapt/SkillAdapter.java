@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.workflow.resource.adapt;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.bo.SkillDetails;
 import com.openjiuwen.studio.agent.manager.entity.SkillEntity;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
@@ -51,7 +52,10 @@ public class SkillAdapter extends ResourceAdapter {
         }
         Map<String, List<String>> parentIdMap = getParentIdMap(exportResources);
         List<String> skillIds = exportResources.stream().map(ExportResourceUnit::getResourceId).toList();
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        // 导出请求由当前 domain 发起，按"本 domain 全部 + 跨 domain 已上架"过滤（issue #1734 隔离语义，
+        // 粒度与 getSkillPackageContent / deleteStudioSkill 对齐：同 domain 内跨 workspace/project 可见）
+        String domainId = RequestContextUtils.getRequestUserDomainId();
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, domainId);
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return null;
         }

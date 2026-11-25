@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import org.springframework.validation.annotation.Validated;
@@ -30,9 +31,12 @@ public class PluginShelfReq implements Serializable {
     private String versionId = null;
 
     @JsonProperty("category")
-    @Schema(description = "行业分类ID（关联 t_pe_industry.id，用于广场展示行业标签；缺省保持插件既有分类）",
+    @Schema(description = "行业分类ID（关联 t_pe_industry.id 的 UUID，用于广场展示行业标签；缺省保持插件既有分类）",
         example = "uuid")
-    @Size(max = 64)
+    @Size(max = 36, message = "category length must not exceed 36")
+    // 空串/纯空白=缺省保持既有分类（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        message = "category must be a valid UUID")
     private String category = null;
 
     public String getVersionId() {

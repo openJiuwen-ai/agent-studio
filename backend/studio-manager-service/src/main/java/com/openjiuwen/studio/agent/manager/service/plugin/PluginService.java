@@ -87,6 +87,7 @@ import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.AgentCommonService;
 import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
+import com.openjiuwen.studio.agent.manager.service.AssetCategoryValidator;
 import com.openjiuwen.studio.agent.manager.service.IPluginService;
 import com.openjiuwen.studio.agent.manager.service.ToolManagementService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginAdapterImpl;
@@ -219,6 +220,9 @@ public class PluginService implements IPluginService {
 
     @Autowired
     private AssetShelfPermissionValidator shelfPermissionValidator;
+
+    @Autowired
+    private AssetCategoryValidator assetCategoryValidator;
 
     @Autowired
     private ToolMapper toolMapper;
@@ -2469,7 +2473,9 @@ public class PluginService implements IPluginService {
         // 锚定版本解析：指定版本校验存在；缺省实时取当前最新发布版本（决策：last_version_id 仅作线索）
         String anchorVersionId = resolveAnchorVersion(pluginId, body == null ? null : body.getVersionId());
         // 行业分类：上架时可补充目录展示需用的行业标签（广场 getCategoryLabel 展示）
+        // FR-03：分类须校验存在于 t_pe_industry（library_type='plugin'），非法值 fail-closed 拒绝，不留半成品
         String category = body == null ? null : body.getCategory();
+        assetCategoryValidator.validateCategoryExists(category, AssetCategoryValidator.LIBRARY_TYPE_PLUGIN);
         if (StringUtils.isNotBlank(category) && !category.equals(plugin.getCategory())) {
             pluginMapper.updateCategoryById(pluginId, projectId, category);
         }

@@ -3,8 +3,12 @@
  */
 package com.openjiuwen.studio.agent.manager.service.environment;
 
+import com.openjiuwen.studio.agent.manager.observability.MdcScope;
+import com.openjiuwen.studio.agent.manager.observability.MdcSnapshot;
+
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
@@ -17,9 +21,9 @@ public class GlobalSyncAgentOpsStatus<T> {
     private static volatile GlobalSyncAgentOpsStatus<?> instance;
 
     /**
-     * 线程安全的队列
+     * 线程安全的队列（元素携带入队时的 MDC 快照，供处理线程按项传播）
      */
-    private final ConcurrentLinkedQueue<T> queue;
+    private final ConcurrentLinkedQueue<QueuedItem<T>> queue;
 
     /**
      * 处理数据的消费者
@@ -78,13 +82,15 @@ public class GlobalSyncAgentOpsStatus<T> {
             return;
         }
 
-        // 队列空时休眠，减少CPU消耗
+        // 队列空时休眠，减少CPU消耗；处理每项时安装入队时捕获的 MDC 快照
         Thread processThread = new Thread(() -> {
             while (true) {
                 try {
-                    T data = queue.poll();
-                    if (data != null) {
-                        dataProcessor.accept(data);
+                    QueuedItem<T> item = queue.poll();
+                    if (item != null) {
+                        try (MdcScope scope = item.snapshot.openScope()) {
+                            dataProcessor.accept(item.data);
+                        }
                     } else {
                         // 队列空时休眠，减少CPU消耗
                         Thread.sleep(3000);
@@ -98,17 +104,22 @@ public class GlobalSyncAgentOpsStatus<T> {
     }
 
     /**
-     * 添加数据到队列
+     * 添加数据到队列（在提交线程捕获 MDC 四 key，供处理线程关联请求日志）
      *
      */
     public void addData(T data) {
         if (data != null && !this.contains(data)) {
-            queue.add(data);
+            queue.add(new QueuedItem<>(data, MdcSnapshot.capture()));
         }
     }
 
     public boolean contains(T data) {
-        return queue.contains(data);
+        for (QueuedItem<T> item : queue) {
+            if (Objects.equals(item.data, data)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -125,5 +136,15 @@ public class GlobalSyncAgentOpsStatus<T> {
      */
     public void clear() {
         queue.clear();
+    }
+
+    private static final class QueuedItem<T> {
+        private final T data;
+        private final MdcSnapshot snapshot;
+
+        private QueuedItem(T data, MdcSnapshot snapshot) {
+            this.data = data;
+            this.snapshot = snapshot;
+        }
     }
 }

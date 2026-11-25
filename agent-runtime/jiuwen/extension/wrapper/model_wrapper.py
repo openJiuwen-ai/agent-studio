@@ -376,9 +376,20 @@ class ModelWrapper:
         if parent_span_id and parent_trace_id:
             identity["parent_span_id"] = str(parent_span_id)
             identity["parent_trace_id"] = str(parent_trace_id)
+            # 始终携带 parent_trace_flags，避免上游 _explicit_parent_context
+            # 在缺省时强制 SAMPLED（#1713）。kwargs 未给时按 OTEL_SAMPLE_RATE 决策。
             parent_trace_flags = kwargs.get("parent_trace_flags")
-            if parent_trace_flags is not None:
-                identity["parent_trace_flags"] = str(parent_trace_flags)
+            if parent_trace_flags is None:
+                try:
+                    from agent_runtime.observability.otel_parent_flags import (
+                        resolve_injected_trace_flags,
+                    )
+
+                    tid = int(str(parent_trace_id), 16)
+                    parent_trace_flags = f"{int(resolve_injected_trace_flags(tid)):02x}"
+                except (ValueError, ImportError, TypeError):
+                    parent_trace_flags = "00"
+            identity["parent_trace_flags"] = str(parent_trace_flags)
         request_params = ModelWrapper._llm_request_params(kwargs)
         if request_params:
             identity["request_params"] = request_params
