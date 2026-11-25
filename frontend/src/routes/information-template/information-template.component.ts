@@ -230,16 +230,19 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
     this.getStructuredMessagesListData();
   }
 
-  onMessageTemplatePageSizeChange(size: number) {
+  /** 回到第一页并刷新列表，保留用户选择的每页条数 */
+  private resetPageAndReload() {
     this.currentPage = 1;
-    this.pageSize.size = size;
     this.getStructuredMessagesListData();
   }
 
+  onMessageTemplatePageSizeChange(size: number) {
+    this.pageSize.size = size;
+    this.resetPageAndReload();
+  }
+
   searchList() {
-    this.currentPage = 1;
-    this.pageSize.size = 10;
-    this.getStructuredMessagesListData();
+    this.resetPageAndReload();
   }
 
   listAction($event: any, row: any) {
