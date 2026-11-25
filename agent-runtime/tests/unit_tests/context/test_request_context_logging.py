@@ -255,6 +255,32 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(get_log_format("workflow"), COMMON_LOG_FORMAT)
         self.assertEqual(get_log_format("llm"), COMMON_LOG_FORMAT)
 
+    def test_config_yaml_format_aligns_with_common_log_format(self):
+        """jiuwen/config.yaml 的 logging.format 优先于常量生效（standalone 路径
+        common logger），字段序列必须与 jiuwen COMMON_LOG_FORMAT 一致——否则
+        conversation_id 等新增字段会在独立部署路径静默丢失。
+
+        注意对账对象是 jiuwen 侧常量（裸 asctime）而非 runtime 侧
+        logging_context 版本（含 msecs）：yaml 只覆盖 jiuwen 自己装配的
+        common logger。"""
+        from pathlib import Path
+
+        import yaml
+
+        from jiuwen.common.log.base import (
+            COMMON_LOG_FORMAT as JIUWEN_COMMON_LOG_FORMAT,
+        )
+
+        config_path = (
+            Path(__file__).resolve().parents[3] / "jiuwen" / "config.yaml"
+        )
+        with open(config_path, encoding="utf-8") as f:
+            yaml_format = yaml.safe_load(f)["logging"]["format"]
+
+        self.assertEqual(
+            yaml_format.split("|"), JIUWEN_COMMON_LOG_FORMAT.split("|")
+        )
+
     def test_performance_logger_disabled_when_switch_false(self):
         """PERFORMANCE_LOG_ENABLED=false 时 install_log_formatter_patch 应禁用 performance logger。"""
         import agent_runtime.common.logging_context as lc
