@@ -230,6 +230,12 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
     this.getStructuredMessagesListData();
   }
 
+  onMessageTemplatePageSizeChange(size: number) {
+    this.currentPage = 1;
+    this.pageSize.size = size;
+    this.getStructuredMessagesListData();
+  }
+
   searchList() {
     this.currentPage = 1;
     this.pageSize.size = 10;
