@@ -61,6 +61,7 @@ class TestSetupOtelTracerSingleton:
     def _clean_global_state(self, monkeypatch):
         """每个用例前的全局单例/注册表复原，避免用例间相互污染。"""
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
+        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
@@ -136,6 +137,7 @@ class TestSetupOtelTracerThreadSafety:
     @pytest.fixture(autouse=True)
     def _clean_global_state(self, monkeypatch):
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
+        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
@@ -192,3 +194,149 @@ class TestSetupOtelTracerThreadSafety:
         assert tracer_otel_mod.setup_otel_tracer() is cached
         assert tracer_otel_mod.setup_otel_tracer() is cached
         create_mock.assert_not_called()
+
+
+class TestPerTracerHandlerIsolation:
+    """Registry 模板单例 + Tracer.init 克隆：同 workflow_id 并发互不踩 span 状态。"""
+
+    @pytest.fixture(autouse=True)
+    def _clean_global_state(self, monkeypatch):
+        monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
+        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
+        TracerHandlerRegistry.clear()
+        yield
+        TracerHandlerRegistry.clear()
+        # 还原 Tracer.init，避免污染同进程其它用例
+        from openjiuwen.core.session.tracer.tracer import Tracer
+
+        orig = getattr(Tracer.init, "_agentbus_orig_init", None)
+        if orig is not None:
+            Tracer.init = orig  # type: ignore[method-assign]
+        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
+
+    @staticmethod
+    def test_tracer_init_clones_registered_otel_handlers():
+        """两个 Tracer.init 后持有不同 handler 实例，registry 模板保持不变。"""
+        from openjiuwen.core.session.tracer.tracer import Tracer
+        from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
+        from openjiuwen.extensions.tracer_otel.handler import (
+            OtelAgentHandler,
+            OtelWorkflowHandler,
+        )
+        from opentelemetry.sdk.trace import TracerProvider
+
+        otel = TracerProvider().get_tracer("isolation-unit")
+        try:
+            cfg = OtelTracerConfig()
+        except TypeError:
+            cfg = OtelTracerConfig(service_name="isolation-unit")
+
+        template_agent = OtelAgentHandler(otel, cfg)
+        template_wf = OtelWorkflowHandler(otel, cfg)
+        TracerHandlerRegistry.register_handler("otel_agent", template_agent)
+        TracerHandlerRegistry.register_handler("otel_workflow", template_wf)
+        tracer_otel_mod._install_per_tracer_handler_isolation()
+
+        t1 = Tracer(session_id="s1", trace_id="trace-1")
+        t1.init()
+        t2 = Tracer(session_id="s2", trace_id="trace-2")
+        t2.init()
+
+        h1 = t1._workflow_handlers["otel_workflow"]
+        h2 = t2._workflow_handlers["otel_workflow"]
+        assert h1 is not template_wf
+        assert h2 is not template_wf
+        assert h1 is not h2
+        assert t1._agent_handlers["otel_agent"] is not t2._agent_handlers["otel_agent"]
+        assert TracerHandlerRegistry.get_workflow_handlers()["otel_workflow"] is template_wf
+        assert h1._trace_id == "trace-1"
+        assert h2._trace_id == "trace-2"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_concurrent_same_invoke_id_does_not_overwrite_sibling_state():
+        """同 WF/COMP id 交错：A 的 component state 不被 B 覆盖，A done 不 pop B。"""
+        from openjiuwen.core.session.tracer.tracer import Tracer
+        from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
+        from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        wf_id = "wf_same"
+        comp_id = "node_http"
+        provider = TracerProvider()
+        exporter = InMemorySpanExporter()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        otel = provider.get_tracer("isolation-concurrency")
+        try:
+            cfg = OtelTracerConfig()
+        except TypeError:
+            cfg = OtelTracerConfig(service_name="isolation-concurrency")
+
+        TracerHandlerRegistry.register_handler(
+            "otel_workflow", OtelWorkflowHandler(otel, cfg)
+        )
+        tracer_otel_mod._install_per_tracer_handler_isolation()
+
+        t_a = Tracer(session_id="sess-A", trace_id="trace-A")
+        t_a.init()
+        t_b = Tracer(session_id="sess-B", trace_id="trace-B")
+        t_b.init()
+        h_a = t_a._workflow_handlers["otel_workflow"]
+        h_b = t_b._workflow_handlers["otel_workflow"]
+
+        await h_a.on_call_start(
+            wf_id,
+            metadata={"workflow_id": wf_id, "workflow_name": "wf"},
+            inputs={"q": "A"},
+            parent_node_id="",
+        )
+        await h_a.on_call_start(
+            comp_id,
+            metadata={
+                "workflow_id": wf_id,
+                "component_id": comp_id,
+                "component_type": "FlowApi",
+                "component_name": "http_node",
+            },
+            inputs={"q": "A"},
+            parent_node_id=wf_id,
+        )
+        a_state = h_a._span_manager.get(comp_id)
+        assert a_state is not None
+        a_state_id = id(a_state)
+
+        await h_b.on_call_start(
+            wf_id,
+            metadata={"workflow_id": wf_id, "workflow_name": "wf"},
+            inputs={"q": "B"},
+            parent_node_id="",
+        )
+        await h_b.on_call_start(
+            comp_id,
+            metadata={
+                "workflow_id": wf_id,
+                "component_id": comp_id,
+                "component_type": "FlowApi",
+                "component_name": "http_node",
+            },
+            inputs={"q": "B"},
+            parent_node_id=wf_id,
+        )
+
+        assert h_a._span_manager.get(comp_id) is not None
+        assert id(h_a._span_manager.get(comp_id)) == a_state_id
+        assert h_b._span_manager.get(comp_id) is not None
+        assert id(h_b._span_manager.get(comp_id)) != a_state_id
+
+        await h_a.on_call_done(comp_id, outputs={"node_output": "A_RESULT"})
+        assert h_a._span_manager.get(comp_id) is None
+        assert h_b._span_manager.get(comp_id) is not None
+
+        await h_b.on_call_done(comp_id, outputs={"node_output": "B_RESULT"})
+        await h_a.on_call_done(wf_id, outputs={"out": "A"})
+        await h_b.on_call_done(wf_id, outputs={"out": "B"})
+        assert h_b._span_manager.get(comp_id) is None

@@ -13,6 +13,7 @@ from openjiuwen.core.common.logging import workflow_logger as logger
 # 因此请求级根 span 必须复用同一个 tracer 实例，否则拿到 NoOp tracer 导致 span 不导出。
 _otel_tracer: Optional[Any] = None
 _setup_lock = threading.Lock()
+_per_tracer_isolation_installed = False
 
 
 def setup_otel_tracer() -> Optional[Any]:
@@ -77,6 +78,8 @@ def _create_otel_tracer() -> Optional[Any]:
 
     if _handlers_already_registered():
         logger.info("OpenTelemetry tracer handlers already registered, skipping")
+        # 注册表已有模板时仍需安装隔离：否则 Tracer.init 继续共享可变 span 状态。
+        _install_per_tracer_handler_isolation()
         return _otel_tracer
 
     otel_settings = settings.otel
@@ -110,6 +113,7 @@ def _create_otel_tracer() -> Optional[Any]:
     # 注册全部成功后再写入单例：否则注册抛异常会留下半初始化缓存，
     # 后续调用直接返回 tracer 而跳过注册，agent/workflow span 静默不再导出。
     _otel_tracer = otel_tracer
+    _install_per_tracer_handler_isolation()
 
     logger.info(
         f"OpenTelemetry tracer initialized: "
@@ -131,3 +135,72 @@ def _handlers_already_registered() -> bool:
     from openjiuwen.core.session.tracer import TracerHandlerRegistry
     agent_handlers = TracerHandlerRegistry.get_agent_handlers()
     return "otel_agent" in agent_handlers
+
+
+def _clone_otel_handler(template: Any) -> Any:
+    """Clone an OTel handler template into a fresh instance with empty span maps.
+
+    Registry keeps one template per process; each ``Tracer`` must hold its own
+    instance so concurrent same-workflow ``invoke_id`` keys cannot collide.
+    Non-OTel handlers (no ``_otel_tracer`` / ``_config``) are returned as-is.
+    """
+    if isinstance(template, dict):
+        return template
+    otel_tracer = getattr(template, "_otel_tracer", None)
+    config = getattr(template, "_config", None)
+    if otel_tracer is None or config is None:
+        return template
+    return type(template)(otel_tracer, config)
+
+
+def _replace_handlers_with_clones(tracer_self: Any) -> None:
+    """Swap shared registry handlers on a Tracer for per-request clones."""
+    for name, handler in list(getattr(tracer_self, "_agent_handlers", {}).items()):
+        cloned = _clone_otel_handler(handler)
+        if cloned is handler:
+            continue
+        cloned.set_trace_id(tracer_self._trace_id)
+        cloned.set_session_id(tracer_self._session_id)
+        tracer_self._agent_handlers[name] = cloned
+    for name, handler in list(getattr(tracer_self, "_workflow_handlers", {}).items()):
+        cloned = _clone_otel_handler(handler)
+        if cloned is handler:
+            continue
+        cloned.set_trace_id(tracer_self._trace_id)
+        cloned.set_session_id(tracer_self._session_id)
+        tracer_self._workflow_handlers[name] = cloned
+
+
+def _install_per_tracer_handler_isolation() -> None:
+    """Monkeypatch ``Tracer.init`` so each Tracer clones OTel handler templates.
+
+    Upstream ``Tracer.init`` injects the same registry objects into every
+    request and mutates ``trace_id`` / ``session_id`` on them. Handler span
+    maps are keyed by static workflow/component ids, so concurrent runs of the
+    same workflow overwrite each other (``Calling end() on an ended span``).
+
+    Studio cannot change agent-core here; cloning after ``init`` gives each
+    Tracer isolated mutable state while still sharing the process-wide OTel
+    tracer / exporter / config.
+    """
+    global _per_tracer_isolation_installed
+    if _per_tracer_isolation_installed:
+        return
+
+    from openjiuwen.core.session.tracer.tracer import Tracer
+
+    if getattr(Tracer.init, "_agentbus_per_tracer_clone", False):
+        _per_tracer_isolation_installed = True
+        return
+
+    _orig_init = Tracer.init
+
+    def _init_with_cloned_otel_handlers(self, stream_writer_manager=None):
+        _orig_init(self, stream_writer_manager)
+        _replace_handlers_with_clones(self)
+
+    _init_with_cloned_otel_handlers._agentbus_per_tracer_clone = True  # type: ignore[attr-defined]
+    _init_with_cloned_otel_handlers._agentbus_orig_init = _orig_init  # type: ignore[attr-defined]
+    Tracer.init = _init_with_cloned_otel_handlers  # type: ignore[method-assign]
+    _per_tracer_isolation_installed = True
+    logger.info("Installed per-Tracer OTel handler isolation")
