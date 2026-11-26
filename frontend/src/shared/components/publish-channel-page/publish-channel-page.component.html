@@ -128,8 +128,10 @@
       <div class="desc">{{ 'share_chanel_tip' | i18nextEager }}</div>
       <div class="table-content">
         <nz-table
-          class="h-full"
+          class="channel-table h-full"
           [nzData]="tableData"
+          [nzScroll]="{ x: '1200px' }"
+          nzTableLayout="fixed"
           [nzShowPagination]="false"
           [nzSize]="'middle'"
         >
@@ -221,7 +223,10 @@
                 *ngIf="(item?.type === 'WEB_PAGE' || item.type === 'CLOUD_STORE') && (item?.link || item?.url); else empty"
               >
                 <span>{{ 'webpage' | i18nextEager }}URL：</span>
-                <span class="overflow-hidden text-ellipsis whitespace-nowrap">{{ item.url || item.link }}</span>
+                <span
+                  class="url-text overflow-hidden text-ellipsis whitespace-nowrap"
+                  [title]="item.url || item.link"
+                >{{ item.url || item.link }}</span>
               </div>
             </td>
             <td>
