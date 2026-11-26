@@ -2,6 +2,8 @@
 # -*- coding: UTF-8
 """Tests for Code node output type coercion."""
 
+import pytest
+
 from agent_runtime.extension.workflow_node.flow_code import (
     _coerce_value,
     _coerce_outputs,
@@ -337,8 +339,9 @@ class TestCoerceInputs:
         result = _coerce_inputs(user_fields, schema)
         assert result["config"] == {}
 
-    def test_none_object_input_populates_schema_like_legacy_engine(self):
-        """空 object 应先按 {} 应用 schema，兼容旧架构的代码入参。"""
+    @staticmethod
+    def test_none_object_input_populates_schema_like_legacy_engine():
+        """None object 应先按 {} 应用 schema，兼容旧架构的代码入参。"""
         user_fields = {"env_input2": None}
         schema = [
             {
@@ -357,8 +360,28 @@ class TestCoerceInputs:
         assert result == {"env_input2": {key: "" for key in "abcde"}}
         assert result["env_input2"]["a"] == ""
 
-    def test_none_object_nested_defaults_match_legacy_engine(self):
-        """只补齐当前 object 的直接子字段，不额外递归物化嵌套 object。"""
+    @staticmethod
+    def test_empty_object_input_populates_schema_like_legacy_engine():
+        """空字典与 None 一样，按旧架构补齐直接子字段的默认值。"""
+        user_fields = {"config": {}}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [
+                    {"id": "a", "type": "string"},
+                    {"id": "b", "type": "string"},
+                ],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"config": {"a": "", "b": ""}}
+
+    @staticmethod
+    def test_none_object_nested_defaults_match_legacy_engine():
+        """嵌套 array/object 按旧架构保持 None，而非额外物化为 []/{}。"""
         user_fields = {"config": None}
         schema = [
             {
@@ -388,8 +411,9 @@ class TestCoerceInputs:
             }
         }
 
-    def test_existing_object_input_is_not_rewritten(self):
-        """已有 object 仍由上游通用转换处理，FlowCode 不重复改写。"""
+    @staticmethod
+    def test_partial_object_input_populates_missing_schema_defaults():
+        """部分填充字典保留已有值，并按旧架构补齐缺失的直接子字段。"""
         user_fields = {"config": {"a": "configured"}}
         schema = [
             {
@@ -404,7 +428,127 @@ class TestCoerceInputs:
 
         result = _coerce_inputs(user_fields, schema)
 
-        assert result == {"config": {"a": "configured"}}
+        assert result == {"config": {"a": "configured", "b": ""}}
+
+    @staticmethod
+    def test_partial_object_preserves_undeclared_and_existing_values():
+        """兼容性补值不得丢弃额外字段或重写调用方已经提供的值。"""
+        user_fields = {
+            "config": {
+                "a": 7,
+                "undeclared": {"keep": True},
+            }
+        }
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [
+                    {"id": "a", "type": "string"},
+                    {"id": "b", "type": "string"},
+                ],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {
+            "config": {
+                "a": 7,
+                "b": "",
+                "undeclared": {"keep": True},
+            }
+        }
+
+    @staticmethod
+    def test_partial_object_input_does_not_mutate_source():
+        """补齐默认值应返回新对象，不修改上游输入。"""
+        original = {"configured": "value"}
+        user_fields = {"config": original}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [{"id": "missing", "type": "string"}],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result["config"] is not original
+        assert original == {"configured": "value"}
+        assert result["config"] == {"configured": "value", "missing": ""}
+
+    @staticmethod
+    def test_none_object_array_child_without_schema_falls_back(monkeypatch):
+        """不完整的嵌套 schema 不应阻断代码节点，且降级必须记录字段名。"""
+        warnings = []
+        monkeypatch.setattr(
+            "agent_runtime.extension.workflow_node.flow_code."
+            "workflow_logger.warning",
+            lambda message: warnings.append(message),
+        )
+        user_fields = {"config": None}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [{"id": "items", "type": "array"}],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"config": {}}
+        assert len(warnings) == 1
+        assert "config" in warnings[0]
+
+    @staticmethod
+    def test_none_object_unsupported_child_type_falls_back():
+        """不支持的子字段类型只跳过默认值补齐，不升级为节点执行失败。"""
+        user_fields = {"config": None}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [{"id": "value", "type": "any"}],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"config": {}}
+
+    @staticmethod
+    def test_partial_object_conversion_failure_preserves_original_value():
+        """部分填充对象转换失败时保留已有值，不因兼容性补值而丢失数据。"""
+        user_fields = {"config": {"configured": "value"}}
+        schema = [
+            {
+                "id": "config",
+                "type": "object",
+                "schema": [{"id": "items", "type": "array"}],
+            }
+        ]
+
+        result = _coerce_inputs(user_fields, schema)
+
+        assert result == {"config": {"configured": "value"}}
+
+    @staticmethod
+    def test_unexpected_object_conversion_error_is_not_swallowed(monkeypatch):
+        """非 schema 校验异常仍须抛出，避免兼容性降级掩盖程序错误。"""
+        def raise_runtime_error(*args):
+            raise RuntimeError("conversion regression")
+
+        monkeypatch.setattr(
+            "agent_runtime.extension.workflow_node.flow_code.force_convert",
+            raise_runtime_error,
+        )
+        schema = [{"id": "config", "type": "object"}]
+
+        with pytest.raises(RuntimeError, match="conversion regression"):
+            _coerce_inputs({"config": None}, schema)
 
     def test_reproduce_array_none_bug(self):
         """复现本次 bug：payCardList=None 导致 len(None) 报 TypeError"""
