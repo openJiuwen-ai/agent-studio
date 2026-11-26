@@ -132,10 +132,14 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
     },
   ];
 
+  /** 后端仅接受该业务值，与界面语言无关 */
+  readonly exceptionCategory = '异常';
+
   readonly messageClassItems = [
-    { text: this.i18n.transform('exception'), disabled: false },
+    { text: this.i18n.transform('exception'), value: this.exceptionCategory, disabled: false },
     {
       text: this.i18n.transform('custom'),
+      value: 'custom',
       disabled: true,
       tipContent: this.i18n.transform('not_open_yet'),
       tipPosition: 'right',
@@ -179,7 +183,7 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
   };
 
   // 状态
-  messageClassSelectedText = this.messageClassItems[0].text;
+  messageClassSelectedText = this.messageClassItems[0].value;
   visibilitySelected = 'workspace';
   jsonData = '';
   subscribeBtnStatus = this.commonService.getSubscribeStatus();
@@ -224,16 +228,36 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
     return item.id;
   }
 
+  /** 列表展示：把后端分类业务值映射为当前语言的文案，不改变原始数据 */
+  displayCategory(category: string): string {
+    return category === this.exceptionCategory ? this.messageClassItems[0].text : category;
+  }
+
+  /** 列表展示：把后端可见范围值映射为当前语言的文案，不改变原始数据 */
+  displayVisibility(visibility: string): string {
+    const value = visibilityItemsMap.get(visibility) || visibility;
+    return this.visibilityItems.find(item => item.value === value)?.label || visibility;
+  }
+
   pageUpdate(event) {
     this.currentPage = event.currentPage;
     this.pageSize.size = event.size;
     this.getStructuredMessagesListData();
   }
 
-  searchList() {
+  /** 回到第一页并刷新列表，保留用户选择的每页条数 */
+  private resetPageAndReload() {
     this.currentPage = 1;
-    this.pageSize.size = 10;
     this.getStructuredMessagesListData();
+  }
+
+  onMessageTemplatePageSizeChange(size: number) {
+    this.pageSize.size = size;
+    this.resetPageAndReload();
+  }
+
+  searchList() {
+    this.resetPageAndReload();
   }
 
   listAction($event: any, row: any) {
@@ -318,7 +342,7 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
       this.modalTypeName = this.i18n.transform('edit_message_template');
       this.structuredMessagesId = data.id || '';
       this.formGroup.setValue({ name: data.name });
-      this.messageClassSelectedText = this.messageClassItems.find(item => item.text === data.category)?.text || this.messageClassItems[0].text;
+      this.messageClassSelectedText = this.messageClassItems.find(item => item.value === data.category)?.value || this.messageClassItems[0].value;
       this.jsonData = typeof data.content === 'string' ? data.content : JSON.stringify(data.content, null, 2);
       this.visibilitySelected = visibilityItemsMap.get(data.visibility) || 'workspace';
     }
@@ -335,7 +359,7 @@ export class InformationTemplateComponent implements OnInit, OnDestroy {
 
   private resetForm(): void {
     this.formGroup.reset();
-    this.messageClassSelectedText = this.messageClassItems[0].text;
+    this.messageClassSelectedText = this.messageClassItems[0].value;
     this.visibilitySelected = 'workspace';
     this.jsonData = '';
     this.structuredMessagesId = '';

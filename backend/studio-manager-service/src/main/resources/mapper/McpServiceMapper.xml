@@ -835,10 +835,10 @@
           AND snapshot_revision = #{expectedRevision}
     </update>
 
-    <!-- FEAT-134：导入待补配标记（modify 确认后清除） -->
+    <!-- FEAT-134：导入待补配标记（modify 确认后清除）；FALSE 在 MySQL（TINYINT）和 PG（BOOLEAN）均可用 -->
     <update id="markImportConfigured">
         UPDATE ws_mcp_service_def
-        SET import_config_pending = 0,
+        SET import_config_pending = FALSE,
             import_config_paths = NULL,
             snapshot_revision = snapshot_revision + 1
         WHERE id = #{serviceId}
