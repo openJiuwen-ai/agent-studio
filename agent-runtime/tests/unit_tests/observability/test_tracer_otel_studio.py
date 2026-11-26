@@ -988,6 +988,7 @@ async def test_call_done_internal_error_is_swallowed_with_warning():
     assert exporter.get_finished_spans() == ()
 
 
+
 # --- FlowApi / FlowMcp → execute_tool --------------------------------------
 
 
@@ -1015,3 +1016,84 @@ async def test_flow_api_mcp_component_tagged_execute_tool(component_type):
 
     span = _finished_span(exporter, "component.plugin_or_mcp")
     assert (span.attributes or {}).get(GEN_AI_OPERATION_NAME) == "execute_tool"
+
+
+# --- #1766 RAG / Langfuse RETRIEVER -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_knowledge_retrieval_span_langfuse_retriever_and_counts():
+    """检索节点须带 langfuse.observation.type=retriever 与 document_count/knowledge_base。"""
+    from agent_runtime.observability.tracer_otel_studio import (
+        LANGFUSE_OBSERVATION_TYPE,
+        OPENINFERENCE_SPAN_KIND,
+        RETRIEVAL_DOCUMENT_COUNT,
+        RETRIEVAL_KNOWLEDGE_BASE,
+    )
+
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await handler.on_call_start(
+        COMP_ID,
+        metadata={
+            "workflow_id": "wf",
+            "component_id": COMP_ID,
+            "node_id": COMP_ID,
+            "component_type": "jiuwen.knowledgeRetrieval",
+            "component_name": "知识检索",
+            "knowledge_base_ids": ["kb-bank-faq"],
+            "data_source_ids": ["kb-bank-faq"],
+        },
+        inputs={"query": "利率"},
+        parent_node_id=ROOT_ID,
+    )
+    await handler.on_call_done(
+        COMP_ID,
+        outputs={
+            "userFields": {
+                "output_list": [
+                    {"content": "a", "knowledge_base_id": "kb-bank-faq"},
+                    {"content": "b", "knowledge_base_id": "kb-bank-faq"},
+                ]
+            }
+        },
+    )
+
+    span = _finished_span(exporter, "retrieval 知识检索")
+    attrs = span.attributes or {}
+    assert attrs.get(LANGFUSE_OBSERVATION_TYPE) == "retriever"
+    assert attrs.get(OPENINFERENCE_SPAN_KIND) == "RETRIEVER"
+    assert attrs.get(RETRIEVAL_DOCUMENT_COUNT) == 2
+    assert attrs.get(RETRIEVAL_KNOWLEDGE_BASE) == "kb-bank-faq"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_retrieval_miss_sets_document_count_zero():
+    """未命中：document_count=0（已采集），knowledge_base 仍可来自 metadata。"""
+    from agent_runtime.observability.tracer_otel_studio import (
+        RETRIEVAL_DOCUMENT_COUNT,
+        RETRIEVAL_KNOWLEDGE_BASE,
+    )
+
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await handler.on_call_start(
+        COMP_ID,
+        metadata={
+            "workflow_id": "wf",
+            "component_id": COMP_ID,
+            "component_type": "jiuwen.knowledgeRetrieval",
+            "component_name": "知识检索",
+            "data_source_ids": ["kb-bank-faq"],
+        },
+        inputs={"query": "no-hit"},
+        parent_node_id=ROOT_ID,
+    )
+    await handler.on_call_done(
+        COMP_ID, outputs={"userFields": {"output_list": []}}
+    )
+
+    span = _finished_span(exporter, "retrieval 知识检索")
+    attrs = span.attributes or {}
+    assert attrs.get(RETRIEVAL_DOCUMENT_COUNT) == 0
+    assert attrs.get(RETRIEVAL_KNOWLEDGE_BASE) == "kb-bank-faq"
