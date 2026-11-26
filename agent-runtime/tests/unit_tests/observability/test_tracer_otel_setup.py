@@ -348,12 +348,12 @@ class TestPerTracerHandlerIsolation:
         finished = list(exporter.get_finished_spans())
         comp_spans = [s for s in finished if s.name.startswith("component.")]
         assert len(comp_spans) == 2
-        outs = {
-            (s.attributes or {}).get(OJ_WORKFLOW_OUTPUTS)
-            for s in comp_spans
+        output_attrs = {
+            (span.attributes or {}).get(OJ_WORKFLOW_OUTPUTS)
+            for span in comp_spans
         }
         # 两条独立完成；内容经 redact 后仍应能区分 A/B（或至少为两条非空）
-        assert len([o for o in outs if o]) == 2
+        assert len([attr for attr in output_attrs if attr]) == 2
         assert h_a._trace_id == "trace-A"
         assert h_b._trace_id == "trace-B"
 
@@ -366,6 +366,7 @@ class TestPerTracerHandlerIsolation:
         barrier = threading.Barrier(thread_count)
         results = []
         errors = []
+        result_lock = threading.Lock()
 
         def worker(idx: int):
             try:
@@ -373,11 +374,14 @@ class TestPerTracerHandlerIsolation:
                 tracer = Tracer(session_id=f"sess-{idx}", trace_id=f"trace-{idx}")
                 tracer.init()
                 handler = tracer._workflow_handlers["otel_workflow"]
-                results.append(
-                    (idx, id(handler), handler._trace_id, handler._session_id)
-                )
+                # 必须持有 tracer/handler 引用：只存 id() 会在对象回收后地址复用，误报「非独立」。
+                with result_lock:
+                    results.append(
+                        (idx, tracer, handler, handler._trace_id, handler._session_id)
+                    )
             except BaseException as exc:  # noqa: BLE001
-                errors.append(exc)
+                with result_lock:
+                    errors.append(exc)
 
         threads = [
             threading.Thread(target=worker, args=(i,)) for i in range(thread_count)
@@ -389,9 +393,11 @@ class TestPerTracerHandlerIsolation:
 
         assert errors == []
         assert len(results) == thread_count
-        handler_ids = {row[1] for row in results}
-        assert len(handler_ids) == thread_count
-        for idx, _hid, trace_id, session_id in results:
+        handlers = [row[2] for row in results]
+        assert len({id(handler) for handler in handlers}) == thread_count
+        template = TracerHandlerRegistry.get_workflow_handlers()["otel_workflow"]
+        assert all(handler is not template for handler in handlers)
+        for idx, _tracer, _handler, trace_id, session_id in results:
             assert trace_id == f"trace-{idx}"
             assert session_id == f"sess-{idx}"
 
