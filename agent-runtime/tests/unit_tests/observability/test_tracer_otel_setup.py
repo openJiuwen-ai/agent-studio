@@ -15,7 +15,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from openjiuwen.core.session.tracer import TracerHandlerRegistry
-from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
+from openjiuwen.core.session.tracer.tracer import Tracer
+from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
+from openjiuwen.extensions.tracer_otel.handler import (
+    OtelAgentHandler,
+    OtelWorkflowHandler,
+)
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import agent_runtime.observability.tracer_otel as tracer_otel_mod
 
@@ -199,32 +207,27 @@ class TestSetupOtelTracerThreadSafety:
 class TestPerTracerHandlerIsolation:
     """Registry 模板单例 + Tracer.init 克隆：同 workflow_id 并发互不踩 span 状态。"""
 
+    @staticmethod
+    def _restore_tracer_init() -> None:
+        """还原 Tracer.init；直接写模块全局，避免 monkeypatch 在 teardown 把 _orig 还原回来。"""
+        orig = tracer_otel_mod._orig_tracer_init
+        if orig is not None:
+            Tracer.init = orig  # type: ignore[method-assign]
+            tracer_otel_mod._orig_tracer_init = None
+        tracer_otel_mod._per_tracer_isolation_installed = False
+
     @pytest.fixture(autouse=True)
     def _clean_global_state(self, monkeypatch):
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
-        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
+        self._restore_tracer_init()
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
-        # 还原 Tracer.init，避免污染同进程其它用例
-        from openjiuwen.core.session.tracer.tracer import Tracer
-
-        orig = getattr(Tracer.init, "_agentbus_orig_init", None)
-        if orig is not None:
-            Tracer.init = orig  # type: ignore[method-assign]
-        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
+        self._restore_tracer_init()
 
     @staticmethod
     def test_tracer_init_clones_registered_otel_handlers():
         """两个 Tracer.init 后持有不同 handler 实例，registry 模板保持不变。"""
-        from openjiuwen.core.session.tracer.tracer import Tracer
-        from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
-        from openjiuwen.extensions.tracer_otel.handler import (
-            OtelAgentHandler,
-            OtelWorkflowHandler,
-        )
-        from opentelemetry.sdk.trace import TracerProvider
-
         otel = TracerProvider().get_tracer("isolation-unit")
         try:
             cfg = OtelTracerConfig()
@@ -256,15 +259,6 @@ class TestPerTracerHandlerIsolation:
     @pytest.mark.asyncio
     async def test_concurrent_same_invoke_id_does_not_overwrite_sibling_state():
         """同 WF/COMP id 交错：A 的 component state 不被 B 覆盖，A done 不 pop B。"""
-        from openjiuwen.core.session.tracer.tracer import Tracer
-        from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
-        from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
-            InMemorySpanExporter,
-        )
-
         wf_id = "wf_same"
         comp_id = "node_http"
         provider = TracerProvider()

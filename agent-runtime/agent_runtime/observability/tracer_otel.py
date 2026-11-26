@@ -14,6 +14,8 @@ from openjiuwen.core.common.logging import workflow_logger as logger
 _otel_tracer: Optional[Any] = None
 _setup_lock = threading.Lock()
 _per_tracer_isolation_installed = False
+# 保存未 patch 的 Tracer.init；不用函数对象挂 _xxx 属性（触发 G.CLS.11）。
+_orig_tracer_init: Optional[Any] = None
 
 
 def setup_otel_tracer() -> Optional[Any]:
@@ -154,21 +156,23 @@ def _clone_otel_handler(template: Any) -> Any:
 
 
 def _replace_handlers_with_clones(tracer_self: Any) -> None:
-    """Swap shared registry handlers on a Tracer for per-request clones."""
-    for name, handler in list(getattr(tracer_self, "_agent_handlers", {}).items()):
-        cloned = _clone_otel_handler(handler)
-        if cloned is handler:
+    """Swap shared registry handlers on a Tracer for per-request clones.
+
+    ``Tracer.init`` 已对模板调用过 ``set_trace_id`` / ``set_session_id``；克隆时从
+    handler 经公开 setter 回写，并只原地改写 handler 字典，避免直接读/写
+    ``Tracer`` 受保护成员（G.CLS.11）。
+    """
+    for attr_name in ("_agent_handlers", "_workflow_handlers"):
+        handlers = getattr(tracer_self, attr_name, None)
+        if not isinstance(handlers, dict):
             continue
-        cloned.set_trace_id(tracer_self._trace_id)
-        cloned.set_session_id(tracer_self._session_id)
-        tracer_self._agent_handlers[name] = cloned
-    for name, handler in list(getattr(tracer_self, "_workflow_handlers", {}).items()):
-        cloned = _clone_otel_handler(handler)
-        if cloned is handler:
-            continue
-        cloned.set_trace_id(tracer_self._trace_id)
-        cloned.set_session_id(tracer_self._session_id)
-        tracer_self._workflow_handlers[name] = cloned
+        for name, handler in list(handlers.items()):
+            cloned = _clone_otel_handler(handler)
+            if cloned is handler:
+                continue
+            cloned.set_trace_id(getattr(handler, "_trace_id", "") or "")
+            cloned.set_session_id(getattr(handler, "_session_id", None))
+            handlers[name] = cloned
 
 
 def _install_per_tracer_handler_isolation() -> None:
@@ -183,24 +187,23 @@ def _install_per_tracer_handler_isolation() -> None:
     Tracer isolated mutable state while still sharing the process-wide OTel
     tracer / exporter / config.
     """
-    global _per_tracer_isolation_installed
+    global _per_tracer_isolation_installed, _orig_tracer_init
     if _per_tracer_isolation_installed:
         return
 
     from openjiuwen.core.session.tracer.tracer import Tracer
 
-    if getattr(Tracer.init, "_agentbus_per_tracer_clone", False):
+    if _orig_tracer_init is not None:
         _per_tracer_isolation_installed = True
         return
 
-    _orig_init = Tracer.init
+    saved_init = Tracer.init
+    _orig_tracer_init = saved_init
 
     def _init_with_cloned_otel_handlers(self, stream_writer_manager=None):
-        _orig_init(self, stream_writer_manager)
+        saved_init(self, stream_writer_manager)
         _replace_handlers_with_clones(self)
 
-    _init_with_cloned_otel_handlers._agentbus_per_tracer_clone = True  # type: ignore[attr-defined]
-    _init_with_cloned_otel_handlers._agentbus_orig_init = _orig_init  # type: ignore[attr-defined]
     Tracer.init = _init_with_cloned_otel_handlers  # type: ignore[method-assign]
     _per_tracer_isolation_installed = True
     logger.info("Installed per-Tracer OTel handler isolation")
