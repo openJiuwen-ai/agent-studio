@@ -106,6 +106,48 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """获取组件类型标识"""
         return JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE
 
+    def trace_metadata(self) -> dict:
+        """导出检索静态事实，供 OTel handler 映射 gen_ai / retrieval.* 属性。"""
+        if self._conf is None:
+            return {}
+        top_k = self._conf.retrieval_config.get("topK") or self._conf.retrieval_config.get(
+            "top_k"
+        )
+        metadata = {
+            "data_source_ids": list(self._conf.knowledge_base_ids or []),
+            "knowledge_base_ids": list(self._conf.knowledge_base_ids or []),
+        }
+        if isinstance(top_k, int):
+            metadata["top_k"] = top_k
+        return metadata
+
+    def _annotate_ambient_retrieval_span(self) -> None:
+        """在组件 invoke 上下文中补写知识库身份（ambient OTel span = 本节点 span）。"""
+        try:
+            from opentelemetry import trace as otel_trace
+
+            span = otel_trace.get_current_span()
+            if span is None or not span.is_recording():
+                return
+            kb_ids = [
+                str(i)
+                for i in (self._conf.knowledge_base_ids if self._conf else [])
+                if i is not None and str(i)
+            ]
+            if not kb_ids:
+                return
+            # 键名与 tracer_otel_studio / AgentOps normalize 约定一致
+            span.set_attribute("gen_ai.data_source.id", kb_ids)
+            span.set_attribute(
+                "retrieval.knowledge_base",
+                kb_ids[0] if len(kb_ids) == 1 else "multi",
+            )
+        except Exception as exc:
+            workflow_logger.warning(
+                "FlowKnowledgeRetrieval ambient retrieval span annotate failed: %s",
+                exc,
+            )
+
     @staticmethod
     def _resolve_query_from_session(session: Session) -> str:
         try:
@@ -574,6 +616,9 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
                     ),
                     workflow="n/a",
                 )
+
+            # 观测：把配置的知识库 id 写到当前检索 span（issue #1766 / AgentOps）
+            self._annotate_ambient_retrieval_span()
 
             # 2. 加载知识库配置
             kb_config = await self.ensure_kb_config()

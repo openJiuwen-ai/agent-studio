@@ -9,6 +9,15 @@ business_error 标记（组件正常返回但该次调用失败，如 HTTP 4xx/5
 实例化/注册点在本仓（agent_runtime/observability/tracer_otel.py），故通过
 子类在 agent-studio 侧提供等价能力，openjiuwen 源码零改动（零上游依赖）。
 
+另：在 on_call_start 中对 FlowApi / FlowMcp 组件补写
+gen_ai.operation.name=execute_tool（上游白名单仅含 "Tool"，且不得在仓外改其
+受保护成员，见 G.CLS.11）。
+
+另（issue #1766 / AgentOps RAG）：Langfuse 3.x 不把 gen_ai.operation.name=retrieval
+映射为 RETRIEVER，需显式写 langfuse.observation.type=retriever（并附
+openinference.span.kind=RETRIEVER）；看板还依赖 retrieval.knowledge_base /
+retrieval.document_count（studio 输出为 userFields.output_list，非上游 results）。
+
 实现要点：
 - on_invoke（非异常分支）：识别 business_error 标记 → span 置 ERROR 并记录
   错误信息（只标故障事实轴，不改 openjiuwen.status 业务状态）；
@@ -38,6 +47,7 @@ test_tracer_otel_studio.py 全量回归兜底；符号缺失时 tracer_otel.setu
 
 import json
 import re
+from typing import List, Optional
 
 from openjiuwen.core.common.logging import session_logger
 from openjiuwen.core.graph.pregel import GraphInterrupt
@@ -50,6 +60,8 @@ from openjiuwen.extensions.tracer_otel.handler import (
 )
 from openjiuwen.extensions.tracer_otel.redaction import redact
 from openjiuwen.extensions.tracer_otel.semconv import (
+    GEN_AI_DATA_SOURCE_ID,
+    GEN_AI_OPERATION_NAME,
     GEN_AI_RETRIEVAL_DOCUMENTS,
     OJ_PARENT_NODE_ID,
     OJ_STATUS,
@@ -57,6 +69,91 @@ from openjiuwen.extensions.tracer_otel.semconv import (
     OJ_WORKFLOW_OUTPUTS,
 )
 from opentelemetry.trace import Status, StatusCode
+
+# 工作流插件 / MCP：component_type 为类名，上游仅按 "Tool" 子串打 execute_tool
+_WORKFLOW_TOOL_COMPONENT_TYPES = frozenset({"FlowApi", "FlowMcp"})
+_OPERATION_NAME_EXECUTE_TOOL = "execute_tool"
+
+# Langfuse / AgentOps RAG 约定键（见 FEAT-FUNC-116-07-rag-analysis / normalize.py）
+LANGFUSE_OBSERVATION_TYPE = "langfuse.observation.type"
+OPENINFERENCE_SPAN_KIND = "openinference.span.kind"
+RETRIEVAL_KNOWLEDGE_BASE = "retrieval.knowledge_base"
+RETRIEVAL_DOCUMENT_COUNT = "retrieval.document_count"
+_LANGFUSE_TYPE_RETRIEVER = "retriever"
+_OPENINFERENCE_KIND_RETRIEVER = "RETRIEVER"
+# node_type 例：jiuwen.knowledgeRetrieval；类名例：FlowKnowledgeRetrieval
+_RETRIEVAL_TYPE_MARKER = "Retrieval"
+_USER_FIELDS = "userFields"
+
+
+def _is_retrieval_component_type(component_type: str) -> bool:
+    return _RETRIEVAL_TYPE_MARKER in (component_type or "")
+
+
+def _studio_retrieval_hits(outputs) -> Optional[list]:
+    """解析 studio 知识检索输出；无法识别时返回 None（表示未采集）。"""
+    if not isinstance(outputs, dict):
+        return None
+    user_fields = outputs.get(_USER_FIELDS)
+    if isinstance(user_fields, dict) and "output_list" in user_fields:
+        hits = user_fields.get("output_list")
+        return hits if isinstance(hits, list) else []
+    if "results" in outputs:
+        results = outputs.get("results")
+        return results if isinstance(results, list) else []
+    return None
+
+
+def _knowledge_base_from_hits(hits: list) -> Optional[str]:
+    ids = []  # type: List[str]
+    for item in hits:
+        if isinstance(item, dict):
+            kid = item.get("knowledge_base_id")
+            if kid:
+                ids.append(str(kid))
+    uniq = list(dict.fromkeys(ids))
+    if not uniq:
+        return None
+    if len(uniq) == 1:
+        return uniq[0]
+    return "multi"
+
+
+def _annotate_retrieval_span_start(span, metadata: Optional[dict]) -> None:
+    """检索组件 span 打开时：Langfuse RETRIEVER 类型 + 可选知识库身份。"""
+    if not span.is_recording():
+        return
+    span.set_attribute(LANGFUSE_OBSERVATION_TYPE, _LANGFUSE_TYPE_RETRIEVER)
+    span.set_attribute(OPENINFERENCE_SPAN_KIND, _OPENINFERENCE_KIND_RETRIEVER)
+    meta = metadata or {}
+    data_source_ids = meta.get("data_source_ids") or meta.get("knowledge_base_ids")
+    if isinstance(data_source_ids, list) and data_source_ids:
+        ids = [str(i) for i in data_source_ids if i is not None and str(i)]
+        if not ids:
+            return
+        span.set_attribute(GEN_AI_DATA_SOURCE_ID, ids)
+        span.set_attribute(
+            RETRIEVAL_KNOWLEDGE_BASE, ids[0] if len(ids) == 1 else "multi"
+        )
+    elif isinstance(data_source_ids, str) and data_source_ids:
+        span.set_attribute(GEN_AI_DATA_SOURCE_ID, data_source_ids)
+        span.set_attribute(RETRIEVAL_KNOWLEDGE_BASE, data_source_ids)
+
+
+def _annotate_retrieval_span_done(span, outputs) -> None:
+    """检索组件收尾：document_count + 从命中回填 knowledge_base。"""
+    if not span.is_recording():
+        return
+    span.set_attribute(LANGFUSE_OBSERVATION_TYPE, _LANGFUSE_TYPE_RETRIEVER)
+    span.set_attribute(OPENINFERENCE_SPAN_KIND, _OPENINFERENCE_KIND_RETRIEVER)
+    hits = _studio_retrieval_hits(outputs)
+    if hits is None:
+        return
+    span.set_attribute(RETRIEVAL_DOCUMENT_COUNT, len(hits))
+    kb = _knowledge_base_from_hits(hits)
+    if kb:
+        span.set_attribute(RETRIEVAL_KNOWLEDGE_BASE, kb)
+
 
 # 业务失败标记使用的 span 属性键（与 HTTP 业务失败上报方约定的键名一致）
 OJ_BUSINESS_ERROR = "openjiuwen.workflow.business_error"
@@ -98,7 +195,22 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
             **kwargs,
         )
         state = self._span_manager.get(invoke_id)
-        if state is None or self._layer_root_spans.get(invoke_id) is not state:
+        if state is None:
+            return
+
+        # 插件/MCP 工作流节点：补齐 execute_tool（不改上游受保护白名单，避 G.CLS.11）
+        component_type = (metadata or {}).get("component_type", "")
+        if (
+            component_type in _WORKFLOW_TOOL_COMPONENT_TYPES
+            and state.span.is_recording()
+        ):
+            state.span.set_attribute(
+                GEN_AI_OPERATION_NAME, _OPERATION_NAME_EXECUTE_TOOL
+            )
+        if _is_retrieval_component_type(component_type):
+            _annotate_retrieval_span_start(state.span, metadata)
+
+        if self._layer_root_spans.get(invoke_id) is not state:
             return
         span_ctx = state.span.get_span_context()
         if span_ctx is None or not span_ctx.is_valid:
@@ -199,6 +311,7 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
                                 GEN_AI_RETRIEVAL_DOCUMENTS,
                                 [redact(doc, self._config) for doc in documents],
                             )
+                        _annotate_retrieval_span_done(state.span, outputs)
 
                 self._set_workflow_end_attrs(state)
                 if terminal_summary is not None:
