@@ -66,6 +66,8 @@ _llm_settings_factory: Optional[Callable[[], LLMSettingsLike]] = None
 _request_headers_fn: Optional[Callable[[], dict]] = None
 _env_variables_fn: Optional[Callable[[], dict]] = None
 _customer_headers_fn: Optional[Callable[[], dict[str, str]]] = None
+_request_user_id_fn: Optional[Callable[[], str]] = None
+_invoke_mode_fn: Optional[Callable[[], str]] = None
 _model_cache: Any = _UNSET
 _auth_cache: Any = _UNSET
 
@@ -168,6 +170,38 @@ def get_request_customer_headers() -> dict[str, str]:
             return {}
     # 未注册 → 返回空（不反向 import agent_runtime，不回退静态认证 Header）
     return {}
+
+
+def set_request_user_id(fn: Optional[Callable[[], str]]) -> None:
+    """注册当前请求登录用户 ID 提供者（画布试运行覆盖静态 cust-userid 用）。"""
+    global _request_user_id_fn
+    _request_user_id_fn = fn
+
+
+def get_request_user_id() -> str:
+    """当前请求登录用户 ID；未注册或异常返回空串（host-free，不 import 宿主）。"""
+    if _request_user_id_fn is not None:
+        try:
+            return str(_request_user_id_fn() or "")
+        except Exception:
+            return ""
+    return ""
+
+
+def set_invoke_mode(fn: Optional[Callable[[], str]]) -> None:
+    """注册当前请求 ``X-Invoke-Mode`` 提供者（debug / PUBLISHED 等）。"""
+    global _invoke_mode_fn
+    _invoke_mode_fn = fn
+
+
+def get_invoke_mode() -> str:
+    """当前请求调用模式；未注册或异常返回空串（host-free）。"""
+    if _invoke_mode_fn is not None:
+        try:
+            return str(_invoke_mode_fn() or "")
+        except Exception:
+            return ""
+    return ""
 
 
 def set_cache_queues(

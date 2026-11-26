@@ -39,6 +39,8 @@ def reset_model_service_ports():
     ports.set_llm_settings(None)
     ports.set_request_headers(None)
     ports.set_request_customer_headers(None)
+    ports.set_request_user_id(None)
+    ports.set_invoke_mode(None)
     ports.set_env_variables(None)
     ports.set_cache_queues(None, None)
     yield
@@ -46,6 +48,8 @@ def reset_model_service_ports():
     ports.set_llm_settings(None)
     ports.set_request_headers(None)
     ports.set_request_customer_headers(None)
+    ports.set_request_user_id(None)
+    ports.set_invoke_mode(None)
     ports.set_env_variables(None)
     ports.set_cache_queues(None, None)
 
