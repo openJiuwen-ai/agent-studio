@@ -902,10 +902,11 @@ class ReActAgentRunner:
             if session:
                 await session.post_run()
 
-    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
+    async def run_blocking(self, req: ExecutionRequest, *, execution_id: str | None = None,
+                           env_scope: dict | None = None) -> str:
         """运行 ReActAgent 并返回完整的 LLM 响应字符串"""
         result_parts = []
-        async for chunk in self.run_streaming(req, env_scope=env_scope):
+        async for chunk in self.run_streaming(req, execution_id, env_scope=env_scope):
             if chunk is None:
                 continue
             try:

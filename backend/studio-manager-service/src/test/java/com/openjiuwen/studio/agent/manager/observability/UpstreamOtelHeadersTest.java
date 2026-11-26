@@ -97,6 +97,50 @@ class UpstreamOtelHeadersTest {
             .isEqualTo(data);
     }
 
+    @Test
+    void sanitize_keepsConsistentPair() {
+        String traceResponse = "00-" + TID + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers(TID, traceResponse)))
+            .containsOnlyKeys(UpstreamOtelHeaders.X_OTEL_TRACE_ID, UpstreamOtelHeaders.TRACERESPONSE);
+    }
+
+    @Test
+    void sanitize_dropsIllegalTraceIdButKeepsValidTraceResponse() {
+        String traceResponse = "00-" + "c".repeat(32) + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers("x\",\"injected\":\"y", traceResponse)))
+            .containsOnlyKeys(UpstreamOtelHeaders.TRACERESPONSE);
+    }
+
+    @Test
+    void sanitize_dropsMismatchedTraceResponse() {
+        String mismatched = "00-" + "c".repeat(32) + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers(TID, mismatched)))
+            .containsOnlyKeys(UpstreamOtelHeaders.X_OTEL_TRACE_ID);
+    }
+
+    @Test
+    void sanitize_handlesHalfPairAndEmptyInput() {
+        String traceResponse = "00-" + TID + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers(null, traceResponse)))
+            .containsOnlyKeys(UpstreamOtelHeaders.TRACERESPONSE);
+        assertThat(UpstreamOtelHeaders.sanitize(null)).isEmpty();
+        assertThat(UpstreamOtelHeaders.sanitize(Map.of())).isEmpty();
+    }
+
+    @Test
+    void sanitize_dropsMalformedTraceResponse() {
+        String shortTraceId = "00-" + "c".repeat(16) + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers(TID, shortTraceId)))
+            .containsOnlyKeys(UpstreamOtelHeaders.X_OTEL_TRACE_ID);
+        String upperCase = "00-" + TID.toUpperCase() + "-" + "b".repeat(16) + "-01";
+        assertThat(UpstreamOtelHeaders.sanitize(headers(null, upperCase))).isEmpty();
+    }
+
+    @Test
+    void sanitize_blankValuesYieldEmpty() {
+        assertThat(UpstreamOtelHeaders.sanitize(headers("  ", "  "))).isEmpty();
+    }
+
     private static okhttp3.Response stubResponse(String traceId, String traceResponse) {
         okhttp3.Response.Builder builder = new okhttp3.Response.Builder()
             .request(new okhttp3.Request.Builder().url("http://127.0.0.1/").build())

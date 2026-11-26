@@ -191,15 +191,13 @@ public class AgentServiceProxyController {
         if (upstream == null) {
             return null;
         }
-        Map<String, String> otelHeaders = new LinkedHashMap<>(2);
-        String traceId = upstream.getHeaders().getFirst(UpstreamOtelHeaders.X_OTEL_TRACE_ID);
-        if (StringUtils.isNotBlank(traceId)) {
-            otelHeaders.put(UpstreamOtelHeaders.X_OTEL_TRACE_ID, traceId);
-        }
-        String traceResponse = upstream.getHeaders().getFirst(UpstreamOtelHeaders.TRACERESPONSE);
-        if (StringUtils.isNotBlank(traceResponse)) {
-            otelHeaders.put(UpstreamOtelHeaders.TRACERESPONSE, traceResponse);
-        }
+        Map<String, String> candidates = new LinkedHashMap<>(2);
+        candidates.put(UpstreamOtelHeaders.X_OTEL_TRACE_ID,
+            upstream.getHeaders().getFirst(UpstreamOtelHeaders.X_OTEL_TRACE_ID));
+        candidates.put(UpstreamOtelHeaders.TRACERESPONSE,
+            upstream.getHeaders().getFirst(UpstreamOtelHeaders.TRACERESPONSE));
+        // 与流式 capture 共用同一校验入口：逐项校验，非法值丢弃、仅一侧合法时保留该侧
+        Map<String, String> otelHeaders = UpstreamOtelHeaders.sanitize(candidates);
         HttpHeaders relayed = new HttpHeaders();
         otelHeaders.forEach(relayed::set);
         return ResponseEntity.status(upstream.getStatusCode()).headers(relayed).body(upstream.getBody());

@@ -442,7 +442,8 @@ class ControllerRunner:
                 "Failed to trigger memory extraction: %s", e, exc_info=True
             )
 
-    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
+    async def run_blocking(self, req: ExecutionRequest, *, execution_id: str | None = None,
+                           env_scope: dict | None = None) -> str:
         """Execute Controller mode IR and return complete result.
 
         run_streaming 正常流产 SSE bytes、错误流产 dict;_parse_controller_stream_chunk
@@ -452,7 +453,7 @@ class ControllerRunner:
         message_parts: list[str] = []
         message_end_answer = ""
         workflow_end_answer = ""
-        async for chunk in self.run_streaming(req, env_scope=env_scope):
+        async for chunk in self.run_streaming(req, execution_id, env_scope=env_scope):
             if chunk is None:
                 continue
             try:

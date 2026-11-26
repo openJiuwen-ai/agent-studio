@@ -51,21 +51,38 @@ public final class UpstreamOtelHeaders {
         if (response == null) {
             return Collections.emptyMap();
         }
-        Map<String, String> captured = new LinkedHashMap<>(2);
-        String traceId = response.header(X_OTEL_TRACE_ID);
+        Map<String, String> candidates = new LinkedHashMap<>(2);
+        candidates.put(X_OTEL_TRACE_ID, response.header(X_OTEL_TRACE_ID));
+        candidates.put(TRACERESPONSE, response.header(TRACERESPONSE));
+        return sanitize(candidates);
+    }
+
+    /**
+     * 过滤候选 OTel 头：逐项校验，仅保留格式合法（且 trace 一致）的条目。
+     *
+     * <p>流式抓取（{@link #capture}）与非流式 relay 共用同一校验入口，避免上游
+     * 返回非法/不一致头时把错误 trace 透传给调用方。非法值丢弃、不截断、不修正；
+     * 仅一侧合法时保留该侧（与流式 capture 语义一致）。
+     */
+    public static Map<String, String> sanitize(Map<String, String> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> sanitized = new LinkedHashMap<>(2);
+        String traceId = candidates.get(X_OTEL_TRACE_ID);
         boolean validTraceId = StringUtils.isNotBlank(traceId)
             && TRACE_ID_PATTERN.matcher(traceId).matches();
         if (validTraceId) {
-            captured.put(X_OTEL_TRACE_ID, traceId);
+            sanitized.put(X_OTEL_TRACE_ID, traceId);
         }
-        String traceResponse = response.header(TRACERESPONSE);
+        String traceResponse = candidates.get(TRACERESPONSE);
         Matcher matcher = traceResponse == null ? null : TRACE_RESPONSE_PATTERN.matcher(traceResponse);
         // traceresponse 的 trace-id 必须与 X-OTel-Trace-Id 一致（防拼接头）
         if (matcher != null && matcher.matches()
             && (!validTraceId || matcher.group(1).equals(traceId))) {
-            captured.put(TRACERESPONSE, traceResponse);
+            sanitized.put(TRACERESPONSE, traceResponse);
         }
-        return captured.isEmpty() ? Collections.emptyMap() : captured;
+        return sanitized.isEmpty() ? Collections.emptyMap() : sanitized;
     }
 
     /**

@@ -325,21 +325,25 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
             headers=otel_headers,
         )
     else:
-        _blocking_scope = _env_scope_of(request)
-        _blocking_kwargs: dict = {}
-        if _supports_kwarg(runner.run_blocking, "execution_id"):
-            _blocking_kwargs["execution_id"] = execution_id
-        if _supports_kwarg(runner.run_blocking, "env_scope"):
-            _blocking_kwargs["env_scope"] = _blocking_scope
-        full_text = await runner.run_blocking(req, **_blocking_kwargs)
-        now_ms = int(time.time() * 1000)
+        # 非流式与流式必须使用同一执行 ID：登记在 runner 内、读取/清理在本层，
+        # 两侧 ID 不一致会导致响应头/帧缺 trace 且登记条目无法按执行清理。
+        # 环境作用域沿用旧行为：无条件解析并绑定（旧 runner 不支持入参也要播种）。
+        blocking_scope = _env_scope_of(request)
         conv_id = req.conversation_id
-        otel_trace = get_session_trace(conv_id, execution_id)
-        trace_id, span_id = (otel_trace[0], otel_trace[1]) if otel_trace else ("", "")
-        # 头必须先取：非流式无后续迭代，取完即清理登记（与流式 finally 对称）
-        otel_headers = build_otel_trace_headers_for(conv_id, execution_id)
-        if conv_id:
-            clear_session_trace(conv_id, execution_id)
+        trace_id, span_id = "", ""
+        otel_headers = {}
+        try:
+            full_text = await runner.run_blocking(
+                req, **_blocking_kwargs_for(runner, execution_id, blocking_scope))
+        finally:
+            # 成功/异常都要按执行清理，避免登记残留（与流式 finally 对称）；
+            # 头必须先取后清，非流式无后续迭代可再读。
+            otel_trace = get_session_trace(conv_id, execution_id) if conv_id else None
+            trace_id, span_id = (otel_trace[0], otel_trace[1]) if otel_trace else ("", "")
+            if conv_id:
+                otel_headers = build_otel_trace_headers_for(conv_id, execution_id)
+                clear_session_trace(conv_id, execution_id)
+        now_ms = int(time.time() * 1000)
         return JSONResponse(
             content={
                 "event": "done",
@@ -404,6 +408,21 @@ async def _inject_otel_ids(chunks, session_id: str = "", execution_id: str = "")
     finally:
         if session_id:
             clear_session_trace(session_id, execution_id)
+
+
+def _blocking_kwargs_for(runner, execution_id: str, env_scope: dict) -> dict:
+    """非流式执行的可选关键字：按能力探测传 execution_id / env_scope。
+
+    execution_id 必须与登记侧（runner 内建会话）同值，否则响应头/帧取不到 trace，
+    且流结束按执行清理时会残留条目（issue 1754 复审）。旧 runner/替身不接受该形参时
+    跳过，保持旧 Core 兼容；env_scope 已由调用方无条件解析（保持 ContextVar 播种）。
+    """
+    kwargs = {}
+    if _supports_kwarg(runner.run_blocking, "execution_id"):
+        kwargs["execution_id"] = execution_id
+    if _supports_kwarg(runner.run_blocking, "env_scope"):
+        kwargs["env_scope"] = env_scope
+    return kwargs
 
 
 def _supports_kwarg(func, name: str) -> bool:

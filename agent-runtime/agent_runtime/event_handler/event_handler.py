@@ -8,6 +8,7 @@ Key adaptations for open-source:
 """
 
 import json
+import re
 import time
 import traceback
 from typing import Dict, Type, AsyncGenerator, Any, Optional
@@ -29,6 +30,29 @@ from agent_runtime.event_handler.base.enums import EventMapping
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.base.conversation import ConversationManager
 from agent_runtime.serve.execution_events import ExecutionEventStream
+
+_OTEL_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_OTEL_TRACE_RESPONSE_RE = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$")
+
+
+def _header_value(headers: Optional[dict], name: str) -> str:
+    if not headers:
+        return ""
+    for key, value in headers.items():
+        if str(key).lower() == name:
+            return str(value)
+    return ""
+
+
+def _attach_otel_fields(content: dict, headers: Optional[dict]) -> None:
+    """把已校验的 OTel 响应头写入非流式 JSON（与响应头同源，缺失/非法不补）。"""
+    trace_id = _header_value(headers, "x-otel-trace-id")
+    if not _OTEL_TRACE_ID_RE.match(trace_id):
+        return
+    content.setdefault("otel_trace_id", trace_id)
+    matcher = _OTEL_TRACE_RESPONSE_RE.match(_header_value(headers, "traceresponse"))
+    if matcher is not None and matcher.group(1) == trace_id:
+        content.setdefault("otel_span_id", matcher.group(2))
 
 
 class EventHandler:
@@ -270,9 +294,12 @@ class EventHandler:
         non_stream_output.setdefault("node_info", [])
         non_stream_output.setdefault("events", [])
         response = NonStreamingResponse.model_construct(**non_stream_output)
+        content = response.model_dump(exclude_none=True, by_alias=True)
+        # issue 1754：非流式 JSON 与响应头同源携带真实 trace（原实现仅透传头）
+        _attach_otel_fields(content, headers)
         # issue 1754：非流式同样要把上游 OTel 响应头带到下游（原实现丢弃 headers）
         return JSONResponse(
-            content=response.model_dump(exclude_none=True, by_alias=True),
+            content=content,
             headers=headers or None,
         )
 

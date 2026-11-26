@@ -9,7 +9,7 @@ import pytest
 from fastapi import Request
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from agent_runtime.event_handler.event_handler import EventHandler
+from agent_runtime.event_handler.event_handler import EventHandler, _attach_otel_fields
 from agent_runtime.event_handler.base.trace import Trace
 
 
@@ -379,3 +379,63 @@ class TestEncapsulateNonStreamResponse:
             mock_response, "workflow", request, "wf/ir/wf-1/wf-1.json"
         )
         assert isinstance(result, JSONResponse)
+
+
+class TestAttachOtelFields:
+    """issue 1754 复审：非流式 JSON 与响应头同源写入 trace 字段。"""
+
+    TRI = "a" * 32
+    SPAN = "b" * 16
+    OTHER = "c" * 32
+
+    def _headers(self, trace_id=None, trace_response=None):
+        headers = {}
+        if trace_id is not None:
+            headers["X-OTel-Trace-Id"] = trace_id
+        if trace_response is not None:
+            headers["traceresponse"] = trace_response
+        return headers
+
+    def test_writes_consistent_pair(self):
+        content = {}
+        _attach_otel_fields(
+            content,
+            self._headers(self.TRI, "00-%s-%s-01" % (self.TRI, self.SPAN)),
+        )
+
+        assert content == {"otel_trace_id": self.TRI, "otel_span_id": self.SPAN}
+
+    def test_skips_illegal_trace_id(self):
+        content = {}
+        _attach_otel_fields(
+            content,
+            self._headers("bad-trace", "00-%s-%s-01" % (self.OTHER, self.SPAN)),
+        )
+
+        assert content == {}
+
+    def test_skips_mismatched_trace_response(self):
+        content = {}
+        _attach_otel_fields(
+            content,
+            self._headers(self.TRI, "00-%s-%s-01" % (self.OTHER, self.SPAN)),
+        )
+
+        assert content == {"otel_trace_id": self.TRI}
+
+    def test_does_not_override_existing_fields(self):
+        content = {"otel_trace_id": "keep", "otel_span_id": "keep-span"}
+        _attach_otel_fields(
+            content,
+            self._headers(self.TRI, "00-%s-%s-01" % (self.TRI, self.SPAN)),
+        )
+
+        assert content == {"otel_trace_id": "keep", "otel_span_id": "keep-span"}
+
+    def test_empty_or_missing_headers_is_noop(self):
+        content = {}
+        _attach_otel_fields(content, None)
+        _attach_otel_fields(content, {})
+        _attach_otel_fields(content, self._headers(None, None))
+
+        assert content == {}
