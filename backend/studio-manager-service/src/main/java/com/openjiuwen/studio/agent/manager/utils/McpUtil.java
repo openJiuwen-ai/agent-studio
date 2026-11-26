@@ -242,6 +242,13 @@ public class McpUtil {
             throw new AgentStudioException(StudioError.INVALID_PARAMETER_ERROR, "deployment-type");
         }
         BeanUtils.copyProperties(serviceDetail, entity);
+        // FEAT-134回归修复：import_config_pending为数据库NOT NULL列，普通(非导入)链路DTO该字段缺省null，
+        // copyProperties会用null覆盖实体默认值false，导致insert报
+        // Column 'import_config_pending' cannot be null(openjiuwen.02001042)。
+        // 在DTO->Entity转换边界归一化null->false；导入链路McpTransferService不走此转换且入库前显式set，语义不受影响。
+        if (entity.getImportConfigPending() == null) {
+            entity.setImportConfigPending(Boolean.FALSE);
+        }
         if (StringUtils.isNotBlank(serviceDetail.getId())) {
             entity.setId(serviceDetail.getId());
             McpServiceEntity mcpServiceById = this.serviceDao.getMcpServiceOnlyById(serviceDetail.getId());
