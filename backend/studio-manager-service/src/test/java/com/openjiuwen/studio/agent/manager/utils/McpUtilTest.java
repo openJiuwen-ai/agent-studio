@@ -2,6 +2,7 @@
 package com.openjiuwen.studio.agent.manager.utils;
 
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRuntimeVo;
@@ -33,6 +34,7 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class McpUtilTest {
 
@@ -368,5 +370,45 @@ class McpUtilTest {
         McpServerEntity result = mcpUtil.mcpServiceInfoDto2ServerEntity(dto);
 
         assertNotNull(result);
+    }
+
+    /**
+     * 回归：普通(非导入)创建 POST /v1/{project_id}/mcp/deploy/{id} 报
+     * openjiuwen.02001042 (Column 'import_config_pending' cannot be null)。
+     * 请求体 McpServiceDeployReq 不含 import_config_pending，DTO 该字段缺省 null，
+     * BeanUtils.copyProperties 会把实体默认 false 覆盖成 null，进而 insert 失败。
+     * 转换边界必须把 null 归一化为 false。
+     */
+    @Test
+    void testMcpServiceDetailInfoDto2ServiceEntity_ImportConfigPending() {
+        McpServiceDetailInfoDto serviceDetail = new McpServiceDetailInfoDto();
+        serviceDetail.setName("blank-create-mcp");
+        // 前置：普通创建链路 DTO 的 importConfigPending 保持缺省 null
+        assertNull(serviceDetail.getImportConfigPending());
+
+        when(serviceDao.getMcpServiceByNameAndTenant(anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        RequestContextUtils.setContext("token", "project-1", "tenant-1");
+        try {
+            McpServiceEntity entity = mcpUtil.mcpServiceDetailInfoDto2ServiceEntity(serviceDetail, "ws-1");
+
+            assertNotNull(entity);
+            assertNotNull(entity.getId());
+            // import_config_pending 为 NOT NULL 列：转换结果绝不能是 null
+            assertNotNull(entity.getImportConfigPending(),
+                "importConfigPending must never be null after DTO->Entity conversion");
+            assertEquals(Boolean.FALSE, entity.getImportConfigPending(),
+                "null importConfigPending from DTO must be normalized to false");
+
+            serviceDetail.setImportConfigPending(Boolean.TRUE);
+            assertEquals(Boolean.TRUE,
+                mcpUtil.mcpServiceDetailInfoDto2ServiceEntity(serviceDetail, "ws-1").getImportConfigPending());
+            serviceDetail.setImportConfigPending(Boolean.FALSE);
+            assertEquals(Boolean.FALSE,
+                mcpUtil.mcpServiceDetailInfoDto2ServiceEntity(serviceDetail, "ws-1").getImportConfigPending());
+        } finally {
+            RequestContextUtils.remove();
+        }
     }
 }
