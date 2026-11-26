@@ -9,6 +9,9 @@ business_error 标记（组件正常返回但该次调用失败，如 HTTP 4xx/5
 实例化/注册点在本仓（agent_runtime/observability/tracer_otel.py），故通过
 子类在 agent-studio 侧提供等价能力，openjiuwen 源码零改动（零上游依赖）。
 
+另：导入时把 FlowApi / FlowMcp 补进上游 _TOOL_SUBSTRINGS，使工作流插件与
+MCP 节点打上 gen_ai.operation.name=execute_tool（上游白名单仅含 "Tool"）。
+
 实现要点：
 - on_invoke（非异常分支）：识别 business_error 标记 → span 置 ERROR 并记录
   错误信息（只标故障事实轴，不改 openjiuwen.status 业务状态）；
@@ -42,6 +45,7 @@ import re
 from openjiuwen.core.common.logging import session_logger
 from openjiuwen.core.graph.pregel import GraphInterrupt
 from openjiuwen.core.session.tracer.data import NodeStatus
+from openjiuwen.extensions.tracer_otel import handler as _otel_handler
 from openjiuwen.extensions.tracer_otel.handler import (
     OtelWorkflowHandler,
     _build_error_summary,
@@ -57,6 +61,15 @@ from openjiuwen.extensions.tracer_otel.semconv import (
     OJ_WORKFLOW_OUTPUTS,
 )
 from opentelemetry.trace import Status, StatusCode
+
+# 工作流插件 / MCP 节点的 component_type 是 FlowApi / FlowMcp（类名），
+# 上游 _TOOL_SUBSTRINGS 仅含 "Tool"，不会打成 execute_tool。本仓补丁扩展白名单；
+# 用 dict.fromkeys 保序去重，重复 import 幂等。上游若已收录则无额外效果。
+_otel_handler._TOOL_SUBSTRINGS = tuple(
+    dict.fromkeys(
+        (*getattr(_otel_handler, "_TOOL_SUBSTRINGS", ()), "FlowApi", "FlowMcp")
+    )
+)
 
 # 业务失败标记使用的 span 属性键（与 HTTP 业务失败上报方约定的键名一致）
 OJ_BUSINESS_ERROR = "openjiuwen.workflow.business_error"

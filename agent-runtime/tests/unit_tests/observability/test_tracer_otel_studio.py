@@ -986,3 +986,32 @@ async def test_call_done_internal_error_is_swallowed_with_warning():
     assert "on_call_done failed" in warn.call_args[0][0]
     assert "attr broken" in str(warn.call_args[0][1])
     assert exporter.get_finished_spans() == ()
+
+
+# --- FlowApi / FlowMcp → execute_tool --------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("component_type", ["FlowApi", "FlowMcp"])
+async def test_flow_api_mcp_component_tagged_execute_tool(component_type):
+    """工作流插件/MCP 节点 component_type 须打 gen_ai.operation.name=execute_tool。"""
+    from openjiuwen.extensions.tracer_otel.semconv import GEN_AI_OPERATION_NAME
+
+    handler, exporter = _new_handler()
+    await _open_root(handler)
+    await handler.on_call_start(
+        COMP_ID,
+        metadata={
+            "workflow_id": "wf",
+            "component_id": COMP_ID,
+            "node_id": COMP_ID,
+            "component_type": component_type,
+            "component_name": "plugin_or_mcp",
+        },
+        inputs={"query": "hi"},
+        parent_node_id=ROOT_ID,
+    )
+    await handler.on_call_done(COMP_ID, outputs={"ok": True})
+
+    span = _finished_span(exporter, "component.plugin_or_mcp")
+    assert (span.attributes or {}).get(GEN_AI_OPERATION_NAME) == "execute_tool"
