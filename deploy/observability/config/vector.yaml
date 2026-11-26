@@ -139,12 +139,23 @@ transforms:
         event_time, parse_err = parse_timestamp(normalized_time, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: get_env_var!("APP_LOG_TIMEZONE"))
         if parse_err == null { .timestamp = event_time }
       }
-      trace_parts, trace_err = parse_regex(.message, r'^(?:[^|]*\|){4}(?P<trace_id>[^|]+)\|')
-      if trace_err == null && trace_parts.trace_id != "" && trace_parts.trace_id != "default_trace_id" { .trace_id = trace_parts.trace_id }
       request_parts, request_err = parse_regex(.message, r'(?i)request_id=(?P<request_id>[0-9a-f-]{16,})')
       if request_err == null { .request_id = request_parts.request_id }
       execution_parts, execution_err = parse_regex(.message, r'(?i)execution_id=(?P<execution_id>[0-9a-f-]{16,})')
       if execution_err == null { .execution_id = execution_parts.execution_id }
+      # 列位映射（优先于 message KV；只校验前 8 段，兼容 multiline 堆栈日志）
+      # 9 段：time|type|file|func|conversation|execution|request|level|message
+      # 7 段 perf：time|perf|trace|execution|request|level|message
+      pos9_parts, pos9_err = parse_regex(.message, r'^(?:[^|\n]*\|){4}(?P<conversation_id>[^|\n]*)\|(?:[^|\n]*)\|(?P<request_id>[^|\n]*)\|(?P<levelname>[^|\n]+)\|')
+      if pos9_err == null && pos9_parts.conversation_id != null {
+        if pos9_parts.conversation_id != "" && pos9_parts.conversation_id != "default_trace_id" { .conversation_id = pos9_parts.conversation_id }
+        if pos9_parts.request_id != null && pos9_parts.request_id != "" { .request_id = pos9_parts.request_id }
+      }
+      perf7_parts, perf7_err = parse_regex(.message, r'^[^|\n]*\|(?:perf|performance)\|(?P<trace_id>[^|\n]*)\|(?:[^|\n]*)\|(?P<request_id>[^|\n]*)\|[^|\n]*\|')
+      if perf7_err == null && perf7_parts.trace_id != null {
+        if perf7_parts.trace_id != "" && perf7_parts.trace_id != "default_trace_id" { .trace_id = perf7_parts.trace_id }
+        if perf7_parts.request_id != null && perf7_parts.request_id != "" { .request_id = perf7_parts.request_id }
+      }
 
   console_fields:
     type: remap

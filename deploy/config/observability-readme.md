@@ -116,7 +116,9 @@ Grafana → Explore → VictoriaLogs datasource：
 _stream:{service="manager"}        # 按 service 过滤（LogsQL stream filter）
 _stream:{service="runtime"} WARN   # runtime 的 WARN 日志（全文搜索）
 _stream:{service="mysql"}          # MySQL 容器标准输出
-trace_id:="<完整 trace_id>"         # 按 trace 精确查询
+conversation_id:="<会话号>"          # 按会话查询（runtime 9 段日志，改版后）
+request_id:="<请求号>"               # 按请求查询（跨版本可用）
+trace_id:="<完整 trace_id>"          # 按 trace 查询（manager/perf 等含该字段的日志）
 WARN                                # 所有服务的 WARN
 ```
 

@@ -20,8 +20,8 @@
         "query": ".*", "current": {"text": ".*", "value": ".*"}
       },
       {
-        "name": "trace", "label": "Trace ID", "type": "textbox",
-        "query": "请输入trace_id", "current": {"text": "请输入trace_id", "value": "请输入trace_id"}
+        "name": "trace", "label": "会话/请求/追踪 ID", "type": "textbox",
+        "query": "请输入 conversation_id / request_id / trace_id", "current": {"text": "请输入 conversation_id / request_id / trace_id", "value": "请输入 conversation_id / request_id / trace_id"}
       }
     ]
   },
@@ -78,10 +78,10 @@
       "options": {"showTime": true, "wrapLogMessage": true}
     },
     {
-      "id": 7, "type": "logs", "title": "Trace 精确查询",
-      "description": "在顶部 Trace ID 输入框粘贴完整 trace_id。",
+      "id": 7, "type": "logs", "title": "ID 精确查询",
+      "description": "顶部输入会话号(conversation_id，runtime 9 段日志)、请求号(request_id，跨版本)或 trace_id(manager/perf 等含该字段的日志)。",
       "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
-      "targets": [{"refId": "A", "queryType": "instant", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} trace_id:=\"$trace\""}],
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} (conversation_id:=\"$trace\" OR request_id:=\"$trace\" OR trace_id:=\"$trace\")"}],
       "gridPos": {"x": 0, "y": 36, "w": 24, "h": 8},
       "options": {"showTime": true, "wrapLogMessage": true}
     }

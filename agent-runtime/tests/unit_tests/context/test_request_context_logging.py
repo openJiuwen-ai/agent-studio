@@ -235,7 +235,7 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             COMMON_LOG_FORMAT,
             "%(asctime)s,%(msecs)03d|%(log_type)s|%(filename)s:%(lineno)d|%(funcName)s|"
-            "%(trace_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|"
+            "%(conversation_id)s|%(execution_id)s|%(request_id)s|%(levelname)s|"
             "%(message)s",
         )
         self.assertEqual(
@@ -323,3 +323,187 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
             return {"type": "http.request", "body": body, "more_body": False}
 
         return receive
+
+    # ── BUG2026112312077-12127：对外日志第 5 段恢复为 conversation_id ──
+
+    def test_common_log_format_places_conversation_id_in_fifth_slot(self):
+        """COMMON 格式第 5 段必须是 conversation_id，且整体仍为 9 段、levelname 在第 8 段。"""
+        segments = COMMON_LOG_FORMAT.split("|")
+        self.assertEqual(len(segments), 9)
+        self.assertEqual(segments[4], "%(conversation_id)s")
+        self.assertEqual(segments[5], "%(execution_id)s")
+        self.assertEqual(segments[6], "%(request_id)s")
+        self.assertEqual(segments[7], "%(levelname)s")
+        # 第 5 槽是“替换”而非“新增”：trace_id 不得再出现在 COMMON 格式中
+        self.assertNotIn("%(trace_id)s", COMMON_LOG_FORMAT)
+
+    def test_performance_log_format_keeps_trace_id_in_third_slot(self):
+        """PERFORMANCE 格式保持 7 段，第 3 段仍为 trace_id（不受本次改动影响）。"""
+        segments = PERFORMANCE_LOG_FORMAT.split("|")
+        self.assertEqual(len(segments), 7)
+        self.assertEqual(segments[2], "%(trace_id)s")
+        self.assertEqual(segments[5], "%(levelname)s")
+        self.assertNotIn("%(conversation_id)s", PERFORMANCE_LOG_FORMAT)
+
+    def _make_record_with_ctx(self, context, msg="hello"):
+        """真实链路：生产 record_factory 产出 LogRecord（注入 ctx 字段）。"""
+        install_request_id_log_record_factory()
+        token = _request_ctx.set(context)
+        self.addCleanup(_request_ctx.reset, token)
+        return logging.getLogRecordFactory()(
+            "workflow",
+            logging.INFO,
+            __file__,
+            1,
+            msg,
+            (),
+            None,
+        )
+
+    def test_record_factory_injects_conversation_id_when_present(self):
+        """conversation_id 有值时原样注入，不被 execution_id 覆盖。"""
+        from agent_runtime.context.request_context import RequestContext
+
+        record = self._make_record_with_ctx(
+            RequestContext(
+                conversation_id="conv-abc",
+                execution_id="exec-abc",
+                request_id="req-abc",
+            )
+        )
+
+        self.assertEqual(record.conversation_id, "conv-abc")
+        self.assertEqual(record.execution_id, "exec-abc")
+        self.assertEqual(record.request_id, "req-abc")
+
+    def test_record_factory_keeps_conversation_id_empty_when_absent(self):
+        """无会话时第 5 段留空（对齐 Versatile lite），不回退 execution_id。"""
+        from agent_runtime.context.request_context import RequestContext
+
+        record = self._make_record_with_ctx(
+            RequestContext(
+                conversation_id="",
+                execution_id="exec-fallback",
+                request_id="req-fallback",
+            )
+        )
+
+        self.assertEqual(record.conversation_id, "")
+        self.assertEqual(record.execution_id, "exec-fallback")
+
+    @staticmethod
+    def _render_common(record):
+        """走真实 core ContextFilter（补 log_type/trace_id）+ MaskingFormatter 渲染。"""
+        from openjiuwen.core.common.logging.default.default_impl import ContextFilter
+        from jiuwen.common.log.base import MaskingFormatter
+
+        ContextFilter("common").filter(record)
+        return MaskingFormatter(
+            fmt=COMMON_LOG_FORMAT,
+            datefmt="%Y-%m-%d %H:%M:%S",
+            truncate_for_console=False,
+        ).format(record)
+
+    def test_real_chain_renders_conversation_id_in_fifth_segment(self):
+        """record_factory + ContextFilter + MaskingFormatter：conversation_id 落在第 5 段。"""
+        from unittest.mock import patch
+        from agent_runtime.context.request_context import RequestContext
+
+        record = self._make_record_with_ctx(
+            RequestContext(
+                conversation_id="conv-real-1",
+                trace_id="trace-real-1",
+                execution_id="exec-real-1",
+                request_id="req-real-1",
+            )
+        )
+        with patch(
+            "openjiuwen.core.common.logging.default.default_impl.get_session_id",
+            return_value="trace-real-1",
+        ):
+            line = self._render_common(record)
+
+        segments = line.split("|")
+        self.assertEqual(len(segments), 9)
+        self.assertEqual(segments[4], "conv-real-1")
+        self.assertEqual(segments[5], "exec-real-1")
+        self.assertEqual(segments[6], "req-real-1")
+        self.assertEqual(segments[7], "INFO")
+        self.assertEqual(segments[8], "hello")
+
+    def test_real_chain_keeps_fifth_segment_empty_without_conversation(self):
+        """真实链路下无会话时第 5 段留空，且不与第 6 段 execution_id 重复。"""
+        from unittest.mock import patch
+        from agent_runtime.context.request_context import RequestContext
+
+        record = self._make_record_with_ctx(
+            RequestContext(
+                conversation_id="",
+                execution_id="exec-real-fb",
+                request_id="req-real-fb",
+            )
+        )
+        with patch(
+            "openjiuwen.core.common.logging.default.default_impl.get_session_id",
+            return_value="trace-real-2",
+        ):
+            line = self._render_common(record)
+
+        segments = line.split("|")
+        self.assertEqual(segments[4], "")
+        self.assertEqual(segments[5], "exec-real-fb")
+        self.assertNotEqual(segments[4], segments[5])
+
+    def test_real_chain_does_not_repeat_value_when_trace_equals_request(self):
+        """trace_id 与 request_id 相同时，COMMON 行内该值最多出现 1 次（不再泄露 trace 段）。"""
+        from unittest.mock import patch
+        from agent_runtime.context.request_context import RequestContext
+
+        duplicated = "same-value-12127"
+        record = self._make_record_with_ctx(
+            RequestContext(
+                conversation_id="conv-unique",
+                trace_id=duplicated,
+                execution_id="exec-unique",
+                request_id=duplicated,
+            )
+        )
+        with patch(
+            "openjiuwen.core.common.logging.default.default_impl.get_session_id",
+            return_value=duplicated,
+        ):
+            line = self._render_common(record)
+
+        segments = line.split("|")
+        self.assertEqual(segments[4], "conv-unique")
+        self.assertEqual(segments[6], duplicated)
+        self.assertEqual(line.count(duplicated), 1)
+        self.assertNotEqual(segments[4], duplicated)
+        self.assertNotEqual(segments[5], duplicated)
+
+    def test_vector_runtime_rules_are_aligned(self):
+        """两份 Vector 的 runtime 列位规则必须同源，且不得回退到旧的 9 段 trace 规则。"""
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[4]
+        files = [
+            root / "deploy/config/vector.yaml",
+            root / "deploy/observability/config/vector.yaml",
+        ]
+        rules = []
+        for f in files:
+            text = f.read_text(encoding="utf-8")
+            lines = [
+                line.strip()
+                for line in text.splitlines()
+                if line.strip().startswith(("pos9_parts,", "perf7_parts,"))
+            ]
+            self.assertEqual(len(lines), 2, "%s 缺少 9 段/perf 列位规则" % f)
+            joined = "\n".join(lines)
+            self.assertIn("(?:[^|\\n]*\\|){4}", joined)
+            self.assertIn("(?:perf|performance)", joined)
+            self.assertIn("(?P<conversation_id>[^|\\n]*)", joined)
+            self.assertIn("(?P<request_id>[^|\\n]*)", joined)
+            self.assertNotIn("(?P<trace_id>[^|]+)\\|')", text)
+            rules.append(lines)
+        self.assertEqual(rules[0], rules[1], "两份 Vector 规则不一致")
