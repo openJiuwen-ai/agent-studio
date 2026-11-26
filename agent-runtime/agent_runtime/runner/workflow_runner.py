@@ -804,10 +804,21 @@ class WorkflowRunner:
                 except Exception:  # noqa: BLE001 - 释放失败不阻断主流程
                     pass
 
-    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
-        """执行 IR 工作流并返回完整结果"""
+    async def run_blocking(
+        self,
+        req: ExecutionRequest,
+        execution_id: str | None = None,
+        env_scope: dict | None = None,
+    ) -> str:
+        """执行 IR 工作流并返回完整结果。
+
+        ``execution_id`` 须与 API 层请求级 ID 一致并透传给 ``run_streaming``，
+        否则会回退 ``session_id``，同 conversation 并发非流式会共享 OTel scope。
+        """
         result_parts = []
-        async for chunk in self.run_streaming(req, env_scope=env_scope):
+        async for chunk in self.run_streaming(
+            req, execution_id=execution_id, env_scope=env_scope
+        ):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
             if event in ("message", "done"):

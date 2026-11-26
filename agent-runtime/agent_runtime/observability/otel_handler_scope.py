@@ -53,15 +53,32 @@ def current_execution_scope() -> str:
     return otel_context.get_value(EXEC_SCOPE_KEY) or _UNSCOPED
 
 
-def release_execution_scope(execution_id: str) -> None:
-    """执行结束时释放对应子 handler，避免 LRU 挤出前长期占坑。"""
+def _handler_has_live_spans(handler: Any) -> bool:
+    """上游在 QA 中断时有意保留未收尾 mapping / span，供 resume 复用同一 OTel trace。"""
+    for attr in ("_layer_root_spans", "_component_spans"):
+        mapping = getattr(handler, attr, None)
+        if isinstance(mapping, dict) and mapping:
+            return True
+    mgr = getattr(handler, "_span_manager", None)
+    spans = getattr(mgr, "_spans", None) if mgr is not None else None
+    return isinstance(spans, dict) and bool(spans)
+
+
+def release_execution_scope(execution_id: str, *, force: bool = False) -> bool:
+    """执行结束时释放对应子 handler。
+
+    默认若仍有 live span（QA 中断 / 客户端提前关闭），保留 keyed 子 handler 与
+    ``_cached_root_ctx``，避免 resume 同 exec_id 时被拆成新 OTel trace。
+    返回是否真正释放。
+    """
     try:
         from openjiuwen.core.session.tracer import TracerHandlerRegistry
     except ImportError:  # pragma: no cover
-        return
+        return False
     dispatcher = TracerHandlerRegistry.get_workflow_handlers().get("otel_workflow")
     if isinstance(dispatcher, ExecutionScopedWorkflowHandler):
-        dispatcher.release_execution_scope(execution_id)
+        return dispatcher.release_execution_scope(execution_id, force=force)
+    return False
 
 
 def stamp_current_scope_identity(
@@ -129,20 +146,39 @@ class ExecutionScopedWorkflowHandler(TraceExtWorkflowHandler):
                     handler.set_session_id(self._pending_session_id)
                 self._handlers[scope] = handler
             self._handlers.move_to_end(scope)
-            while len(self._handlers) > self._max_scopes:
-                _, evicted = self._handlers.popitem(last=False)
-                cleanup = getattr(evicted, "_cleanup_stale_spans", None)
-                if callable(cleanup):
-                    cleanup()
+            self._evict_idle_overflow_locked()
             return handler
 
-    def release_execution_scope(self, execution_id: str) -> None:
-        with self._lock:
-            handler = self._handlers.pop(execution_id, None)
-        if handler is not None:
-            cleanup = getattr(handler, "_cleanup_stale_spans", None)
+    def _evict_idle_overflow_locked(self) -> None:
+        """LRU 淘汰空闲 scope；有 live span 的保留（QA resume / 未收尾）。"""
+        while len(self._handlers) > self._max_scopes:
+            evict_key = None
+            for key, candidate in self._handlers.items():
+                if not _handler_has_live_spans(candidate):
+                    evict_key = key
+                    break
+            if evict_key is None:
+                # 全部 live：允许暂时超过 max_scopes，避免拆 resume trace
+                break
+            evicted = self._handlers.pop(evict_key)
+            cleanup = getattr(evicted, "_cleanup_stale_spans", None)
             if callable(cleanup):
                 cleanup()
+
+    def release_execution_scope(self, execution_id: str, *, force: bool = False) -> bool:
+        with self._lock:
+            handler = self._handlers.get(execution_id)
+            if handler is None:
+                return False
+            if not force and _handler_has_live_spans(handler):
+                # 中断/提前关闭：保留状态供同 exec_id 恢复
+                self._handlers.move_to_end(execution_id)
+                return False
+            self._handlers.pop(execution_id, None)
+        cleanup = getattr(handler, "_cleanup_stale_spans", None)
+        if callable(cleanup):
+            cleanup()
+        return True
 
     def set_trace_id(self, trace_id: str) -> None:
         self._pending_trace_id = trace_id

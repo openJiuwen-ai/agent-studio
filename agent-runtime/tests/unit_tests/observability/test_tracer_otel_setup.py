@@ -400,4 +400,80 @@ class TestExecutionScopedWorkflowIsolation:
             assert child._session_id == "sess-1"
         finally:
             otel_context.detach(token)
-            release_execution_scope("exec-1")
+            release_execution_scope("exec-1", force=True)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_release_preserves_live_handler_for_resume():
+        """有 live span 时 release 不 pop；同 exec_id 再 attach 复用子 handler 与 cached root。"""
+        wf_id = "wf_resume"
+        exporter, dispatcher = (
+            TestExecutionScopedWorkflowIsolation._register_scoped("scope-resume")
+        )
+        tracer = Tracer(session_id="sess-r", trace_id="trace-r")
+        tracer.init()
+        root_meta = {"workflow_id": wf_id, "workflow_name": "wf"}
+
+        token = attach_execution_scope(
+            "exec-r", trace_id="trace-r", session_id="sess-r"
+        )
+        try:
+            await tracer.trigger(
+                _WF, "on_call_start", invoke_id=wf_id, metadata=root_meta,
+                inputs={"q": "ask"}, parent_node_id="",
+            )
+            child = dispatcher._handlers["exec-r"]
+            cached = child._cached_root_ctx
+            assert cached is not None
+            assert child._layer_root_spans
+        finally:
+            otel_context.detach(token)
+
+        # 模拟 QA 中断 / 客户端关闭：finally 调用 release，但不得拆掉 live 状态
+        assert release_execution_scope("exec-r") is False
+        assert "exec-r" in dispatcher._handlers
+        assert dispatcher._handlers["exec-r"] is child
+        assert child._cached_root_ctx is cached
+
+        # resume：同 exec/trace 再 attach，必须复用原子 handler 与 cached root
+        token = attach_execution_scope(
+            "exec-r", trace_id="trace-r", session_id="sess-r"
+        )
+        try:
+            assert dispatcher._handlers["exec-r"] is child
+            assert child._cached_root_ctx is cached
+            await tracer.trigger(
+                _WF, "on_call_done", invoke_id=wf_id,
+                outputs={"out": "done"}, parent_node_id="",
+            )
+        finally:
+            otel_context.detach(token)
+
+        assert release_execution_scope("exec-r") is True
+        assert "exec-r" not in dispatcher._handlers
+        finished = list(exporter.get_finished_spans())
+        assert any(s.name == wf_id for s in finished)
+        # 只有一条 root（未被 release 提前 end 后再造一条）
+        assert len([s for s in finished if s.name == wf_id]) == 1
+
+@pytest.mark.asyncio
+async def test_run_blocking_forwards_execution_id(monkeypatch):
+    """非流式路径须把 API 层 execution_id 透传给 run_streaming（隔离 scope）。"""
+    from agent_runtime.runner.workflow_runner import WorkflowRunner
+
+    runner = WorkflowRunner(MagicMock())
+    seen = {}
+
+    async def fake_stream_gen(req, execution_id=None, env_scope=None):
+        seen["execution_id"] = execution_id
+        seen["env_scope"] = env_scope
+        yield {"event": "done", "data": {"answer": "ok"}}
+
+    monkeypatch.setattr(runner, "run_streaming", fake_stream_gen)
+    text = await runner.run_blocking(
+        MagicMock(), execution_id="exec-unique", env_scope={"k": 1}
+    )
+    assert text == "ok"
+    assert seen["execution_id"] == "exec-unique"
+    assert seen["env_scope"] == {"k": 1}
+
