@@ -9,8 +9,9 @@ business_error 标记（组件正常返回但该次调用失败，如 HTTP 4xx/5
 实例化/注册点在本仓（agent_runtime/observability/tracer_otel.py），故通过
 子类在 agent-studio 侧提供等价能力，openjiuwen 源码零改动（零上游依赖）。
 
-另：导入时把 FlowApi / FlowMcp 补进上游 _TOOL_SUBSTRINGS，使工作流插件与
-MCP 节点打上 gen_ai.operation.name=execute_tool（上游白名单仅含 "Tool"）。
+另：在 on_call_start 中对 FlowApi / FlowMcp 组件补写
+gen_ai.operation.name=execute_tool（上游白名单仅含 "Tool"，且不得在仓外改其
+受保护成员，见 G.CLS.11）。
 
 实现要点：
 - on_invoke（非异常分支）：识别 business_error 标记 → span 置 ERROR 并记录
@@ -45,7 +46,6 @@ import re
 from openjiuwen.core.common.logging import session_logger
 from openjiuwen.core.graph.pregel import GraphInterrupt
 from openjiuwen.core.session.tracer.data import NodeStatus
-from openjiuwen.extensions.tracer_otel import handler as _otel_handler
 from openjiuwen.extensions.tracer_otel.handler import (
     OtelWorkflowHandler,
     _build_error_summary,
@@ -54,6 +54,7 @@ from openjiuwen.extensions.tracer_otel.handler import (
 )
 from openjiuwen.extensions.tracer_otel.redaction import redact
 from openjiuwen.extensions.tracer_otel.semconv import (
+    GEN_AI_OPERATION_NAME,
     GEN_AI_RETRIEVAL_DOCUMENTS,
     OJ_PARENT_NODE_ID,
     OJ_STATUS,
@@ -62,14 +63,9 @@ from openjiuwen.extensions.tracer_otel.semconv import (
 )
 from opentelemetry.trace import Status, StatusCode
 
-# 工作流插件 / MCP 节点的 component_type 是 FlowApi / FlowMcp（类名），
-# 上游 _TOOL_SUBSTRINGS 仅含 "Tool"，不会打成 execute_tool。本仓补丁扩展白名单；
-# 用 dict.fromkeys 保序去重，重复 import 幂等。上游若已收录则无额外效果。
-_otel_handler._TOOL_SUBSTRINGS = tuple(
-    dict.fromkeys(
-        (*getattr(_otel_handler, "_TOOL_SUBSTRINGS", ()), "FlowApi", "FlowMcp")
-    )
-)
+# 工作流插件 / MCP：component_type 为类名，上游仅按 "Tool" 子串打 execute_tool
+_WORKFLOW_TOOL_COMPONENT_TYPES = frozenset({"FlowApi", "FlowMcp"})
+_OPERATION_NAME_EXECUTE_TOOL = "execute_tool"
 
 # 业务失败标记使用的 span 属性键（与 HTTP 业务失败上报方约定的键名一致）
 OJ_BUSINESS_ERROR = "openjiuwen.workflow.business_error"
@@ -111,7 +107,20 @@ class StudioOtelWorkflowHandler(OtelWorkflowHandler):
             **kwargs,
         )
         state = self._span_manager.get(invoke_id)
-        if state is None or self._layer_root_spans.get(invoke_id) is not state:
+        if state is None:
+            return
+
+        # 插件/MCP 工作流节点：补齐 execute_tool（不改上游受保护白名单，避 G.CLS.11）
+        component_type = (metadata or {}).get("component_type", "")
+        if (
+            component_type in _WORKFLOW_TOOL_COMPONENT_TYPES
+            and state.span.is_recording()
+        ):
+            state.span.set_attribute(
+                GEN_AI_OPERATION_NAME, _OPERATION_NAME_EXECUTE_TOOL
+            )
+
+        if self._layer_root_spans.get(invoke_id) is not state:
             return
         span_ctx = state.span.get_span_context()
         if span_ctx is None or not span_ctx.is_valid:
