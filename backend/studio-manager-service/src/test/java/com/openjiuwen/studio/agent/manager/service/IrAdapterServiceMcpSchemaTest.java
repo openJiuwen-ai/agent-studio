@@ -9,6 +9,8 @@ import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -16,6 +18,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -83,6 +88,41 @@ class IrAdapterServiceMcpSchemaTest {
             assertEquals(true, find(items.get("schema"), "name").get("required"));
             assertEquals("integer", find(items.get("schema"), "size").get("type"));
             assertEquals(false, find(items.get("schema"), "size").get("required"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", ",\"items\":null", ",\"items\":{}"})
+    void arraysWithoutItemConstraintsOmitItemSchemaInInputAndOutput(String items) {
+        for (String type : List.of("\"array\"", "[\"null\",\"array\"]", "[\"array\",\"null\"]")) {
+            String schema = "{\"type\":\"object\",\"required\":[\"files\"],\"properties\":{\"files\":{"
+                + "\"type\":" + type + items + "}}}";
+            Map<String, Object> result = adapt(schema, schema);
+            for (String key : List.of("arguments", "response")) {
+                Map<String, Object> files = find(result.get(key), "files");
+                assertEquals("array", files.get("type"));
+                assertEquals(true, files.get("required"));
+                assertFalse(files.containsKey("schema"));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "{\"properties\":{\"name\":{\"type\":\"string\"}}}",
+        "{\"oneOf\":[{\"type\":\"object\"},{\"type\":\"null\"}]}",
+        "{\"type\":null,\"properties\":{\"name\":{\"type\":\"string\"}}}", "{\"type\":\"\"}"
+    })
+    void constrainedArrayItemsWithoutATypeFailBeforeInputOrOutputIrIsEmitted(String items) {
+        String empty = "{\"type\":\"object\",\"properties\":{}}";
+        String schema = "{\"type\":\"object\",\"properties\":{\"files\":{"
+            + "\"type\":[\"null\",\"array\"],\"items\":" + items + "}}}";
+        IllegalArgumentException inputError = assertThrows(IllegalArgumentException.class,
+            () -> adapt(schema, empty));
+        IllegalArgumentException outputError = assertThrows(IllegalArgumentException.class,
+            () -> adapt(empty, schema));
+        for (IllegalArgumentException error : List.of(inputError, outputError)) {
+            assertTrue(error.getMessage().contains("$.properties[\"files\"].items.type"));
         }
     }
 

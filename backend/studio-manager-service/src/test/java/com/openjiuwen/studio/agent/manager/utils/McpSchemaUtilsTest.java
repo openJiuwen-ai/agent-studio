@@ -104,6 +104,28 @@ class McpSchemaUtilsTest {
         assertEquals("integer", McpSchemaUtils.parseWorkflowSchema("{\"type\":[\"integer\"]}").getType());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", ",\"items\":null", ",\"items\":{}"})
+    void nullableArrayWithoutItemConstraintsKeepsItemsAbsent(String items) {
+        SchemaConfig parsed = McpSchemaUtils.parseWorkflowSchema("{\"type\":[\"null\",\"array\"]" + items + "}");
+        assertEquals("array", parsed.getType());
+        assertNull(parsed.getItems());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "{\"properties\":{\"name\":{\"type\":\"string\"}}}",
+        "{\"oneOf\":[{\"type\":\"object\"},{\"type\":\"null\"}]}",
+        "{\"type\":null}", "{\"type\":\"\"}"
+    })
+    void constrainedArrayItemsWithoutATypeFailWithTheirPath(String items) {
+        String schema = "{\"type\":\"object\",\"properties\":{\"files\":{"
+            + "\"type\":[\"null\",\"array\"],\"items\":" + items + "}}}";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> McpSchemaUtils.parseWorkflowSchema(schema));
+        assertTrue(error.getMessage().contains("$.properties[\"files\"].items.type"));
+    }
+
     @Test
     void preservesExistingOneOfRepresentation() {
         SchemaConfig parsed = McpSchemaUtils.parseWorkflowSchema("""

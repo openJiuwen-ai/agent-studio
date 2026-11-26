@@ -42,6 +42,16 @@ public final class McpSchemaUtils {
         }
         if (schema.get("items") instanceof JSONObject items) {
             normalize(items, path + ".items");
+            if ("array".equals(schema.get("type"))) {
+                if (items.isEmpty()) {
+                    // An empty item schema imposes no constraints, like omitted items.
+                    schema.remove("items");
+                } else if (!(items.get("type") instanceof String itemType) || itemType.isBlank()) {
+                    // Do not guess object/union types or silently discard item constraints.
+                    throw new IllegalArgumentException("Unsupported MCP array item schema at " + path
+                        + ".items.type: constrained items require an explicit type for workflow IR");
+                }
+            }
         }
         if (schema.get("oneOf") instanceof JSONArray alternatives) {
             for (int i = 0; i < alternatives.size(); i++) {
