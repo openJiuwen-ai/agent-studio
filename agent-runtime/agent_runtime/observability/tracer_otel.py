@@ -16,6 +16,8 @@ _setup_lock = threading.Lock()
 _per_tracer_isolation_installed = False
 # 保存未 patch 的 Tracer.init；不用函数对象挂 _xxx 属性（触发 G.CLS.11）。
 _orig_tracer_init: Optional[Any] = None
+# 序列化「上游 init（改写共享模板身份）+ 克隆替换」：避免并发 init 串 identity。
+_tracer_init_clone_lock = threading.Lock()
 
 
 def setup_otel_tracer() -> Optional[Any]:
@@ -112,10 +114,11 @@ def _create_otel_tracer() -> Optional[Any]:
         "otel_workflow", _workflow_handler_cls(otel_tracer, config)
     )
 
-    # 注册全部成功后再写入单例：否则注册抛异常会留下半初始化缓存，
-    # 后续调用直接返回 tracer 而跳过注册，agent/workflow span 静默不再导出。
-    _otel_tracer = otel_tracer
+    # 先装隔离再发布单例：外层 if _otel_tracer is not None 不进锁，若先发布
+    # 其它线程会走快速路径拿到「已有 tracer、尚未 patch」的窗口。
     _install_per_tracer_handler_isolation()
+    # 注册+隔离都成功后再写入单例：否则半初始化缓存会让后续调用跳过注册。
+    _otel_tracer = otel_tracer
 
     logger.info(
         f"OpenTelemetry tracer initialized: "
@@ -186,6 +189,13 @@ def _install_per_tracer_handler_isolation() -> None:
     Studio cannot change agent-core here; cloning after ``init`` gives each
     Tracer isolated mutable state while still sharing the process-wide OTel
     tracer / exporter / config.
+
+    为何不用「无状态分发器」替代 patch：registry 合同仍是注入同一实例；事件
+    kwargs 的 invoke_id 是静态业务 ID，分发器无法按执行维 demux，且
+    ``set_trace_id`` 写在共享对象上，并发下与共享模板同样会串号。根治需
+    upstream 在 ``Tracer.init`` 按模板工厂化；本仓 patch 是过渡方案。
+    「上游 init + 克隆」必须在同一把锁内完成，否则并发 init 会在克隆前覆盖
+    模板上的 trace/session 身份。
     """
     global _per_tracer_isolation_installed, _orig_tracer_init
     if _per_tracer_isolation_installed:
@@ -199,10 +209,12 @@ def _install_per_tracer_handler_isolation() -> None:
 
     saved_init = Tracer.init
     _orig_tracer_init = saved_init
+    init_lock = _tracer_init_clone_lock
 
     def _init_with_cloned_otel_handlers(self, stream_writer_manager=None):
-        saved_init(self, stream_writer_manager)
-        _replace_handlers_with_clones(self)
+        with init_lock:
+            saved_init(self, stream_writer_manager)
+            _replace_handlers_with_clones(self)
 
     Tracer.init = _init_with_cloned_otel_handlers  # type: ignore[method-assign]
     _per_tracer_isolation_installed = True
