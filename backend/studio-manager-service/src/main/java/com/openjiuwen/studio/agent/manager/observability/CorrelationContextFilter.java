@@ -70,7 +70,11 @@ public class CorrelationContextFilter extends OncePerRequestFilter {
             String headerRequestId = request.getHeader(REQUEST_ID_HEADER);
             requestId = CorrelationIdValidator.isValid(headerRequestId) ? headerRequestId
                 : UUID.randomUUID().toString();
-            String headerTraceId = request.getHeader(TRACE_ID_HEADER);
+            // issue 1754：X-Correlation-Id 为规范名，优先读取；TraceID 过渡期兼容
+            String headerTraceId = request.getHeader(CorrelationHeaderProvider.CORRELATION_ID_HEADER);
+            if (headerTraceId == null || headerTraceId.isEmpty()) {
+                headerTraceId = request.getHeader(TRACE_ID_HEADER);
+            }
             traceId = CorrelationIdValidator.isValid(headerTraceId) ? headerTraceId : requestId;
             request.setAttribute(REQUEST_ID_ATTRIBUTE, requestId);
             request.setAttribute(TRACE_ID_ATTRIBUTE, traceId);
@@ -87,6 +91,8 @@ public class CorrelationContextFilter extends OncePerRequestFilter {
             ? response
             : new SingleValueCorrelationResponseWrapper(response);
         effectiveResponse.setHeader(REQUEST_ID_HEADER, requestId);
+        // issue 1754：双写——规范名 X-Correlation-Id + 过渡期兼容 TraceID（同值）
+        effectiveResponse.setHeader(CorrelationHeaderProvider.CORRELATION_ID_HEADER, traceId);
         effectiveResponse.setHeader(TRACE_ID_HEADER, traceId);
         try (MdcScope scope = MdcScope.open(Map.of(
             MdcKeys.REQUEST_ID, requestId,

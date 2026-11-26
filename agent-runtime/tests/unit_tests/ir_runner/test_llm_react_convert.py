@@ -45,6 +45,11 @@ class TestConvertLlmReactNode:
         ), patch(
             "openjiuwen.core.foundation.llm.Model", return_value=mock_model
         ) as mock_model_cls, patch(
+            # issue 1752：model 会被 OTel 装饰包装；本用例校验字段映射与注入，
+            # 将包装 passthrough 以保持 "注入的即同一 model 实例" 断言
+            "agent_runtime.common.trace_compat.build_traced_model",
+            side_effect=lambda _m, **_kw: _m,
+        ), patch(
             "openjiuwen.core.runner.Runner"
         ) as mock_runner_cls, patch(
             "jiuwen.serve.controllers.execution.ir_converter.FlowAgent"

@@ -163,6 +163,32 @@ class CorrelationHeaderProviderTest {
     }
 
     @Test
+    void apply_dualWritesCorrelationIdWithTraceValue() {
+        fullMdc();
+        MapSink sink = new MapSink();
+
+        CorrelationHeaderProvider.apply(
+            CorrelationHeaderProvider.provide(OutboundCorrelationPolicy.RUNTIME_EXECUTION), sink);
+
+        // issue 1754：规范名 X-Correlation-Id 与过渡期 TraceID 同值双写
+        assertThat(sink.getFirst(CorrelationHeaderProvider.CORRELATION_ID_HEADER)).isEqualTo("trace-1");
+        assertThat(sink.getFirst(CorrelationHeaderProvider.TRACE_ID_HEADER)).isEqualTo("trace-1");
+    }
+
+    @Test
+    void apply_removesForgedCorrelationIdVariant() {
+        fullMdc();
+        MapSink sink = new MapSink();
+        sink.seed("x-correlation-id", "forged");
+
+        CorrelationHeaderProvider.apply(
+            CorrelationHeaderProvider.provide(OutboundCorrelationPolicy.RUNTIME_EXECUTION), sink);
+
+        assertThat(sink.countValues(CorrelationHeaderProvider.CORRELATION_ID_HEADER)).isEqualTo(1);
+        assertThat(sink.getFirst(CorrelationHeaderProvider.CORRELATION_ID_HEADER)).isEqualTo("trace-1");
+    }
+
+    @Test
     void apply_nonExecution_leavesExecutionAbsent_evenIfSinkHadIt() {
         fullMdc();
         MapSink sink = new MapSink();

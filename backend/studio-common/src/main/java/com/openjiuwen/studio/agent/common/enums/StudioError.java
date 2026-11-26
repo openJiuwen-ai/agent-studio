@@ -683,6 +683,11 @@ public enum StudioError {
      */
     DOWNSTREAM_DEPENDENCY_FAILED(BAD_GATEWAY, COMMON, "1131"),
 
+    /**
+     * 下游响应格式不符合约定（2xx 响应无法按约定协议解析，如期望 JSON 却收到 SSE）
+     */
+    DOWNSTREAM_RESPONSE_INVALID(BAD_GATEWAY, COMMON, "1134"),
+
 
     /**
      * ============================== AGENT ==============================

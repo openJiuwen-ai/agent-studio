@@ -216,14 +216,28 @@ class EventHandler:
         finally:
             await self._close_body_iterator(body_iterator)
 
-    async def get_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> StreamingResponse:
+    async def get_stream_result(
+        self,
+        handler_type: str,
+        body_iterator: AsyncGenerator,
+        headers: dict = None,
+    ) -> StreamingResponse:
         transformed_iterator = self.get_handler_body_iterator(
             handler_type=handler_type,
             body_iterator=body_iterator,
         )
-        return StreamingResponse(content=transformed_iterator, media_type="text/event-stream")
+        return StreamingResponse(
+            content=transformed_iterator,
+            media_type="text/event-stream",
+            headers=headers or None,
+        )
 
-    async def get_non_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> Any:
+    async def get_non_stream_result(
+        self,
+        handler_type: str,
+        body_iterator: AsyncGenerator,
+        headers: dict = None,
+    ) -> Any:
         """Consume stream fully, aggregate into NonStreamingResponse."""
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
@@ -256,7 +270,11 @@ class EventHandler:
         non_stream_output.setdefault("node_info", [])
         non_stream_output.setdefault("events", [])
         response = NonStreamingResponse.model_construct(**non_stream_output)
-        return JSONResponse(content=response.model_dump(exclude_none=True, by_alias=True))
+        # issue 1754：非流式同样要把上游 OTel 响应头带到下游（原实现丢弃 headers）
+        return JSONResponse(
+            content=response.model_dump(exclude_none=True, by_alias=True),
+            headers=headers or None,
+        )
 
     @classmethod
     async def encapsulate_stream_response(
@@ -275,9 +293,13 @@ class EventHandler:
             ir_path=ir_path,
             query=query,
         )
+        extra_headers = getattr(response, "headers", None)
+        if extra_headers is not None and not isinstance(extra_headers, dict):
+            extra_headers = dict(extra_headers)
         return await handler.get_stream_result(
             handler_type=handler_type,
             body_iterator=response.body_iterator,
+            headers=extra_headers,
         )
 
     @classmethod
@@ -297,7 +319,11 @@ class EventHandler:
             ir_path=ir_path,
             query=query,
         )
+        extra_headers = getattr(response, "headers", None)
+        if extra_headers is not None and not isinstance(extra_headers, dict):
+            extra_headers = dict(extra_headers)
         return await handler.get_non_stream_result(
             handler_type=handler_type,
             body_iterator=response.body_iterator,
+            headers=extra_headers,
         )

@@ -161,16 +161,19 @@ class RuntimeUserIdStreamProfileMatrixTest {
                 MdcScope scope = mock(MdcScope.class);
                 when(agentServiceProxyService.establishExecutionScope(any(HttpHeaders.class))).thenReturn(scope);
                 when(runtimeClient.runWorkflowWithConversation(any(), any(), any(), any(), any(), any(), any(), any(),
-                    any())).thenReturn(ResponseEntity.ok("feign-ok"));
+                    any(), any(), any())).thenReturn(ResponseEntity.ok("feign-ok"));
 
                 Object result = controller.runWorkflowWithConversation("p0", "ws0", "env0", "wf0", "c0", null, false,
                     body, inbound);
 
-                assertThat(result).isEqualTo("feign-ok");
+                // 非流式经 relayUpstreamOtelHeaders 透传上游状态码/OTel 头，返回 ResponseEntity
+                assertThat(result).isInstanceOf(ResponseEntity.class);
+                assertThat(((ResponseEntity<?>) result).getBody()).isEqualTo("feign-ok");
                 ArgumentCaptor<String> custCaptor = ArgumentCaptor.forClass(String.class);
                 verify(runtimeClient).runWorkflowWithConversation(
                     eq(LOGIN_UID + "|0"), custCaptor.capture(),
-                    eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body));
+                    eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body),
+                    eq(Boolean.FALSE), eq(Constant.Common.INVOKE_MOD_DEBUG));
                 assertThat(custCaptor.getValue()).isEqualTo(LOGIN_UID);
                 assertThat(body.getUserId()).isEqualTo(LOGIN_UID);
                 // 入站 headers 同样被写入（与流式一致），供可观测/后续扩展
@@ -196,14 +199,15 @@ class RuntimeUserIdStreamProfileMatrixTest {
             MdcScope scope = mock(MdcScope.class);
             when(agentServiceProxyService.establishExecutionScope(any(HttpHeaders.class))).thenReturn(scope);
             when(runtimeClient.runWorkflowWithConversation(any(), any(), any(), any(), any(), any(), any(), any(),
-                any())).thenReturn(ResponseEntity.ok("feign-ok"));
+                any(), any(), any())).thenReturn(ResponseEntity.ok("feign-ok"));
 
             controller.runWorkflowWithConversation("p0", "ws0", "env0", "wf0", "c0", null, false, body, inbound);
 
             ArgumentCaptor<String> custCaptor = ArgumentCaptor.forClass(String.class);
             verify(runtimeClient).runWorkflowWithConversation(
                 eq(LOGIN_UID + "|0"), custCaptor.capture(),
-                eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body));
+                eq("p0"), eq("wf0"), eq("c0"), eq("ws0"), eq("env0"), isNull(), eq(body),
+                eq(Boolean.FALSE), eq("PUBLISHED"));
             assertThat(custCaptor.getValue()).isNull();
             assertThat(body.getUserId()).isNull();
             // 不得用登录用户覆盖客户端伪造/静态值

@@ -27,8 +27,11 @@ public final class CorrelationHeaderProvider {
     /** 出站 Header 名：X-Request-Id。 */
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
 
-    /** 出站 Header 名：TraceID。 */
+    /** 出站 Header 名：TraceID（deprecated：过渡期双写保留，新接入方用 X-Correlation-Id）。 */
     public static final String TRACE_ID_HEADER = "TraceID";
+
+    /** 出站 Header 名：X-Correlation-Id（TraceID 的规范名，双写过渡期与 TraceID 同值）。 */
+    public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
 
     /** 出站 Header 名：X-Execution-Id（仅 RUNTIME_EXECUTION 输出）。 */
     public static final String EXECUTION_ID_HEADER = "X-Execution-Id";
@@ -98,10 +101,16 @@ public final class CorrelationHeaderProvider {
         }
         // 2. 写入策略唯一允许的权威值
         headers.asMap().forEach(sink::setHeader);
+        // 3. 过渡期双写：TraceID 的规范名为 X-Correlation-Id，两者同值下发，
+        //    下游可任选其一；TraceID 待调用方迁移完成后下线（issue 1754）。
+        String correlationId = headers.asMap().get(TRACE_ID_HEADER);
+        if (correlationId != null && !correlationId.isEmpty()) {
+            sink.setHeader(CORRELATION_ID_HEADER, correlationId);
+        }
     }
 
     private static boolean isCorrelationHeader(String name) {
         return REQUEST_ID_HEADER.equalsIgnoreCase(name) || TRACE_ID_HEADER.equalsIgnoreCase(name)
-            || EXECUTION_ID_HEADER.equalsIgnoreCase(name);
+            || CORRELATION_ID_HEADER.equalsIgnoreCase(name) || EXECUTION_ID_HEADER.equalsIgnoreCase(name);
     }
 }

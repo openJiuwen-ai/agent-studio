@@ -70,6 +70,6 @@ public class CustomerHeaderFeignInterceptor implements RequestInterceptor {
     /** 三个关联 Header 的大小写不敏感判定——客户透传排除，防覆盖权威值。 */
     static boolean isCorrelationHeader(String name) {
         return "X-Request-Id".equalsIgnoreCase(name) || "TraceID".equalsIgnoreCase(name)
-            || "X-Execution-Id".equalsIgnoreCase(name);
+            || "X-Correlation-Id".equalsIgnoreCase(name) || "X-Execution-Id".equalsIgnoreCase(name);
     }
 }

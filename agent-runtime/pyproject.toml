@@ -8,9 +8,9 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.4.0",
     "pydantic-settings~=2.14.2",
-    # agent-core 官方 hotfix 分支（0.1.17_hotfix）上包含组件异常 span
-    # status.description 修复的 commit；待合入 openJiuwen/agent-core@develop 后改回 @develop
-    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@3d67eac383055d513a1bcba64b081336bd14b004",
+    # agent-core 0.1.17_hotfix 线已合入的 commit（!3933 merge 2b6a9e94e）：含组件异常 span
+    # status.description 修复与 execution_id/Span 环境维度；待该线进入 openJiuwen/agent-core@develop 后改回 @develop
+    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@2b6a9e94e958ef86b97a94a4869684e36609b1eb",
     "boto3",
     "aioboto3",
     "aiohttp",

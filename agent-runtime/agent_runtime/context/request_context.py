@@ -25,6 +25,10 @@ class RequestContext:
     headers: dict = field(default_factory=dict)
     user_id: str = ""
     project_id: str = ""
+    # 请求级环境作用域（issue #1755）：随执行写入 OTel Span 属性，
+    # 不写 Resource（同一 Runtime 进程服务多个工作空间）。
+    workspace_id: str = ""
+    environment_id: str = ""
     conversation_id: str = ""
     trace_id: str = ""
     execution_id: str = ""

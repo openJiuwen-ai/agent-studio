@@ -70,6 +70,44 @@ def _format_llm_error_detail(exc: Exception) -> str:
     return friendly_message(exc)
 
 
+_EMPTY_FINISH_REASONS = frozenset({"length", "content_filter"})
+
+
+def _finish_reason_of(value) -> str:
+    """读取 chunk/message 的 finish_reason；"null" 视为未上报。"""
+    reason = getattr(value, "finish_reason", None)
+    if reason is None or str(reason) == "null":
+        return ""
+    return str(reason)
+
+
+def _validate_llm_output(*, received: int, content: str, reasoning: str,
+                         has_tool_calls: bool, finish_reasons) -> None:
+    """LLM 结果空值校验（issue #1756，口径 A：默认判失败）。
+
+    - 0 帧：网关可能返回了非流式响应（如 200 + JSON 错误体），判失败；
+    - 有内容/思考/tool_calls：正常（仅 reasoning、仅 tool_calls 不得误判）；
+    - 全空：finish_reason 为 length/content_filter 时给出具体原因，否则按空响应失败。
+    """
+    if received <= 0:
+        raise build_error(
+            StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
+            error_msg="LLM 未收到任何流式数据：模型网关可能返回了非流式响应或空响应",
+        )
+    if content or reasoning or has_tool_calls:
+        return
+    reasons = {r for r in finish_reasons if r}
+    if reasons & _EMPTY_FINISH_REASONS:
+        raise build_error(
+            StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
+            error_msg=f"LLM 未返回内容（finish_reason={','.join(sorted(reasons))}）",
+        )
+    raise build_error(
+        StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
+        error_msg="LLM 未返回任何内容（content/reasoning/tool_calls 均为空）",
+    )
+
+
 class LLMChainModelConfig(BaseModel):
     model_name: StrictStr = Field(alias="modelName")
     model_type: StrictStr = Field(alias="modelType")
@@ -153,7 +191,20 @@ class LLMChain(WorkflowComponent):
                 model_client_config=llm_comp_config.model_client_config,
                 model_config=llm_comp_config.model_config,
             )
-            return model
+            # 每次真实调用补一个带 usage/ttft 的 llm span（有壳合并/无壳新建，
+            # 由 core 能力门控）。组件实例定义级复用：装饰会话落定义级常量，
+            # 业务身份经 identity 附到 span，避免跨执行错归属
+            from agent_runtime.common.trace_compat import (
+                DEFINITION_SCOPED_SESSION_ID,
+                build_traced_model,
+                resolve_trace_identity,
+            )
+
+            return build_traced_model(
+                model,
+                session_id=DEFINITION_SCOPED_SESSION_ID,
+                identity=resolve_trace_identity(self, None),
+            )
 
         except ValidationError as e:
             raise build_error(
@@ -181,6 +232,14 @@ class LLMChain(WorkflowComponent):
 
             try:
                 llm_output = await self._llm.invoke(messages=language_model_inputs)
+                # issue #1756：非流式同样校验空结果（含 responseFormat=json 路径）
+                _validate_llm_output(
+                    received=1,
+                    content=getattr(llm_output, "content", "") or "",
+                    reasoning=getattr(llm_output, "reasoning_content", "") or "",
+                    has_tool_calls=bool(getattr(llm_output, "tool_calls", None)),
+                    finish_reasons={_finish_reason_of(llm_output)},
+                )
 
                 formatted_res = self._format_response(
                     llm_output.content,
@@ -325,6 +384,10 @@ class LLMChain(WorkflowComponent):
             "usage_metadata": None,
             "first_token_ms": None,
             "total_token_ms": None,
+            # issue #1756：空结果判定信号（thinking enabled 路径）
+            "received_chunks": 0,
+            "has_tool_calls": False,
+            "finish_reasons": set(),
         }
 
         try:
@@ -397,6 +460,12 @@ class LLMChain(WorkflowComponent):
         index = 0
 
         async for item in result_iter:
+            state["received_chunks"] += 1
+            if getattr(item, "tool_calls", None):
+                state["has_tool_calls"] = True
+            _finish_reason = _finish_reason_of(item)
+            if _finish_reason:
+                state["finish_reasons"].add(_finish_reason)
             if state["is_first_token"]:
                 state["first_token_ms"] = round(
                     (time.perf_counter() - state["start_time"]) * 1000)
@@ -429,6 +498,24 @@ class LLMChain(WorkflowComponent):
             if item.content:
                 content_chunks.append(item.content)
 
+            # issue #1756 复审：先累加本帧内容再判空，避免单帧 content+finish 被误判
+            if _finish_reason:
+                _validate_llm_output(
+                    received=state["received_chunks"],
+                    content="".join(content_chunks),
+                    reasoning=reasoning_content,
+                    has_tool_calls=state["has_tool_calls"],
+                    finish_reasons=state["finish_reasons"],
+                )
+
+        # issue #1756：thinking 路径流结束后再兜底校验
+        _validate_llm_output(
+            received=state["received_chunks"],
+            content="".join(content_chunks),
+            reasoning=reasoning_content,
+            has_tool_calls=state["has_tool_calls"],
+            finish_reasons=state["finish_reasons"],
+        )
         return reasoning_content
 
     async def _stream_thinking_enabled(
@@ -510,11 +597,21 @@ class LLMChain(WorkflowComponent):
             "is_first_token": True,
             "first_token_ms": None,
             "usage_metadata": None,
+            # issue #1756：零帧/空内容判定所需的运行时信号
+            "received_chunks": 0,
+            "has_tool_calls": False,
+            "finish_reasons": set(),
         }
         think_index = 0
 
         async for chunk in self._llm.stream(
             messages=language_model_inputs, tools=[]):
+            stream_state["received_chunks"] += 1
+            if getattr(chunk, "tool_calls", None):
+                stream_state["has_tool_calls"] = True
+            _finish_reason = _finish_reason_of(chunk)
+            if _finish_reason:
+                stream_state["finish_reasons"].add(_finish_reason)
             # 收集 usage / metadata
             if hasattr(chunk, 'usage_metadata') and chunk.usage_metadata:
                 stream_state["usage_metadata"] = chunk.usage_metadata
@@ -554,10 +651,29 @@ class LLMChain(WorkflowComponent):
                 accumulated_content += chunk.content
                 yield {USER_FIELDS: {output_id: chunk.content}}
 
+            # issue #1756 复审：先累加本帧内容再判空，避免单帧 content+finish 被误判
+            if _finish_reason:
+                _validate_llm_output(
+                    received=stream_state["received_chunks"],
+                    content=accumulated_content,
+                    reasoning=reasoning_content,
+                    has_tool_calls=stream_state["has_tool_calls"],
+                    finish_reasons=stream_state["finish_reasons"],
+                )
+
         # 流结束：性能统计 + trace + 最终帧
         total_token_ms = round(
             (time.perf_counter() - stream_state["start_time"]) * 1000)
         workflow_logger.info(f"total_token<llm>|{total_token_ms}")
+
+        # issue #1756：流结束结果校验，空结果必须判失败（不能以 finish 组装成功帧）
+        _validate_llm_output(
+            received=stream_state["received_chunks"],
+            content=accumulated_content,
+            reasoning=reasoning_content,
+            has_tool_calls=stream_state["has_tool_calls"],
+            finish_reasons=stream_state["finish_reasons"],
+        )
 
         reasoning_for_format = reasoning_content if output_reasoning else None
         formatted_res = self._format_response(

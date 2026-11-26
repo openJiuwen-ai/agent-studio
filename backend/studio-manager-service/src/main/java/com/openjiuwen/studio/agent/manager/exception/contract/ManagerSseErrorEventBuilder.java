@@ -34,9 +34,13 @@ public class ManagerSseErrorEventBuilder {
      * @return Map 形式的 {@code {event:"error", data:{...}}}
      */
     public Map<String, Object> buildEnvelope(ErrorDescriptor descriptor, Locale locale) {
-        String errorMsg = safeResolve(descriptor.getMessageKey(), locale);
-        String errorReason = safeResolve(descriptor.getReasonKey(), locale);
-        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), locale);
+        var passthrough = descriptor.getPassthroughText();
+        String messageFallback = passthrough != null ? passthrough.getMessage() : null;
+        String errorMsg = safeResolve(descriptor.getMessageKey(), locale, messageFallback);
+        String errorReason = safeResolve(descriptor.getReasonKey(), locale,
+            passthrough != null ? firstNonBlank(passthrough.getReason(), messageFallback) : null);
+        String errorSuggestion = safeResolve(descriptor.getSuggestionKey(), locale,
+            passthrough != null ? firstNonBlank(passthrough.getSuggestion(), messageFallback) : null);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("error_code", descriptor.getErrorCode());
@@ -65,13 +69,28 @@ public class ManagerSseErrorEventBuilder {
         }
     }
 
-    /** COM-03 §4: fail-closed——resolver 异常或空值时抛出,不返回空串。 */
-    private String safeResolve(String key, Locale locale) {
+    /**
+     * COM-03 §4: i18n 命中则用 i18n；未命中（返回 key 原文/空）时回退到下游受管文案
+     * （COM-04 §5.2：可信 RUNTIME 原码在 Manager i18n 缺失时的 passthrough）；
+     * 两者都不可用时 fail-closed，不输出空串。
+     */
+    private String safeResolve(String key, Locale locale, String passthroughFallback) {
         String result = resolver.resolve(key, locale);
-        if (result == null || result.isBlank()) {
-            throw new IllegalStateException(
-                "i18n resolution returned blank for key=" + key + " locale=" + locale);
+        boolean resolved = result != null && !result.isBlank() && !result.equals(key);
+        if (resolved) {
+            return result;
         }
-        return result;
+        if (passthroughFallback != null && !passthroughFallback.isBlank()) {
+            return passthroughFallback;
+        }
+        if (result != null && !result.isBlank()) {
+            return result;
+        }
+        throw new IllegalStateException(
+            "i18n resolution returned blank for key=" + key + " locale=" + locale);
+    }
+
+    private static String firstNonBlank(String first, String fallback) {
+        return first != null && !first.isBlank() ? first : fallback;
     }
 }

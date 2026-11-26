@@ -619,6 +619,16 @@ async def _execute_workflow_run(
         environment_id = ctx.environment_id
         workspace_id = ctx.workspace_id
 
+    # issue #1755：把兜底后的环境作用域回填请求上下文，供 tracer 会话/根 Span 写入
+    _request_scope = _request_ctx.get()
+    _request_scope.workspace_id = workspace_id or ""
+    _request_scope.environment_id = environment_id or ""
+    if ctx.project_id:
+        _request_scope.project_id = ctx.project_id
+    # 同时写 request.state：runner 可能在其他 task/线程执行，ContextVar 不可靠
+    request.state.workspace_id = workspace_id or ""
+    request.state.environment_id = environment_id or ""
+    request.state.project_id = ctx.project_id or ""
     instance_id = ctx.workflow_id
     user_id = _request_ctx.get().user_id
     version_id = resolved_version or ""
@@ -768,6 +778,16 @@ async def _execute_agent_run(
         environment_id = ctx.environment_id
         workspace_id = ctx.workspace_id
 
+    # issue #1755：把兜底后的环境作用域回填请求上下文，供 tracer 会话/根 Span 写入
+    _request_scope = _request_ctx.get()
+    _request_scope.workspace_id = workspace_id or ""
+    _request_scope.environment_id = environment_id or ""
+    if ctx.project_id:
+        _request_scope.project_id = ctx.project_id
+    # 同时写 request.state：runner 可能在其他 task/线程执行，ContextVar 不可靠
+    request.state.workspace_id = workspace_id or ""
+    request.state.environment_id = environment_id or ""
+    request.state.project_id = ctx.project_id or ""
     instance_id = ctx.agent_id
     user_id = _request_ctx.get().user_id
     version_id = resolved_version or ""

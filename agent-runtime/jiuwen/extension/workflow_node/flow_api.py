@@ -50,6 +50,7 @@ from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.session.stream.base import OutputSchema
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 USER_FIELDS = "userFields"
@@ -135,6 +136,47 @@ class MessageSubType(str, Enum):
 
     PLUGIN_PARAM_MISS = "plugin_param_miss"
     PLUGIN_CALL_CONFIRM = "plugin_call_confirm"
+
+
+def _raise_if_api_error(outputs):
+    """插件错误响应转异常：让 core 装饰器把 execute_tool span 标 ERROR。
+
+    仅工作流 FlowApi 使用；插件本身仍返回错误对象（Agent 路径语义不变），
+    FlowApi 外层 catch 继续按原有错误码/文案转业务错误。
+    """
+    if not isinstance(outputs, dict):
+        return
+    code = outputs.get("errCode", 0)
+    if code != 0:
+        raise CommonJiuWenBaseException(
+            error_code=code if isinstance(code, int) else 105000,
+            message=outputs.get("errMessage") or "plugin execution error",
+        )
+
+
+class _ErrorRaisingApi:
+    """FlowApi 专用适配器：在装饰器内部把插件错误响应转成异常。"""
+
+    def __init__(self, api):
+        self._api = api
+
+    def __getattr__(self, name):
+        # 透传原工具属性（card/name/params 等）：core 装饰器用 card.name
+        # 作为 tool.name，不能因适配器包装而丢真实工具名
+        return getattr(self._api, name)
+
+    async def invoke(self, inputs, **kwargs):
+        outputs = await self._api.ainvoke(inputs, **kwargs)
+        _raise_if_api_error(outputs)
+        return outputs
+
+    def astream(self, inputs, **kwargs):
+        async def _gen():
+            async for item in self._api.astream(inputs, **kwargs):
+                _raise_if_api_error(item)
+                yield item
+
+        return _gen()
 
 
 class FlowApi(WorkflowComponent):
@@ -270,7 +312,10 @@ class FlowApi(WorkflowComponent):
             if tmp_header:
                 cur_headers.update(tmp_header)
 
-            api_outputs = await self._api.ainvoke(
+            # 工作流内 API 插件不经 ToolMgr.get_tool 装饰，主动补一层 tracer
+            # 装饰以产出 execute_tool span；未注册 handler 或旧版 core 时原样返回
+            api_tool = decorate_tool_with_trace(_ErrorRaisingApi(self._api), session)
+            api_outputs = await api_tool.invoke(
                 formatted_inputs, runtime_auth={"headers": cur_headers}
             )
             outputs = {USER_FIELDS: self._format_api_outputs(api_outputs)}
@@ -380,7 +425,10 @@ class FlowApi(WorkflowComponent):
             if tmp_header:
                 cur_headers.update(tmp_header)
 
-            api_outputs = self._api.astream(
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理包装
+            # astream，首 chunk 起 execute_tool span；旧 core 原样透传）
+            api_tool = decorate_tool_with_trace(_ErrorRaisingApi(self._api), session)
+            api_outputs = api_tool.astream(
                 api_inputs, runtime_auth={"headers": cur_headers}
             )
             async for schema in self._transform_async_stream_data(api_outputs, session):

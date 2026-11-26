@@ -16,6 +16,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+
+import feign.codec.DecodeException;
 
 /**
  * COM-04 §9.2: Mapper 参数化测试。
@@ -33,6 +36,35 @@ class DownstreamErrorMapperTest {
     private static final String REQUEST_ID = "req-com04-001";
 
     // ---- 八码默认映射 02001131/502，无 registered reference 不成对外码 ----
+
+    @Test
+    void map_decode_failure_on_2xx_maps_to_response_invalid() {
+        DownstreamFailure f = DownstreamFailure.httpResponse(
+            DownstreamService.RUNTIME, Transport.FEIGN, 200, null, mock(DecodeException.class));
+        ErrorDescriptor d = mapper.map(f, REQUEST_ID);
+
+        assertEquals("openjiuwen.02001134", d.getErrorCode());
+        assertEquals(502, d.getHttpStatus());
+        assertEquals(DownstreamService.RUNTIME, ErrorDescriptorDiagnostics.getDownstreamService(d));
+    }
+
+    @Test
+    void map_decode_failure_on_non_2xx_keeps_dependency_failed() {
+        DownstreamFailure f = DownstreamFailure.httpResponse(
+            DownstreamService.RUNTIME, Transport.FEIGN, 500, null, mock(DecodeException.class));
+        ErrorDescriptor d = mapper.map(f, REQUEST_ID);
+
+        assertEquals("openjiuwen.02001131", d.getErrorCode());
+    }
+
+    @Test
+    void map_non_decode_2xx_keeps_dependency_failed() {
+        DownstreamFailure f = DownstreamFailure.httpResponse(
+            DownstreamService.RUNTIME, Transport.FEIGN, 200, null, new RuntimeException("bad-body"));
+        ErrorDescriptor d = mapper.map(f, REQUEST_ID);
+
+        assertEquals("openjiuwen.02001131", d.getErrorCode());
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {

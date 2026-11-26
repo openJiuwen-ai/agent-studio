@@ -28,6 +28,11 @@ public class ManagerErrorCatalog {
         return resolve(StudioError.DOWNSTREAM_DEPENDENCY_FAILED);
     }
 
+    /** 下游响应格式不符合约定（2xx 协议解析失败）。 */
+    public ErrorDefinition downstreamResponseInvalid() {
+        return resolve(StudioError.DOWNSTREAM_RESPONSE_INVALID);
+    }
+
     /** 兜底码：服务内部错误（500）。 */
     public ErrorDefinition unexpectedError() {
         return resolve(StudioError.UNEXPECTED_ERROR);
