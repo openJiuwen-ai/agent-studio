@@ -15,6 +15,7 @@ from typing import AsyncIterator, Optional, Union
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
+from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.orchestration.flow.utils import force_convert
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
@@ -188,15 +189,25 @@ def _coerce_outputs(result_dict: dict, outputs_schema: list[dict]) -> dict:
     return coerced
 
 
-def _coerce_empty_object_input(field_def: dict) -> dict:
-    """按旧架构语义转换空 object，补齐其直接子字段的默认值。"""
+def _coerce_object_input(value: dict | None, field_def: dict) -> dict:
+    """按旧架构补齐 object 默认值；schema 校验失败时保留原 dict 或回退 {}。"""
     field_id = field_def["id"]
-    converted, errors = force_convert({field_id: {}}, [field_def])
-    if errors:
-        raise ValueError(
-            f"Code input object schema conversion failed for '{field_id}': {errors}"
+    original = {} if value is None else dict(value)
+    try:
+        converted, errors = force_convert({field_id: {}}, [field_def])
+    except JiuWenBaseException as e:
+        workflow_logger.warning(
+            f"Code input object schema conversion failed for '{field_id}': {e}, "
+            "fallback to unexpanded object"
         )
-    return converted[field_id]
+        return original
+    if errors:
+        workflow_logger.warning(
+            f"Code input object schema conversion failed for '{field_id}': {errors}, "
+            "fallback to unexpanded object"
+        )
+        return original
+    return {**converted[field_id], **original}
 
 
 def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
@@ -205,7 +216,7 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     当上游节点未提供值导致输入为 None 时，根据 schema 类型做合理默认值填充：
     - string 类型: None → ""
     - array 类型: None → []
-    - object 类型: 先按 {} 应用嵌套 schema，兼容旧架构代码入参
+    - object 类型: None 或 dict 按旧架构补齐缺失的直接子字段，保留已有值
     - 其他类型: 保持 None 不变
 
     Args:
@@ -234,8 +245,8 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     coerced = {}
     for key, value in user_fields.items():
         target_type = type_map.get(key)
-        if value is None and target_type == "object":
-            coerced[key] = _coerce_empty_object_input(field_map[key])
+        if target_type == "object" and (value is None or isinstance(value, dict)):
+            coerced[key] = _coerce_object_input(value, field_map[key])
         elif target_type:
             coerced[key] = _coerce_value(value, target_type, input_mode=True)
         else:
