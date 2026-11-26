@@ -13,11 +13,6 @@ from openjiuwen.core.common.logging import workflow_logger as logger
 # 因此请求级根 span 必须复用同一个 tracer 实例，否则拿到 NoOp tracer 导致 span 不导出。
 _otel_tracer: Optional[Any] = None
 _setup_lock = threading.Lock()
-_per_tracer_isolation_installed = False
-# 保存未 patch 的 Tracer.init；不用函数对象挂 _xxx 属性（触发 G.CLS.11）。
-_orig_tracer_init: Optional[Any] = None
-# 序列化「上游 init（改写共享模板身份）+ 克隆替换」：避免并发 init 串 identity。
-_tracer_init_clone_lock = threading.Lock()
 
 
 def setup_otel_tracer() -> Optional[Any]:
@@ -26,9 +21,12 @@ def setup_otel_tracer() -> Optional[Any]:
     Reads configuration from ``settings.otel``.  When ``OTEL_ENABLED`` is
     ``True`` and the ``openjiuwen[tracer-otel]`` extension is installed,
     creates an OTel TracerProvider + exporter and registers
-    ``OtelAgentHandler`` / ``OtelWorkflowHandler`` into
-    ``TracerHandlerRegistry`` so that all subsequent ``Tracer`` instances
-    automatically emit OTel spans.
+    ``OtelAgentHandler`` / workflow handler into ``TracerHandlerRegistry``
+    so that all subsequent ``Tracer`` instances automatically emit OTel spans.
+
+    Workflow 侧注册 ``ExecutionScopedWorkflowHandler``：按 runner 写入的
+    execution scope 分发到独立 ``StudioOtelWorkflowHandler``，避免同工作流
+    并发共享 span 状态（不 monkeypatch ``Tracer.init``）。
 
     This function is idempotent and thread-safe; repeated calls return the
     tracer created by the first successful call.  Returns ``None`` when OTel
@@ -67,14 +65,14 @@ def _create_otel_tracer() -> Optional[Any]:
     try:
         # 本仓子类依赖上游扩展的私有符号（升级可能缺失/改名），与上游导入隔离，
         # 失败时回退官方 handler，避免 OTel 整体静默停用并被误报为"未安装扩展"
-        from agent_runtime.observability.tracer_otel_studio import (
-            StudioOtelWorkflowHandler,
+        from agent_runtime.observability.otel_handler_scope import (
+            ExecutionScopedWorkflowHandler,
         )
 
-        _workflow_handler_cls = StudioOtelWorkflowHandler
+        _workflow_handler_cls = ExecutionScopedWorkflowHandler
     except ImportError as import_exc:
         logger.warning(
-            "StudioOtelWorkflowHandler unavailable (%s), "
+            "ExecutionScopedWorkflowHandler unavailable (%s), "
             "fallback to official OtelWorkflowHandler",
             import_exc,
         )
@@ -82,8 +80,6 @@ def _create_otel_tracer() -> Optional[Any]:
 
     if _handlers_already_registered():
         logger.info("OpenTelemetry tracer handlers already registered, skipping")
-        # 注册表已有模板时仍需安装隔离：否则 Tracer.init 继续共享可变 span 状态。
-        _install_per_tracer_handler_isolation()
         return _otel_tracer
 
     otel_settings = settings.otel
@@ -114,10 +110,8 @@ def _create_otel_tracer() -> Optional[Any]:
         "otel_workflow", _workflow_handler_cls(otel_tracer, config)
     )
 
-    # 先装隔离再发布单例：外层 if _otel_tracer is not None 不进锁，若先发布
-    # 其它线程会走快速路径拿到「已有 tracer、尚未 patch」的窗口。
-    _install_per_tracer_handler_isolation()
-    # 注册+隔离都成功后再写入单例：否则半初始化缓存会让后续调用跳过注册。
+    # 注册全部成功后再写入单例：否则注册抛异常会留下半初始化缓存，
+    # 后续调用直接返回 tracer 而跳过注册，agent/workflow span 静默不再导出。
     _otel_tracer = otel_tracer
 
     logger.info(
@@ -126,7 +120,8 @@ def _create_otel_tracer() -> Optional[Any]:
         f"endpoint={config.exporter_endpoint or 'N/A'}, "
         f"protocol={config.protocol}, "
         f"service_name={config.service_name}, "
-        f"sample_rate={config.sample_rate}"
+        f"sample_rate={config.sample_rate}, "
+        f"workflow_handler={_workflow_handler_cls.__name__}"
     )
     return _otel_tracer
 
@@ -140,82 +135,3 @@ def _handlers_already_registered() -> bool:
     from openjiuwen.core.session.tracer import TracerHandlerRegistry
     agent_handlers = TracerHandlerRegistry.get_agent_handlers()
     return "otel_agent" in agent_handlers
-
-
-def _clone_otel_handler(template: Any) -> Any:
-    """Clone an OTel handler template into a fresh instance with empty span maps.
-
-    Registry keeps one template per process; each ``Tracer`` must hold its own
-    instance so concurrent same-workflow ``invoke_id`` keys cannot collide.
-    Non-OTel handlers (no ``_otel_tracer`` / ``_config``) are returned as-is.
-    """
-    if isinstance(template, dict):
-        return template
-    otel_tracer = getattr(template, "_otel_tracer", None)
-    config = getattr(template, "_config", None)
-    if otel_tracer is None or config is None:
-        return template
-    return type(template)(otel_tracer, config)
-
-
-def _replace_handlers_with_clones(tracer_self: Any) -> None:
-    """Swap shared registry handlers on a Tracer for per-request clones.
-
-    ``Tracer.init`` 已对模板调用过 ``set_trace_id`` / ``set_session_id``；克隆时从
-    handler 经公开 setter 回写，并只原地改写 handler 字典，避免直接读/写
-    ``Tracer`` 受保护成员（G.CLS.11）。
-    """
-    for attr_name in ("_agent_handlers", "_workflow_handlers"):
-        handlers = getattr(tracer_self, attr_name, None)
-        if not isinstance(handlers, dict):
-            continue
-        for name, handler in list(handlers.items()):
-            cloned = _clone_otel_handler(handler)
-            if cloned is handler:
-                continue
-            cloned.set_trace_id(getattr(handler, "_trace_id", "") or "")
-            cloned.set_session_id(getattr(handler, "_session_id", None))
-            handlers[name] = cloned
-
-
-def _install_per_tracer_handler_isolation() -> None:
-    """Monkeypatch ``Tracer.init`` so each Tracer clones OTel handler templates.
-
-    Upstream ``Tracer.init`` injects the same registry objects into every
-    request and mutates ``trace_id`` / ``session_id`` on them. Handler span
-    maps are keyed by static workflow/component ids, so concurrent runs of the
-    same workflow overwrite each other (``Calling end() on an ended span``).
-
-    Studio cannot change agent-core here; cloning after ``init`` gives each
-    Tracer isolated mutable state while still sharing the process-wide OTel
-    tracer / exporter / config.
-
-    为何不用「无状态分发器」替代 patch：registry 合同仍是注入同一实例；事件
-    kwargs 的 invoke_id 是静态业务 ID，分发器无法按执行维 demux，且
-    ``set_trace_id`` 写在共享对象上，并发下与共享模板同样会串号。根治需
-    upstream 在 ``Tracer.init`` 按模板工厂化；本仓 patch 是过渡方案。
-    「上游 init + 克隆」必须在同一把锁内完成，否则并发 init 会在克隆前覆盖
-    模板上的 trace/session 身份。
-    """
-    global _per_tracer_isolation_installed, _orig_tracer_init
-    if _per_tracer_isolation_installed:
-        return
-
-    from openjiuwen.core.session.tracer.tracer import Tracer
-
-    if _orig_tracer_init is not None:
-        _per_tracer_isolation_installed = True
-        return
-
-    saved_init = Tracer.init
-    _orig_tracer_init = saved_init
-    init_lock = _tracer_init_clone_lock
-
-    def _init_with_cloned_otel_handlers(self, stream_writer_manager=None):
-        with init_lock:
-            saved_init(self, stream_writer_manager)
-            _replace_handlers_with_clones(self)
-
-    Tracer.init = _init_with_cloned_otel_handlers  # type: ignore[method-assign]
-    _per_tracer_isolation_installed = True
-    logger.info("Installed per-Tracer OTel handler isolation")

@@ -2,32 +2,32 @@
 # pylint: disable=protected-access  # 单测需直接验证内部函数与成员
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 
-"""setup_otel_tracer 导入隔离/回退单测。
-
-M1 评审关注点固化：StudioOtelWorkflowHandler 子类导入失败（openjiuwen 升级后
-私有符号缺失/改名）时，回退官方 OtelWorkflowHandler，OTel 不静默停用。
-"""
+"""setup_otel_tracer 导入隔离/回退与 execution-scope 隔离单测。"""
 import builtins
 import threading
 import time
 from unittest.mock import MagicMock
 
 import pytest
+from opentelemetry import context as otel_context
 
 from openjiuwen.core.session.tracer import TracerHandlerRegistry
 from openjiuwen.core.session.tracer.handler import TracerHandlerName
 from openjiuwen.core.session.tracer.tracer import Tracer
 from openjiuwen.extensions.tracer_otel.config import OtelTracerConfig
-from openjiuwen.extensions.tracer_otel.handler import (
-    OtelAgentHandler,
-    OtelWorkflowHandler,
-)
+from openjiuwen.extensions.tracer_otel.handler import OtelWorkflowHandler
 from openjiuwen.extensions.tracer_otel.semconv import OJ_WORKFLOW_OUTPUTS
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 import agent_runtime.observability.tracer_otel as tracer_otel_mod
+from agent_runtime.observability.otel_handler_scope import (
+    ExecutionScopedWorkflowHandler,
+    attach_execution_scope,
+    current_execution_scope,
+    release_execution_scope,
+)
 
 _WF = TracerHandlerName.TRACER_WORKFLOW.value
 
@@ -44,16 +44,44 @@ def _block_studio_import(name, gdict=None, ldict=None, fromlist=(), level=0):
     return _real_import(name, gdict, ldict, fromlist, level)
 
 
+def _block_scope_import(name, gdict=None, ldict=None, fromlist=(), level=0):
+    if name == "agent_runtime.observability.otel_handler_scope":
+        raise ImportError("simulated: execution scope module missing")
+    return _real_import(name, gdict, ldict, fromlist, level)
+
+
 @pytest.mark.asyncio
-async def test_fallbacks_to_official_handler_when_studio_unavailable(monkeypatch):
+async def test_registers_scoped_handler_when_studio_unavailable(monkeypatch):
+    """studio 子类不可用：仍注册 ExecutionScoped（子 handler 回退官方实现）。"""
     prev_enabled = tracer_otel_mod.settings.otel.enabled
     tracer_otel_mod.settings.otel.enabled = True
     monkeypatch.setattr(builtins, "__import__", _block_studio_import)
     try:
         TracerHandlerRegistry.clear()
+        monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
+        tracer_otel_mod.setup_otel_tracer()
+        handlers = TracerHandlerRegistry.get_workflow_handlers()
+        assert isinstance(handlers.get("otel_workflow"), ExecutionScopedWorkflowHandler)
+    finally:
+        tracer_otel_mod.settings.otel.enabled = prev_enabled
+        TracerHandlerRegistry.clear()
+
+
+@pytest.mark.asyncio
+async def test_fallbacks_to_official_handler_when_scope_unavailable(monkeypatch):
+    """execution-scope 模块不可用：回退官方 OtelWorkflowHandler，OTel 不静默停用。"""
+    prev_enabled = tracer_otel_mod.settings.otel.enabled
+    tracer_otel_mod.settings.otel.enabled = True
+    monkeypatch.setattr(builtins, "__import__", _block_scope_import)
+    try:
+        TracerHandlerRegistry.clear()
+        monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
         tracer_otel_mod.setup_otel_tracer()
         handlers = TracerHandlerRegistry.get_workflow_handlers()
         assert isinstance(handlers.get("otel_workflow"), OtelWorkflowHandler)
+        assert not isinstance(
+            handlers.get("otel_workflow"), ExecutionScopedWorkflowHandler
+        )
     finally:
         tracer_otel_mod.settings.otel.enabled = prev_enabled
         TracerHandlerRegistry.clear()
@@ -73,7 +101,6 @@ class TestSetupOtelTracerSingleton:
     def _clean_global_state(self, monkeypatch):
         """每个用例前的全局单例/注册表复原，避免用例间相互污染。"""
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
-        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
@@ -149,7 +176,6 @@ class TestSetupOtelTracerThreadSafety:
     @pytest.fixture(autouse=True)
     def _clean_global_state(self, monkeypatch):
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
-        monkeypatch.setattr(tracer_otel_mod, "_per_tracer_isolation_installed", False)
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
@@ -208,59 +234,18 @@ class TestSetupOtelTracerThreadSafety:
         create_mock.assert_not_called()
 
 
-class TestPerTracerHandlerIsolation:
-    """Registry 模板单例 + Tracer.init 克隆：同 workflow_id 并发互不踩 span 状态。"""
-
-    @staticmethod
-    def _restore_tracer_init() -> None:
-        """还原 Tracer.init；直接写模块全局，避免 monkeypatch 在 teardown 把 _orig 还原回来。"""
-        orig = tracer_otel_mod._orig_tracer_init
-        if orig is not None:
-            Tracer.init = orig  # type: ignore[method-assign]
-            tracer_otel_mod._orig_tracer_init = None
-        tracer_otel_mod._per_tracer_isolation_installed = False
+class TestExecutionScopedWorkflowIsolation:
+    """ExecutionScopedWorkflowHandler：同 workflow_id、不同 exec scope 互不踩 span。"""
 
     @pytest.fixture(autouse=True)
     def _clean_global_state(self, monkeypatch):
         monkeypatch.setattr(tracer_otel_mod, "_otel_tracer", None)
-        self._restore_tracer_init()
         TracerHandlerRegistry.clear()
         yield
         TracerHandlerRegistry.clear()
-        self._restore_tracer_init()
 
     @staticmethod
-    def test_tracer_init_clones_registered_otel_handlers():
-        """两个 Tracer.init 后持有不同 handler 实例，registry 模板保持不变。"""
-        otel = TracerProvider().get_tracer("isolation-unit")
-        try:
-            cfg = OtelTracerConfig()
-        except TypeError:
-            cfg = OtelTracerConfig(service_name="isolation-unit")
-
-        template_agent = OtelAgentHandler(otel, cfg)
-        template_wf = OtelWorkflowHandler(otel, cfg)
-        TracerHandlerRegistry.register_handler("otel_agent", template_agent)
-        TracerHandlerRegistry.register_handler("otel_workflow", template_wf)
-        tracer_otel_mod._install_per_tracer_handler_isolation()
-
-        t1 = Tracer(session_id="s1", trace_id="trace-1")
-        t1.init()
-        t2 = Tracer(session_id="s2", trace_id="trace-2")
-        t2.init()
-
-        h1 = t1._workflow_handlers["otel_workflow"]
-        h2 = t2._workflow_handlers["otel_workflow"]
-        assert h1 is not template_wf
-        assert h2 is not template_wf
-        assert h1 is not h2
-        assert t1._agent_handlers["otel_agent"] is not t2._agent_handlers["otel_agent"]
-        assert TracerHandlerRegistry.get_workflow_handlers()["otel_workflow"] is template_wf
-        assert h1._trace_id == "trace-1"
-        assert h2._trace_id == "trace-2"
-
-    @staticmethod
-    def _register_workflow_handler(service_name: str):
+    def _register_scoped(service_name: str):
         provider = TracerProvider()
         exporter = InMemorySpanExporter()
         provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -269,29 +254,41 @@ class TestPerTracerHandlerIsolation:
             cfg = OtelTracerConfig()
         except TypeError:
             cfg = OtelTracerConfig(service_name=service_name)
-        TracerHandlerRegistry.register_handler(
-            "otel_workflow", OtelWorkflowHandler(otel, cfg)
+        dispatcher = ExecutionScopedWorkflowHandler(otel, cfg)
+        TracerHandlerRegistry.register_handler("otel_workflow", dispatcher)
+        return exporter, dispatcher
+
+    @staticmethod
+    def test_setup_registers_execution_scoped_handler(monkeypatch):
+        import openjiuwen.extensions.tracer_otel as extension
+
+        fake_tracer = MagicMock(name="scoped-setup-tracer")
+        monkeypatch.setattr(
+            extension, "init_otel_tracer", MagicMock(return_value=fake_tracer)
         )
-        tracer_otel_mod._install_per_tracer_handler_isolation()
-        return exporter
+        monkeypatch.setattr(tracer_otel_mod.settings.otel, "enabled", True)
+
+        assert tracer_otel_mod.setup_otel_tracer() is fake_tracer
+        handler = TracerHandlerRegistry.get_workflow_handlers().get("otel_workflow")
+        assert isinstance(handler, ExecutionScopedWorkflowHandler)
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_concurrent_same_invoke_id_via_tracer_trigger():
-        """经 Tracer.trigger 注入路径：同 WF/COMP id 交错互不覆盖，outputs 分属两条 trace。"""
+    async def test_different_scopes_isolate_same_invoke_id_via_trigger():
+        """共享同一 registry 分发器 + Tracer.trigger：不同 exec scope 下同 WF/COMP 不串号。"""
         wf_id = "wf_same"
         comp_id = "node_http"
-        exporter = TestPerTracerHandlerIsolation._register_workflow_handler(
-            "isolation-trigger"
+        exporter, dispatcher = (
+            TestExecutionScopedWorkflowIsolation._register_scoped("scope-trigger")
         )
 
         t_a = Tracer(session_id="sess-A", trace_id="trace-A")
         t_a.init()
         t_b = Tracer(session_id="sess-B", trace_id="trace-B")
         t_b.init()
-        h_a = t_a._workflow_handlers["otel_workflow"]
-        h_b = t_b._workflow_handlers["otel_workflow"]
-        assert h_a is not h_b
+        # 仍是同一个分发器实例（不再 monkeypatch Tracer.init）
+        assert t_a._workflow_handlers["otel_workflow"] is dispatcher
+        assert t_b._workflow_handlers["otel_workflow"] is dispatcher
 
         root_meta = {"workflow_id": wf_id, "workflow_name": "wf"}
         comp_meta = {
@@ -301,49 +298,79 @@ class TestPerTracerHandlerIsolation:
             "component_name": "http_node",
         }
 
-        await t_a.trigger(
-            _WF, "on_call_start", invoke_id=wf_id, metadata=root_meta,
-            inputs={"q": "A"}, parent_node_id="",
+        token_a = attach_execution_scope(
+            "exec-A", trace_id="trace-A", session_id="sess-A"
         )
-        await t_a.trigger(
-            _WF, "on_call_start", invoke_id=comp_id, metadata=comp_meta,
-            inputs={"q": "A"}, parent_node_id=wf_id,
-        )
-        a_state_id = id(h_a._span_manager.get(comp_id))
-        assert a_state_id
+        try:
+            assert current_execution_scope() == "exec-A"
+            await t_a.trigger(
+                _WF, "on_call_start", invoke_id=wf_id, metadata=root_meta,
+                inputs={"q": "A"}, parent_node_id="",
+            )
+            await t_a.trigger(
+                _WF, "on_call_start", invoke_id=comp_id, metadata=comp_meta,
+                inputs={"q": "A"}, parent_node_id=wf_id,
+            )
+            sub_a = dispatcher._handlers["exec-A"]
+            a_state_id = id(sub_a._span_manager.get(comp_id))
+            assert a_state_id
+        finally:
+            otel_context.detach(token_a)
 
-        await t_b.trigger(
-            _WF, "on_call_start", invoke_id=wf_id, metadata=root_meta,
-            inputs={"q": "B"}, parent_node_id="",
+        token_b = attach_execution_scope(
+            "exec-B", trace_id="trace-B", session_id="sess-B"
         )
-        await t_b.trigger(
-            _WF, "on_call_start", invoke_id=comp_id, metadata=comp_meta,
-            inputs={"q": "B"}, parent_node_id=wf_id,
-        )
+        try:
+            await t_b.trigger(
+                _WF, "on_call_start", invoke_id=wf_id, metadata=root_meta,
+                inputs={"q": "B"}, parent_node_id="",
+            )
+            await t_b.trigger(
+                _WF, "on_call_start", invoke_id=comp_id, metadata=comp_meta,
+                inputs={"q": "B"}, parent_node_id=wf_id,
+            )
+            sub_b = dispatcher._handlers["exec-B"]
+            assert sub_b is not sub_a
+            assert id(sub_b._span_manager.get(comp_id)) != a_state_id
+            # A 的状态仍在（不同子 handler）
+            assert id(sub_a._span_manager.get(comp_id)) == a_state_id
+        finally:
+            otel_context.detach(token_b)
 
-        assert id(h_a._span_manager.get(comp_id)) == a_state_id
-        assert h_b._span_manager.get(comp_id) is not None
-        assert id(h_b._span_manager.get(comp_id)) != a_state_id
+        token_a = attach_execution_scope("exec-A", trace_id="trace-A", session_id="sess-A")
+        try:
+            await t_a.trigger(
+                _WF, "on_call_done", invoke_id=comp_id,
+                outputs={"node_output": "A_RESULT"}, parent_node_id=wf_id,
+            )
+            assert sub_a._span_manager.get(comp_id) is None
+            assert sub_b._span_manager.get(comp_id) is not None
+        finally:
+            otel_context.detach(token_a)
 
-        await t_a.trigger(
-            _WF, "on_call_done", invoke_id=comp_id,
-            outputs={"node_output": "A_RESULT"}, parent_node_id=wf_id,
-        )
-        assert h_a._span_manager.get(comp_id) is None
-        assert h_b._span_manager.get(comp_id) is not None
+        token_b = attach_execution_scope("exec-B", trace_id="trace-B", session_id="sess-B")
+        try:
+            await t_b.trigger(
+                _WF, "on_call_done", invoke_id=comp_id,
+                outputs={"node_output": "B_RESULT"}, parent_node_id=wf_id,
+            )
+            await t_b.trigger(
+                _WF, "on_call_done", invoke_id=wf_id,
+                outputs={"out": "B"}, parent_node_id="",
+            )
+        finally:
+            otel_context.detach(token_b)
 
-        await t_b.trigger(
-            _WF, "on_call_done", invoke_id=comp_id,
-            outputs={"node_output": "B_RESULT"}, parent_node_id=wf_id,
-        )
-        await t_a.trigger(
-            _WF, "on_call_done", invoke_id=wf_id,
-            outputs={"out": "A"}, parent_node_id="",
-        )
-        await t_b.trigger(
-            _WF, "on_call_done", invoke_id=wf_id,
-            outputs={"out": "B"}, parent_node_id="",
-        )
+        token_a = attach_execution_scope("exec-A", trace_id="trace-A", session_id="sess-A")
+        try:
+            await t_a.trigger(
+                _WF, "on_call_done", invoke_id=wf_id,
+                outputs={"out": "A"}, parent_node_id="",
+            )
+        finally:
+            otel_context.detach(token_a)
+            release_execution_scope("exec-A")
+            release_execution_scope("exec-B")
 
         finished = list(exporter.get_finished_spans())
         comp_spans = [s for s in finished if s.name.startswith("component.")]
@@ -352,77 +379,25 @@ class TestPerTracerHandlerIsolation:
             (span.attributes or {}).get(OJ_WORKFLOW_OUTPUTS)
             for span in comp_spans
         }
-        # 两条独立完成；内容经 redact 后仍应能区分 A/B（或至少为两条非空）
         assert len([attr for attr in output_attrs if attr]) == 2
-        assert h_a._trace_id == "trace-A"
-        assert h_b._trace_id == "trace-B"
 
     @staticmethod
-    def test_concurrent_tracer_init_keeps_distinct_identity():
-        """多线程同时 Tracer.init：各 handler 绑定自己的 trace/session，不串到模板上最后写入的身份。"""
-        TestPerTracerHandlerIsolation._register_workflow_handler("isolation-racy-init")
-
-        thread_count = 8
-        barrier = threading.Barrier(thread_count)
-        results = []
-        errors = []
-        result_lock = threading.Lock()
-
-        def worker(idx: int):
-            try:
-                barrier.wait(timeout=10)
-                tracer = Tracer(session_id=f"sess-{idx}", trace_id=f"trace-{idx}")
-                tracer.init()
-                handler = tracer._workflow_handlers["otel_workflow"]
-                # 必须持有 tracer/handler 引用：只存 id() 会在对象回收后地址复用，误报「非独立」。
-                with result_lock:
-                    results.append(
-                        (idx, tracer, handler, handler._trace_id, handler._session_id)
-                    )
-            except BaseException as exc:  # noqa: BLE001
-                with result_lock:
-                    errors.append(exc)
-
-        threads = [
-            threading.Thread(target=worker, args=(i,)) for i in range(thread_count)
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=10)
-
-        assert errors == []
-        assert len(results) == thread_count
-        handlers = [row[2] for row in results]
-        assert len({id(handler) for handler in handlers}) == thread_count
-        template = TracerHandlerRegistry.get_workflow_handlers()["otel_workflow"]
-        assert all(handler is not template for handler in handlers)
-        for idx, _tracer, _handler, trace_id, session_id in results:
-            assert trace_id == f"trace-{idx}"
-            assert session_id == f"sess-{idx}"
-
-    @staticmethod
-    def test_setup_installs_isolation_before_publishing_singleton(monkeypatch):
-        """_create_otel_tracer：隔离安装完成前不得发布 _otel_tracer（防快速路径窗口）。"""
-        import openjiuwen.extensions.tracer_otel as extension
-
-        fake_tracer = MagicMock(name="ordered-tracer")
-        monkeypatch.setattr(extension, "init_otel_tracer", MagicMock(return_value=fake_tracer))
-        monkeypatch.setattr(tracer_otel_mod.settings.otel, "enabled", True)
-
-        seen = {"published_before_install": False}
-        real_install = tracer_otel_mod._install_per_tracer_handler_isolation
-
-        def install_and_check():
-            # 进入 install 时单例应仍为 None
-            if tracer_otel_mod._otel_tracer is not None:
-                seen["published_before_install"] = True
-            real_install()
-
-        monkeypatch.setattr(
-            tracer_otel_mod, "_install_per_tracer_handler_isolation", install_and_check
+    def test_attach_stamps_identity_onto_scoped_child():
+        """attach 后 stamp：子 handler 拿到本次 trace/session，不被并发 pending 覆盖。"""
+        _, dispatcher = TestExecutionScopedWorkflowIsolation._register_scoped(
+            "scope-stamp"
         )
+        # 模拟 Tracer.init 在 unscoped 下改写 pending（并发最后写入）
+        dispatcher.set_trace_id("trace-stale")
+        dispatcher.set_session_id("sess-stale")
 
-        assert tracer_otel_mod.setup_otel_tracer() is fake_tracer
-        assert seen["published_before_install"] is False
-        assert tracer_otel_mod._per_tracer_isolation_installed is True
+        token = attach_execution_scope(
+            "exec-1", trace_id="trace-1", session_id="sess-1"
+        )
+        try:
+            child = dispatcher._handlers["exec-1"]
+            assert child._trace_id == "trace-1"
+            assert child._session_id == "sess-1"
+        finally:
+            otel_context.detach(token)
+            release_execution_scope("exec-1")
