@@ -115,7 +115,7 @@
           [nzPageSizeOptions]="pageSize.options"
           nzShowSizeChanger
           (nzPageIndexChange)="getStructuredMessagesListData()"
-          (nzPageSizeChange)="searchList()"
+          (nzPageSizeChange)="onMessageTemplatePageSizeChange($event)"
         >
         </nz-pagination>
       </div>
