@@ -15,6 +15,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
 
 @Slf4j
@@ -29,21 +30,31 @@ public class SSRFValidator {
 
     private static boolean isUrlSafe(String url) {
 
-        if (!SSRFStaticConfig.isSsrfValidationEnabled()) {
-            return true;
-        }
-
         if (url == null || url.trim().isEmpty()) {
             return true;
         }
 
+        URI uri;
         try {
-            URI uri = new URI(url.trim());
-            // 检查协议是否为 HTTP/HTTPS <防止 file://, ftp://, gopher:// 等>
-            String scheme = uri.getScheme();
-            if (StringUtils.isEmpty(scheme) || !SSRFStaticConfig.getAllowedProtocols().contains(scheme)) {
-                return false;
-            }
+            uri = new URI(url.trim());
+        } catch (URISyntaxException e) {
+            log.error("url is not a valid URI, url is {}", url);
+            return false;
+        }
+
+        // 协议白名单与 SSRF 总开关解耦：即便关闭内网地址校验，也不能放行 file://、ftp://、gopher:// 等协议。
+        // 关闭开关只应放宽「内网地址/域名」判定，不应连带取消协议限制。
+        String scheme = uri.getScheme();
+        if (StringUtils.isEmpty(scheme) || !isProtocolAllowed(scheme)) {
+            log.error("protocol is not allowed, url is {}", url);
+            return false;
+        }
+
+        if (!SSRFStaticConfig.isSsrfValidationEnabled()) {
+            return true;
+        }
+
+        try {
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return false;
@@ -109,6 +120,11 @@ public class SSRFValidator {
             log.error("url is invalid, url is {}, error is {}", url, e);
             return false;
         }
+    }
+
+    private static boolean isProtocolAllowed(String scheme) {
+        return SSRFStaticConfig.getAllowedProtocols().stream()
+            .anyMatch(allowed -> allowed != null && allowed.trim().equalsIgnoreCase(scheme));
     }
 
     private static boolean isBlockedInternalDomain(String host) {
