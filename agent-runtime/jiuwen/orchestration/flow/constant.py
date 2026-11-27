@@ -10,6 +10,7 @@ import yaml
 
 from jiuwen.common.log.base import logger
 
+
 def _resolve_config_filename(raw: str) -> str:
     """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
     含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
