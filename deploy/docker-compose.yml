@@ -18,7 +18,7 @@ services:
     pull_policy: if_not_present
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
+      MYSQL_ROOT_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?SPRING_DATASOURCE_PASSWORD must be set (no default credential)}
       MYSQL_DATABASE: "agent-builder"
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_general_ci
@@ -59,8 +59,8 @@ services:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
-      MINIO_ROOT_USER: ${OBS_AK:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${OBS_SK:-minioadmin}
+      MINIO_ROOT_USER: ${OBS_AK:?OBS_AK must be set (no default credential)}
+      MINIO_ROOT_PASSWORD: ${OBS_SK:?OBS_SK must be set (no default credential)}
       MINIO_DOMAIN: minio
     volumes:
       - minio_data:/data
@@ -89,8 +89,8 @@ services:
         condition: service_healthy
     restart: "no"
     environment:
-      OBS_AK: ${OBS_AK:-minioadmin}
-      OBS_SK: ${OBS_SK:-minioadmin}
+      OBS_AK: ${OBS_AK:?OBS_AK must be set (no default credential)}
+      OBS_SK: ${OBS_SK:?OBS_SK must be set (no default credential)}
       OBS_BUCKET: ${OBS_BUCKET:-agent-builder}
     entrypoint: >
       /bin/sh -c "
@@ -541,7 +541,7 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set (no default credential)}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false

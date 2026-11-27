@@ -485,7 +485,7 @@ init_database() {
     # 执行 init.sql
     log_info "Executing init.sql..."
     local db_password
-    db_password=$(get_env_value SPRING_DATASOURCE_PASSWORD 123456)
+    db_password=$(get_env_value SPRING_DATASOURCE_PASSWORD "")
     compose exec -T mysql sh -c "mysql -uroot -p'${db_password}' < /docker-entrypoint-initdb.d/init.sql" 2>/dev/null || \
         compose exec -T mysql sh -c "mysql -uroot < /docker-entrypoint-initdb.d/init.sql" 2>/dev/null || \
         log_warn "Database init failed (may already be initialized)"
