@@ -10,22 +10,42 @@ import yaml
 
 from jiuwen.common.log.base import logger
 
-# 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）；
-# 只允许 resource 目录内的文件名，禁止路径分隔符防目录外读取
-_FILENAME = os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml")
-if not _FILENAME or "/" in _FILENAME or "\\" in _FILENAME or Path(_FILENAME).is_absolute():
-    logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {_FILENAME!r}, fallback to default")
-    _FILENAME = "workflow_constant.yaml"
+
+def _resolve_config_filename(raw: str) -> str:
+    """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
+    含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
+    if _is_unsafe_filename(raw):
+        logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {raw!r}, fallback to default")
+        return "workflow_constant.yaml"
+    return raw
+
+
+def _is_unsafe_filename(name: str) -> bool:
+    # basename 一致 = 纯文件名（无分隔符/无盘符相对形态）；. 与 .. 同样拒绝
+    return not name or Path(name).name != name or name in {".", ".."}
+
+
+# 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）
+_FILENAME = _resolve_config_filename(os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml"))
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resource', _FILENAME)
 
 
 def _load_workflow_constant():
     try:
         with open(CONFIG_PATH, encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
-    except Exception as e:
+            data = yaml.safe_load(config_file)
+    except (OSError, yaml.YAMLError) as e:
         logger.error(f"load workflow constant config failed: {CONFIG_PATH}, error: {e}")
         return {}
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(
+            f"workflow constant config {CONFIG_PATH} top-level is {type(data).__name__}, "
+            "expected mapping, fallback to defaults"
+        )
+        return {}
+    return data
 
 
 def _load_positive_int(key: str, default: int) -> int:
@@ -567,6 +587,15 @@ ERROR = "error"
 SIMPLE_TYPE_DICT = {STRING: str, INTEGER: int, NUMBER: float, BOOLEAN: bool}
 
 # 节点类型默认值：YAML 逐键覆盖，未声明的键保留内置默认，部分配置不会丢失其余默认值
+_TYPE_DEFAULT_VALUE_TYPES = {
+    STRING: str,
+    INTEGER: int,
+    NUMBER: float,
+    BOOLEAN: bool,
+    ARRAY: type(None),
+    OBJECT: type(None),
+    ERROR: type(None),
+}
 TYPE_DEFAULT_VALUE_DICT = {
     STRING: "",
     INTEGER: None,
@@ -579,10 +608,22 @@ TYPE_DEFAULT_VALUE_DICT = {
 _type_overrides = workflow_constant.get("type_default_value_dict")
 if isinstance(_type_overrides, dict):
     for _key, _value in _type_overrides.items():
-        if _key in TYPE_DEFAULT_VALUE_DICT:
-            TYPE_DEFAULT_VALUE_DICT[_key] = _value
-        else:
+        if _key not in TYPE_DEFAULT_VALUE_DICT:
             logger.warning(f"type_default_value_dict has unknown key: {_key!r}, ignored")
+            continue
+        _expected = _TYPE_DEFAULT_VALUE_TYPES[_key]
+        # int 是 bool 的父类，需先排除 bool 再匹配 int/float，避免 boolean: 1 被放行
+        _type_ok = (
+            isinstance(_value, _expected)
+            and not (_expected in (int, float) and isinstance(_value, bool))
+        )
+        if not _type_ok:
+            logger.warning(
+                f"type_default_value_dict key {_key!r} value {_value!r} has invalid type "
+                f"{type(_value).__name__}, keep builtin default"
+            )
+            continue
+        TYPE_DEFAULT_VALUE_DICT[_key] = _value
 
 # custom component
 BUILT_IN_COMPONENT_PREFIX = "jiuwen."
