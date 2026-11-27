@@ -34,7 +34,7 @@ def _load_workflow_constant():
     try:
         with open(CONFIG_PATH, encoding="utf-8") as config_file:
             data = yaml.safe_load(config_file)
-    except (OSError, yaml.YAMLError) as e:
+    except (OSError, UnicodeError, yaml.YAMLError) as e:
         logger.error(f"load workflow constant config failed: {CONFIG_PATH}, error: {e}")
         return {}
     if data is None:

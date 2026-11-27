@@ -60,11 +60,11 @@ class TestResolveConfigFilename:
         ["../secret.yaml", "/etc/passwd", "C:\\win.ini", "", "..", "."],
     )
     @staticmethod
-    def test_unsafe_filename_falls_back(monkeypatch, bad_value):
-        # 非法值回落默认文件：加载结果与不设环境变量一致
-        module = _reload_constant(monkeypatch, env=bad_value)
-        default_module = _reload_constant(monkeypatch)
-        assert module.CONFIG_PATH == default_module.CONFIG_PATH
+    def test_unsafe_filename_falls_back(bad_value):
+        # 非法文件名直接被解析函数拒绝并回落默认文件名（不触发文件读取）
+        import jiuwen.orchestration.flow.constant as constant_module
+        resolved = constant_module._resolve_config_filename(bad_value)
+        assert resolved == "workflow_constant.yaml"
 
 
 class TestLoadWorkflowConstant:
@@ -91,6 +91,21 @@ class TestLoadWorkflowConstant:
                 monkeypatch, env="workflow_constant_bad_scalar.yaml"
             )
             assert module.workflow_constant == {}
+        finally:
+            target.unlink(missing_ok=True)
+
+    @staticmethod
+    def test_invalid_utf8_bytes_falls_back(monkeypatch):
+        # 含非法 UTF-8 字节的配置：UnicodeDecodeError 被捕获，回落空配置不崩溃
+        target = _RESOURCE_DIR / "workflow_constant_bad_utf8.yaml"
+        # 0xFF 0xFE 是非法 UTF-8 序列
+        target.write_bytes(b"\xff\xfe task_execute_timeout: 300\n")
+        try:
+            module = _reload_constant(
+                monkeypatch, env="workflow_constant_bad_utf8.yaml"
+            )
+            assert module.workflow_constant == {}
+            assert module.TASK_EXECUTE_TIMEOUT == 300
         finally:
             target.unlink(missing_ok=True)
 
