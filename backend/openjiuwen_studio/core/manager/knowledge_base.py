@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, Union, Tuple, Optional
 from typing import List
 
-from fastapi import status, UploadFile
+from fastapi import HTTPException, status, UploadFile
 from openjiuwen.core.common.logging import logger
 from openjiuwen.core.retrieval.common.config import (
     KnowledgeBaseConfig,
@@ -577,6 +577,10 @@ def with_exception_handling(func):
         async def async_wrapper(*args, **kwargs):
             try:
                 return await func(*args, **kwargs)
+            except HTTPException:
+                # 权限/参数类错误必须原样上抛，让 FastAPI 返回真实状态码；
+                # 否则会被统一改写成 500，调用方无法区分"无权访问"和"服务异常"。
+                raise
             except Exception as e:
                 logger.error(f"[KNOWLEDGE_BASE] Error in {func.__name__}: {str(e)}", exc_info=True)
                 return ResponseModel(
@@ -589,6 +593,9 @@ def with_exception_handling(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except HTTPException:
+            # 同上：HTTPException 代表可预期的客户端错误，不能被降级成 500。
+            raise
         except Exception as e:
             logger.error(f"[KNOWLEDGE_BASE] Error in {func.__name__}: {str(e)}", exc_info=True)
             return ResponseModel(
@@ -3684,17 +3691,22 @@ def knowledge_base_list(req: KnowledgeBaseListRequest, current_user: dict) -> Re
 
     try:
         _ = check_user_space(req.space_id, current_user)
-    except Exception as e:
+    except HTTPException:
+        # 权限不足 / 空间不存在必须如实上报：吞掉之后前端会把"无权访问"显示成
+        # "这个空间里没有知识库"，既误导用户，也让越权探测看不出痕迹。
         logger.warning(
-            f"[KB_LIST] Space check failed, returning empty list - Space ID: {req.space_id}, Error: {str(e)}"
+            f"[KB_LIST] Space check rejected - Space ID: {req.space_id}, User: {user_id}"
         )
-        return ResponseModel(
-            code=status.HTTP_200_OK,
-            message="get knowledge base list success",
-            data=KnowledgeBaseListResponse(
-                items=[], total=0, page=req.page, size=req.size
-            ).model_dump(by_alias=False),
+        raise
+    except Exception as e:
+        logger.error(
+            f"[KB_LIST] Space check failed - Space ID: {req.space_id}, Error: {str(e)}",
+            exc_info=True,
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify space access",
+        ) from e
 
     # 2. 从数据库获取知识库列表
     list_result = knowledge_base_repository.knowledge_base_list(
@@ -3704,16 +3716,15 @@ def knowledge_base_list(req: KnowledgeBaseListRequest, current_user: dict) -> Re
     )
 
     if list_result.code != status.HTTP_200_OK:
-        logger.warning(
-            f"[KB_LIST] Database query failed, returning empty list - "
+        # 数据库故障不能伪装成"空列表"，否则前端表现为知识库全部消失且无人告警
+        logger.error(
+            f"[KB_LIST] Database query failed - "
             f"Space ID: {req.space_id}, Error: {list_result.message}"
         )
         return ResponseModel(
-            code=status.HTTP_200_OK,
-            message="get knowledge base list success",
-            data=KnowledgeBaseListResponse(
-                items=[], total=0, page=req.page, size=req.size
-            ).model_dump(by_alias=False),
+            code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message="Failed to get knowledge base list",
+            data=None,
         )
 
     # 3. 转换数据格式，并检查是否有图增强
