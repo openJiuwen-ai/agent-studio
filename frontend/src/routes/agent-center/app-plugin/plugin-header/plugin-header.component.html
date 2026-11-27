@@ -51,9 +51,6 @@
         </div>
       </div>
       <div class="header-right">
-        <span *ngIf="pluginInfo?.platform_published === 1" class="mr-[16px] text-[13px] text-[#8c8c8c]">
-          {{ 'version_number' | i18nextEager }}{{ pluginInfo?.plaza_version_name || '--' }}
-        </span>
         <div class="px-4 text-[#dbdbdb]">|</div>
         <div class="icon-border" (click)="!hasPermission() && getReference()" nz-tooltip [nzTooltipTitle]="'pluginheadercomponent_1139' | i18nextEager">
           <meta-inline-svg src="assets/agent-center/icons/public_link.svg" [style.color]="'#000'" [style.fontSize]="'16px'" [isInline]="false" />
