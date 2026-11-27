@@ -14,6 +14,7 @@ the IR execution chain or node semantics.
 """
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Query, Request
@@ -37,10 +38,14 @@ from agent_runtime.context.request_context import _request_ctx
 
 a2a_app = APIRouter(tags=["a2a"])
 
+# 模块级 logger：走 root handler，直接输出到 stdout（runtime_py.log 可见）
+_logger = logging.getLogger(__name__)
+
 A2A_ENDPOINT = "/a2a"
 WELL_KNOWN_PATH = "/.well-known/agent-card.json"
 
-_WORKFLOW_APP_TYPES = frozenset({"WORKFLOW", "workflow"})
+# 工作流形态的 appType（chat/task 为工作流子类型，IR 同样存放在 workflow/ir 下）
+_WORKFLOW_APP_TYPES = frozenset({"WORKFLOW", "workflow", "CHAT", "chat", "TASK", "task"})
 _AGENT_CARD_KEY_PREFIX = "a2a:agent-card:"
 
 
@@ -106,9 +111,22 @@ async def handle_a2a(
     parts = message.get("parts", [])
     text_parts = []
     for part in parts:
-        if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
+        if not isinstance(part, dict):
+            continue
+        # A2A 规范字段为 kind，兼容历史调用方使用的 type
+        if (part.get("kind") or part.get("type")) == "text" and part.get("text"):
             text_parts.append(part["text"])
     user_text = " ".join(text_parts)
+
+    # 入口日志：输出到 stdout，便于在 runtime 控制台/日志中直接看到调用
+    _logger.info(
+        "A2A incoming: rpc_id=%s, message_id=%s, agent_id=%s, method=%s, text=%r",
+        request_id,
+        message.get("messageId"),
+        resolved_agent_id,
+        method,
+        user_text[:200],
+    )
 
     # 6. Extract contextId → resolve conversation_id
     context_id = message.get("contextId", "")

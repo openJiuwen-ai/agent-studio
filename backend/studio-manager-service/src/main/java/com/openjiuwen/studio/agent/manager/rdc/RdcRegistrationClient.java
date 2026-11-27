@@ -23,7 +23,7 @@ import java.util.Map;
 /**
  * RDC 注册发现客户端
  *
- * <p>FEAT-131: 封装与 RDC 的 A1（注册）/ A3（注销）交互</p>
+ * <p>FEAT-131: 封装与 RDC 的 A1（注册）/ A2（心跳）/ A3（注销）交互</p>
  * <p>使用 java.net.http.HttpClient，不引入额外依赖</p>
  */
 @Slf4j
@@ -97,6 +97,52 @@ public class RdcRegistrationClient {
         } catch (Exception e) {
             log.error("RDC A1 register error, agentId={}", agentId, e);
             return null;
+        }
+    }
+
+    /**
+     * A2 心跳：PUT {base-url}/v2/agents/{agentId}/instances/{instanceId}/heartbeat
+     *
+     * <p>续命实例的 TTL，防止 30 秒后被 RDC 自动清除。</p>
+     *
+     * @param agentId 应用 ID
+     * @param instanceId RDC 实例 ID
+     * @return true=成功，false=失败
+     */
+    public boolean heartbeat(String agentId, String instanceId) {
+        if (!rdcProperties.isConfigured()) {
+            return false;
+        }
+        if (instanceId == null || instanceId.isBlank()) {
+            return false;
+        }
+
+        String url = String.format("%s/v2/agents/%s/instances/%s/heartbeat",
+            rdcProperties.getBaseUrl(), agentId, instanceId);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("X-Tenant-ID", rdcProperties.getTenantId())
+                .header("Authorization", "Bearer " + rdcProperties.getToken())
+                .timeout(Duration.ofMillis(rdcProperties.getTimeoutMs()))
+                .PUT(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                log.debug("RDC A2 heartbeat success, agentId={}, instanceId={}", agentId, instanceId);
+                return true;
+            } else {
+                log.warn("RDC A2 heartbeat failed, agentId={}, instanceId={}, status={}",
+                    agentId, instanceId, response.statusCode());
+                return false;
+            }
+        } catch (Exception e) {
+            log.warn("RDC A2 heartbeat error, agentId={}, instanceId={}: {}",
+                agentId, instanceId, e.getMessage());
+            return false;
         }
     }
 

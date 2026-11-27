@@ -86,17 +86,21 @@ class A2aEventMapper:
             "plan_message", "node_message", "message", "workflow_node_message",
             "intermediate_message", "agent_node_message",
         ):
-            text = data.get("text", data.get("message", ""))
+            text = data.get("text") or data.get("answer") or data.get("message") or ""
             if text:
                 return self.make_artifact_update_frame(str(text))
             return None
         elif event_type in ("DONE", "done", "end", "plan_done", "workflow_end", "workflow_finished"):
-            text = data.get("text", data.get("result", data.get("message", "")))
-            return self.make_completed_frame(str(text) if text else "", request_id)
+            text = (data.get("text") or data.get("answer")
+                    or data.get("result") or data.get("message") or "")
+            # 空的终态事件（如 "end"）不覆盖已有带文本的终态帧
+            if not text:
+                return None
+            return self.make_completed_frame(str(text), request_id)
         elif event_type in ("ERROR", "EXCEPTION", "error", "plan_error", "exception"):
             text = data.get("text", data.get("message", "Internal error"))
             return self.make_failed_frame(str(text), request_id)
         elif event_type in ("WAITING_USER_INPUT", "AGENT_INTERRUPTED", "interrupt", "waiting_user_input", "agent_interrupted"):
-            text = data.get("text", data.get("message", ""))
+            text = data.get("text") or data.get("answer") or data.get("message") or ""
             return self.make_input_required_degraded_frame(str(text) if text else "", request_id)
         return None

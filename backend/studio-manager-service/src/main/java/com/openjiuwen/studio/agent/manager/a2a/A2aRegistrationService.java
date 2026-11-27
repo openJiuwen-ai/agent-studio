@@ -14,9 +14,11 @@ import com.openjiuwen.studio.agent.manager.rdc.RdcRegistrationClient;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -94,6 +96,33 @@ public class A2aRegistrationService {
             // 注册失败，不阻断发布
             upsertRegistration(agentId, null, RegistrationStatus.REGISTRATION_FAILED, cardJson, "A1");
             log.warn("A2A registration failed (non-blocking), agentId={}, publish continues", agentId);
+        }
+    }
+
+    /**
+     * A2 心跳保活：每 10 秒为所有已注册实例发送心跳
+     *
+     * <p>RDC PostgreSQL 后端不支持 STATIC 免心跳，必须定期续命 TTL。</p>
+     */
+    @Scheduled(fixedDelay = 10000)
+    public void heartbeatAll() {
+        if (!rdcProperties.isEnabled()) {
+            return;
+        }
+        List<AgentRdcRegistrationEntity> registered = registrationMapper.selectByStatus(RegistrationStatus.REGISTERED);
+        if (registered == null || registered.isEmpty()) {
+            return;
+        }
+        for (AgentRdcRegistrationEntity entity : registered) {
+            String agentId = entity.getAgentId();
+            String instanceId = entity.getInstanceId();
+            if (instanceId == null || instanceId.isBlank()) {
+                continue;
+            }
+            boolean ok = rdcClient.heartbeat(agentId, instanceId);
+            if (!ok) {
+                log.warn("Heartbeat failed for agentId={}, instanceId={}, will retry next cycle", agentId, instanceId);
+            }
         }
     }
 

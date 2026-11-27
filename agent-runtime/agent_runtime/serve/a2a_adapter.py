@@ -167,5 +167,10 @@ async def start_adapter(host: str, port: int, internal_host: str, internal_port:
         port,
     )
 
+    # server 创建成功意味着端口已绑定
+    sockets = ", ".join(str(s.getsockname()) for s in server.sockets)
+    _logger.info("A2A adapter started, listening on %s → forwarding to %s:%s",
+                 sockets, internal_host, internal_port)
+
     async with server:
         await server.serve_forever()
