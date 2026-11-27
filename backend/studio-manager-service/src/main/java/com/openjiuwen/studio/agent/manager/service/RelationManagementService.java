@@ -2252,7 +2252,41 @@ public class RelationManagementService implements IRelationManagementService {
             Map<String, ShareResourceEntity> finalShareResourceMap = shareResourceMap;
             // 校验共享版本清单，过滤掉版本表中已不存在（或已软删）的版本，取真实存在的最大版本
             Map<String, ResourceVersionInfo> validShareLatestMap = buildValidShareLatestVersionMap(shareResources);
+            // 资产广场锚定版本（FRS-091）：跨空间直接引用已上架插件时，升级提示的目标版本
+            // 应为广场锚定版本（plaza_version_id），而非插件最新发布版本，
+            // 否则消费方会被引导升级到广场上不可见/未上架的版本，与版本锚定契约冲突。
+            Map<String, PluginEntity> plazaPluginMap = buildPlazaPluginMap(mappingEntities);
+            Map<String, ReleaseVersion> plazaAnchorVersionMap = new HashMap<>();
+            plazaPluginMap.values().forEach(plugin -> {
+                ReleaseVersion anchor = releaseVersionMapper.selectByAppIdAndVersionId(plugin.getPluginId(),
+                    plugin.getPlazaVersionId());
+                if (anchor != null) {
+                    plazaAnchorVersionMap.put(plugin.getPluginId(), anchor);
+                }
+            });
+            // 补充当前引用版本名称（skill 类型已从 extendInfo 设置），供前端升级弹窗按版本名展示，
+            // 避免直接展示版本系统号（长数字 ID 不直观）
+            List<ReleaseVersion> currentVersionParams = mappingEntities.stream()
+                .filter(mappingEntity -> StringUtils.isNotEmpty(mappingEntity.getResourceVersion()))
+                .map(mappingEntity -> {
+                    ReleaseVersion queryParam = new ReleaseVersion();
+                    queryParam.setAppId(mappingEntity.getResourceId());
+                    queryParam.setVersionId(mappingEntity.getResourceVersion());
+                    return queryParam;
+                })
+                .toList();
+            Map<String, String> currentVersionNameMap = currentVersionParams.isEmpty()
+                ? Collections.emptyMap()
+                : releaseVersionMapper.queryByWfVersions(currentVersionParams).stream()
+                    .collect(Collectors.toMap(
+                        version -> version.getAppId() + "#" + version.getVersionId(),
+                        ReleaseVersion::getVersionName,
+                        (existing, replacement) -> existing));
             relations.forEach(relation -> {
+                if (relation.getResourceVersionName() == null && StringUtils.isNotEmpty(relation.getResourceVersion())) {
+                    relation.setResourceVersionName(
+                        currentVersionNameMap.get(relation.getResourceId() + "#" + relation.getResourceVersion()));
+                }
                 ReleaseVersion releaseVersion = latestVersionMap.get(relation.getResourceId());
                 if (releaseVersion != null) {
                     relation.setResourceLatestVersion(releaseVersion.getVersionId());
@@ -2272,6 +2306,19 @@ public class RelationManagementService implements IRelationManagementService {
                         || shareLatestVersion.getVersionId().compareTo(relation.getResourceVersion()) >= 0)) {
                         relation.setResourceLatestVersion(shareLatestVersion.getVersionId());
                         relation.setResourceLatestVersionName(shareLatestVersion.getVersionName());
+                    }
+                }
+                // 跨空间直接引用（非共享）广场已上架插件：最新版本覆盖为广场锚定版本。
+                // 同空间引用（属主自己）保持最新发布版本，便于属主跟进自迭代。
+                PluginEntity plazaPlugin = plazaPluginMap.get(relation.getResourceId());
+                if (plazaPlugin != null
+                    && !ReferenceTypeEnum.SHARE.getValue().equals(relation.getReferenceType())
+                    && StringUtils.isNotEmpty(relation.getAppWorkspaceId())
+                    && !relation.getAppWorkspaceId().equals(plazaPlugin.getWorkspaceId())) {
+                    ReleaseVersion anchorVersion = plazaAnchorVersionMap.get(relation.getResourceId());
+                    if (anchorVersion != null) {
+                        relation.setResourceLatestVersion(anchorVersion.getVersionId());
+                        relation.setResourceLatestVersionName(anchorVersion.getVersionName());
                     }
                 }
             });
@@ -2327,6 +2374,29 @@ public class RelationManagementService implements IRelationManagementService {
             .max(Comparator.comparing(ResourceVersionInfo::getVersionId))
             .ifPresent(versionInfo -> result.put(resourceId, versionInfo)));
         return result;
+    }
+
+    /**
+     * 从映射关系中提取已上架资产广场的插件（tool 类型）集合，key 为 pluginId。
+     * 仅返回 platform_published=1 且 plaza_version_id 非空的插件。
+     *
+     * @param mappingEntities 映射关系列表（resourceId 已去除 #toolId 后缀）
+     * @return pluginId -> 广场已上架插件
+     */
+    private Map<String, PluginEntity> buildPlazaPluginMap(List<MappingEntity> mappingEntities) {
+        List<String> toolResourceIds = mappingEntities.stream()
+            .filter(mappingEntity -> "tool".equals(mappingEntity.getResourceType()))
+            .map(MappingEntity::getResourceId)
+            .distinct()
+            .toList();
+        if (toolResourceIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return pluginMapper.selectByIds(toolResourceIds).stream()
+            .filter(plugin -> Integer.valueOf(1).equals(plugin.getPlatformPublished())
+                && StringUtils.isNotEmpty(plugin.getPlazaVersionId()))
+            .collect(Collectors.toMap(PluginEntity::getPluginId, plugin -> plugin,
+                (existing, replacement) -> existing));
     }
 
     private void searchSkillResourceLatestVersion(List<Relation> relations, List<MappingEntity> mappingEntities) {

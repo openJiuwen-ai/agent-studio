@@ -6335,6 +6335,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           workflow_name: item.resource_name,
           valid: item.valid,
           resource_version: item.resource_version,
+          resource_version_name: item.resource_version_name,
           app_type: item.app_type,
           latest_version_app_sub_type: item.latest_version_app_sub_type,
         }));

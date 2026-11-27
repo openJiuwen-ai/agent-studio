@@ -196,6 +196,7 @@ export interface IRelationItem {
   app_name: string;
   resource_id: string;
   resource_version: string;
+  resource_version_name?: string;
   resource_type: string;
   resource_name: string;
   valid: boolean;

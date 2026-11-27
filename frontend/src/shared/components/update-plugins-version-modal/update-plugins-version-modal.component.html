@@ -37,8 +37,8 @@
           ></label>
         </td>
         <td class="line-clamp">{{ row.name }}</td>
-        <td class="line-clamp">{{ row.version_id ?? 'unpublished'|i18nextEager }}</td>
-        <td class="line-clamp">{{ row.last_version_id }}</td>
+        <td class="line-clamp">{{ row.resource_version_name ?? (row.version_id ?? 'unpublished'|i18nextEager) }}</td>
+        <td class="line-clamp">{{ row.last_version_name ?? row.last_version_id }}</td>
       </tr>
     </tbody>
   </nz-table>

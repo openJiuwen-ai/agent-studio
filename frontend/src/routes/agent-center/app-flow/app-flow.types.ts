@@ -527,6 +527,7 @@ export interface IRefWorkflows {
   workflow_name?: string;
   valid?: boolean;
   resource_version?: string;
+  resource_version_name?: string;
   app_type?: string;
   latest_version_app_sub_type?: string;
 }

@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareScopeEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.entity.WorkspaceEntity;
 import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
 import com.openjiuwen.studio.agent.manager.bo.SkillDetails;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
@@ -41,6 +42,7 @@ import com.openjiuwen.studio.agent.manager.dto.ListResourceRelationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourcesRelationsQo;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -374,6 +376,7 @@ class RelationManagementServiceTest {
         entity.setAppType("agent");
         entity.setAppWorkspaceId(appWorkspaceId);
         entity.setResourceId("plugin-1#tool-1");
+        entity.setResourceType("tool");
         entity.setResourceVersion("v1");
         entity.setReferenceType(referenceType);
         entity.setValid(true);
@@ -499,5 +502,126 @@ class RelationManagementServiceTest {
 
         assertEquals(1, result.getCount());
         assertEquals("app-cross", result.getRelations().get(0).getAppId());
+    }
+
+    @Test
+    void testListAppRelations_PlazaAnchorOverridesLatestForCrossSpaceRef() {
+        // #1735 测试反馈：跨空间直接引用广场已上架插件时，升级提示的目标版本应为广场锚定版本
+        // （plaza_version_id），而非插件最新发布版本；当前版本名称也应回填用于弹窗展示。
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w2");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ListAppRelationsQo qo = new ListAppRelationsQo();
+            qo.setWorkspaceId("w2");
+            qo.setVersion("latest");
+            qo.setShowlatest(true);
+
+            // 跨空间直接引用（app 在 w2，插件在 w1-owner）
+            MappingEntity mapping = buildToolMapping("app-w2", "w2", "direct");
+            mapping.setAppType("workflow");
+            mapping.setAppName("wf");
+            mapping.setResourceVersion("v1-id");
+            when(mappingMapper.selectByAppIdAndAppVersion("app-w2", "latest", null, null))
+                .thenReturn(new ArrayList<>(List.of(mapping)));
+            when(mappingMapper.selectByAppIdAndAppVersion("app-w2", null, null, null))
+                .thenReturn(Collections.emptyList());
+
+            WorkspaceEntity ws = new WorkspaceEntity();
+            ws.setId("w2");
+            ws.setName("W2");
+            when(workspaceMapper.selectWorkspaceByWorkspaceIdList(anyList())).thenReturn(List.of(ws));
+
+            // 插件最新发布版本
+            ReleaseVersion latest = new ReleaseVersion();
+            latest.setAppId("plugin-1");
+            latest.setVersionId("latest-id");
+            latest.setVersionName("v-latest");
+            latest.setAppType("tool");
+            when(releaseVersionMapper.queryLastVersionByAppIds(anySet())).thenReturn(List.of(latest));
+            // 当前引用版本名称回填
+            ReleaseVersion current = new ReleaseVersion();
+            current.setAppId("plugin-1");
+            current.setVersionId("v1-id");
+            current.setVersionName("v1");
+            when(releaseVersionMapper.queryByWfVersions(anyList())).thenReturn(List.of(current));
+            // 广场锚定版本
+            PluginEntity plazaPlugin = new PluginEntity();
+            plazaPlugin.setPluginId("plugin-1");
+            plazaPlugin.setPlatformPublished(1);
+            plazaPlugin.setPlazaVersionId("anchor-id");
+            plazaPlugin.setWorkspaceId("w1-owner");
+            when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plazaPlugin));
+            ReleaseVersion anchor = new ReleaseVersion();
+            anchor.setAppId("plugin-1");
+            anchor.setVersionId("anchor-id");
+            anchor.setVersionName("v-anchor");
+            when(releaseVersionMapper.selectByAppIdAndVersionId("plugin-1", "anchor-id")).thenReturn(anchor);
+
+            when(shareResourceManagerService.queryShareResourceEntityByResourceIdList(anyList()))
+                .thenReturn(Collections.emptyList());
+            when(skillMapper.searchBySkillIds(anyList(), any())).thenReturn(Collections.emptyList());
+
+            var result = relationManagementService.listAppRelations("p1", "app-w2", qo);
+
+            assertEquals(1, result.getCount());
+            var relation = result.getRelations().get(0);
+            assertEquals("anchor-id", relation.getResourceLatestVersion());
+            assertEquals("v-anchor", relation.getResourceLatestVersionName());
+            assertEquals("v1", relation.getResourceVersionName());
+        }
+    }
+
+    @Test
+    void testListAppRelations_PlazaAnchorNotAppliedForSameSpaceRef() {
+        // 同空间引用（属主自己的插件）：升级提示保持最新发布版本，属主可跟进自迭代。
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1-owner");
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+
+            ListAppRelationsQo qo = new ListAppRelationsQo();
+            qo.setWorkspaceId("w1-owner");
+            qo.setVersion("latest");
+            qo.setShowlatest(true);
+
+            MappingEntity mapping = buildToolMapping("app-owner", "w1-owner", "direct");
+            mapping.setAppType("workflow");
+            mapping.setAppName("wf");
+            mapping.setResourceVersion("v1-id");
+            when(mappingMapper.selectByAppIdAndAppVersion("app-owner", "latest", null, null))
+                .thenReturn(new ArrayList<>(List.of(mapping)));
+            when(mappingMapper.selectByAppIdAndAppVersion("app-owner", null, null, null))
+                .thenReturn(Collections.emptyList());
+
+            WorkspaceEntity ws = new WorkspaceEntity();
+            ws.setId("w1-owner");
+            ws.setName("W1");
+            when(workspaceMapper.selectWorkspaceByWorkspaceIdList(anyList())).thenReturn(List.of(ws));
+
+            ReleaseVersion latest = new ReleaseVersion();
+            latest.setAppId("plugin-1");
+            latest.setVersionId("latest-id");
+            latest.setVersionName("v-latest");
+            latest.setAppType("tool");
+            when(releaseVersionMapper.queryLastVersionByAppIds(anySet())).thenReturn(List.of(latest));
+            when(releaseVersionMapper.queryByWfVersions(anyList())).thenReturn(Collections.emptyList());
+
+            PluginEntity plazaPlugin = new PluginEntity();
+            plazaPlugin.setPluginId("plugin-1");
+            plazaPlugin.setPlatformPublished(1);
+            plazaPlugin.setPlazaVersionId("anchor-id");
+            plazaPlugin.setWorkspaceId("w1-owner");
+            when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plazaPlugin));
+
+            when(shareResourceManagerService.queryShareResourceEntityByResourceIdList(anyList()))
+                .thenReturn(Collections.emptyList());
+            when(skillMapper.searchBySkillIds(anyList(), any())).thenReturn(Collections.emptyList());
+
+            var result = relationManagementService.listAppRelations("p1", "app-owner", qo);
+
+            var relation = result.getRelations().get(0);
+            assertEquals("latest-id", relation.getResourceLatestVersion());
+            assertEquals("v-latest", relation.getResourceLatestVersionName());
+        }
     }
 }
