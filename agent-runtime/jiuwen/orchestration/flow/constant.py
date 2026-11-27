@@ -10,12 +10,25 @@ import yaml
 
 from jiuwen.common.log.base import logger
 
-# 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）；
-# 只允许 resource 目录内的文件名，禁止路径分隔符防目录外读取
-_FILENAME = os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml")
-if not _FILENAME or "/" in _FILENAME or "\\" in _FILENAME or Path(_FILENAME).is_absolute():
-    logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {_FILENAME!r}, fallback to default")
-    _FILENAME = "workflow_constant.yaml"
+def _resolve_config_filename(raw: str) -> str:
+    """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
+    含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
+    if _is_unsafe_filename(raw):
+        logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {raw!r}, fallback to default")
+        return "workflow_constant.yaml"
+    return raw
+
+
+def _is_unsafe_filename(name: str) -> bool:
+    if not name:
+        return True
+    if "/" in name or "\\" in name:
+        return True
+    return Path(name).is_absolute()
+
+
+# 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）
+_FILENAME = _resolve_config_filename(os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml"))
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resource', _FILENAME)
 
 
