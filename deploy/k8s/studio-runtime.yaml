@@ -113,8 +113,9 @@ spec:
               value: '/opt/cloud/agent-runtime/tls/key.pem'
             - name: TLS_CERT_PATH
               value: '/opt/cloud/agent-runtime/tls/cert.pem'
-            # ======== [选填] 沙箱配置 ========
-            # 远程沙箱地址（配置后启用沙箱模式，为空则沙箱不可用自动走 local）
+            # ======== [生产环境必填] 沙箱配置 ========
+            # 远程沙箱地址（配置后启用沙箱隔离执行）
+            # ⚠️ 未配置时代码节点将拒绝执行，需设 ALLOW_LOCAL_CODE_EXEC=true 才能走本地（不安全）
             - name: SECURITY_SANDBOX_SERVER
               value: ''
             # 沙箱类型：aio / jiuwenbox
@@ -125,9 +126,18 @@ spec:
             - name: SECURITY_SANDBOX_IDLE_TTL
               value: '600'
             - name: SECURITY_SANDBOX_TIMEOUT
-              value: '300'
+              value: '900'
             - name: SECURITY_SANDBOX_SCOPE
               value: 'system'
+            # 代码黑名单关键字（JSON 数组，由 flow_code._check_blacklist 的 json.loads 解析）
+            - name: CODE_BLACK_LIST
+              value: '["subprocess","os.system","os.popen","os.exec","os.spawn","os.fork","os.kill","os.remove","os.unlink","os.rmdir","os.rename","os.chmod","os.chown","__import__","importlib","ctypes","socket","shutil","multiprocessing"]'
+            # 是否允许本地代码执行（默认 false，仅限可信内网设为 true）
+            - name: ALLOW_LOCAL_CODE_EXEC
+              value: 'false'
+            # 本地代码执行兜底超时（秒）
+            - name: LOCAL_CODE_EXEC_TIMEOUT
+              value: '900'
             # ======== [选填] OpenSearch（启用记忆库时必填） ========
             # 格式: host:port，多节点用逗号分隔
             - name: OPENSEARCH_HOSTS
@@ -169,6 +179,10 @@ spec:
             # Uvicorn worker 数量，未设置时默认 1
             - name: GUNICORN_WORK_NUM
               value: '1'
+            # jemalloc 行为参数（空=库内默认；如 background_thread:true 开启后台页清理
+            # 降低驻留；LD_PRELOAD 由镜像内 start_server.sh 自动设置）
+            - name: MALLOC_CONF
+              value: ''
             - name: PORT
               value: '31014'
             - name: PLUGIN_SSL_API_CERT
@@ -214,6 +228,9 @@ spec:
             # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出，降低日志开销
             - name: PERFORMANCE_LOG_ENABLED
               value: 'true'
+            # 性能日志级别：默认 WARNING（不打印）；设为 INFO 打开性能指标
+            - name: PERFORMANCE_LOG_LEVEL
+              value: 'WARNING'
             # 意图识别工作流开关
             - name: ENABLE_INTENT_WORKFLOW
               value: 'true'
@@ -243,6 +260,13 @@ spec:
               value: ''
             - name: STORAGE_LOCAL_BUCKET
               value: ''
+            # ======== [选填] SQL节点配置 ========
+            # Java manager 服务地址（SQL节点通过HTTP调用manager执行SQL），HTTPS启动需改成https
+            - name: AGENT_MANAGER_ENDPOINT
+              value: 'http://studio-manager:31111'
+            # SQL执行HTTP调用超时时间（秒）
+            - name: DATASOURCE_EXECUTE_TIMEOUT
+              value: '25'
           resources:
             limits:
               cpu: '2'

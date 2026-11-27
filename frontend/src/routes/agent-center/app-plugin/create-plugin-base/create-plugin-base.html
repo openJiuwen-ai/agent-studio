@@ -241,6 +241,54 @@
             </nz-form-item>
 
             <!-- API Key -->
+            <div class="mb-4 mt-4 w-full" *ngIf="groupFormControl.controls.pluginAuthMethod.value === 'pluginDynamicAuth'">
+              <div class="mb-2 w-full text-label">{{ 'mcp_dynamic_auth_tip' | i18nextEager }}</div>
+              <meta-acc-block class="mt-2 block w-full" [title]="'param_list' | i18nextEager">
+                <ng-template #right>
+                  <div class="flex items-center gap-[4px]">
+                    <button nz-button nzType="default" nzSize="small" nz-tooltip [nzTooltipTitle]="'add_params' | i18nextEager" (click)="addDynamicAuthArg()">
+                      <nz-icon class="header-button-icon" nzType="plus" nzTheme="outline" />
+                    </button>
+                  </div>
+                </ng-template>
+                <ng-template #content>
+                  <div class="mt-2 flex items-center gap-2">
+                    <div class="flex w-[48%] items-center gap-[4px] text-label">
+                      <span>{{ 'mcp_dynamic_auth_param_name' | i18nextEager }}</span>
+                      <span nz-tooltip [nzTooltipTitle]="'mcp_dynamic_auth_tip' | i18nextEager" style="font-size: 16px; cursor: pointer">
+                        <nz-icon nzType="question-circle" nzTheme="outline" />
+                      </span>
+                    </div>
+                  </div>
+                  <form #dynamicAuthForm="ngForm">
+                    <div *ngFor="let param of dynamicAuthArgs; index as i" class="mt-2 flex gap-2">
+                      <div class="w-[48%]">
+                        <input
+                          nz-input
+                          style="width: 100%"
+                          [name]="'dynamicAuthName' + i"
+                          nonEmptyValidator
+                          pluginAuthNameValidator
+                          maxlength="64"
+                          [(ngModel)]="param.name"
+                          [placeholder]="'mcp_dynamic_auth_param_name' | i18nextEager"
+                          [class.input-error]="dynamicAuthForm?.controls['dynamicAuthName' + i]?.invalid"
+                        />
+                        <div *ngIf="dynamicAuthForm?.controls['dynamicAuthName' + i]?.invalid" class="error-tip">
+                          {{dynamicAuthForm?.controls['dynamicAuthName' + i]?.errors?.serviceName?.tiErrorMessage}}
+                        </div>
+                      </div>
+
+                      <span *ngIf="i > 0" (click)="deleteDynamicAuthArg(i)" style="font-size: 16px; cursor: pointer; padding-top: 6px">
+                        <nz-icon nzType="delete" nzTheme="outline" />
+                      </span>
+                      <div *ngIf="i === 0" class="h-[16px] w-[16px] bg-transparent"></div>
+                    </div>
+                  </form>
+                </ng-template>
+              </meta-acc-block>
+            </div>
+
             <div class="mb-4 mt-4 w-full" *ngIf="groupFormControl.controls.pluginAuthMethod.value === 'pluginApiKey'">
               <nz-form-item>
                 <nz-form-label [nzSpan]="6">{{ createPluginFormLabel.pluginAuthLoc }}</nz-form-label>

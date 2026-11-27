@@ -5,13 +5,23 @@
 agent-runtime / agent-builder 共享：
   - RedisClientManager（单例，同时管理异步与同步客户端）
   - get_redis_client() / get_sync_redis_client()
+
+Phase 2 过渡委托（Redis Provider 适配层，设计文档 §十）：
+  - 进程内已装配 redis_spi.accessor 时（agent-runtime / agent-builder 由
+    server lifespan 经 common_utils.redis_provider_bootstrap 装配），
+    get_client()/is_initialized/close 优先走 Provider 的 redis-py 原生视图
+    （as_native_client，Q3）；
+  - 未装配或适配层包未安装（独立使用）时回退 legacy 路径，行为不变；
+  - 同步客户端（get_sync_client）在 Provider 已装配时返回同步兼容桥
+    （redis_sync_compat.SyncCompatClient，sync-over-async 线程桥，redis-py
+    调用形态），未装配时回退 legacy 同步客户端。
 """
 
 from __future__ import annotations
 
 import logging
 import ssl
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from redis import Redis as SyncRedis
 from redis.asyncio import Redis
@@ -24,6 +34,49 @@ from redis.sentinel import Sentinel as SyncSentinel
 from common_utils.common_config import RedisMode, RedisSettings
 
 logger = logging.getLogger(__name__)
+
+
+def _load_provider_adapters():
+    """惰性加载 Provider 适配层访问器。
+
+    Q2 约束：redis_spi / redis_native 未安装的环境（builder 侧）返回 None，
+    调用方回退 legacy 路径——builder 行为不变、无需为其预留开关。
+    """
+    try:
+        from redis_native.compat import as_native_client
+        from redis_spi import accessor
+    except ImportError:
+        return None
+    return accessor, as_native_client
+
+
+def _provider_is_initialized() -> bool:
+    """Provider 适配层是否已装配（包缺失视为未装配）。"""
+    adapters = _load_provider_adapters()
+    return adapters is not None and adapters[0].is_initialized()
+
+
+async def _provider_aclose() -> None:
+    """关闭 Provider 客户端（调用方须先确认已装配；关闭异常原样上抛）。"""
+    adapters = _load_provider_adapters()
+    if adapters is not None:
+        await adapters[0].aclose()
+
+
+def _provider_native_view_or_none():
+    """已装配 Provider 时返回其 redis-py 原生视图；否则 None（回退 legacy）。
+
+    返回 None 的情形：适配层包未安装 / Provider 未装配。
+    已装配但 Provider 不暴露原生视图（非 native 实现）时抛 RedisConfigError
+    （fail-fast：业务尚未迁移到 SPI 面，不能静默回退到错误实例）。
+    """
+    adapters = _load_provider_adapters()
+    if adapters is None:
+        return None
+    accessor, as_native_client = adapters
+    if not accessor.is_initialized():
+        return None
+    return as_native_client(accessor.get_redis())
 
 
 class _NonTransactionRedis(Redis):
@@ -51,6 +104,8 @@ class RedisClientManager:
     _client: Optional[Union[Redis, RedisCluster]] = None
     _sync_client: Optional[Union[SyncRedis, SyncRedisCluster]] = None
     _settings: Optional[RedisSettings] = None
+    #: Provider 装配后注册的同步兼容桥（redis_provider_bootstrap 装配成功时注入）
+    _sync_compat: Optional[Any] = None
 
     def __init__(self) -> None:
         raise RuntimeError("Use get_instance() to get the singleton.")
@@ -179,12 +234,20 @@ class RedisClientManager:
     # ------------------------------------------------------------------ #
     # 同步客户端
     # ------------------------------------------------------------------ #
-    def get_sync_client(self) -> Union[SyncRedis, SyncRedisCluster]:
+    @classmethod
+    def set_sync_compat(cls, bridge: Any) -> None:
+        """注册 Provider 同步兼容桥（redis_provider_bootstrap 装配成功时调用）。"""
+        cls._sync_compat = bridge
+
+    def get_sync_client(self) -> Union[SyncRedis, SyncRedisCluster, Any]:
         """获取同步 Redis 客户端（惰性创建）。
 
-        与异步客户端共用同一份 RedisSettings；若异步客户端尚未 init()，
-        本方法会先尝试 init()（同样惰性读取环境变量）。
+        Provider 已装配时返回同步兼容桥（redis_sync_compat.SyncCompatClient，
+        redis-py 调用形态，流量走 Provider）；未装配时回退 legacy 同步客户端
+        （与异步客户端共用同一份 RedisSettings，若尚未 init() 会先惰性初始化）。
         """
+        if self._sync_compat is not None:
+            return self._sync_compat
         if self._sync_client is not None:
             return self._sync_client
 
@@ -306,17 +369,40 @@ class RedisClientManager:
         return ctx
 
     def get_client(self) -> Union[Redis, RedisCluster]:
-        """获取异步 Redis 客户端。"""
+        """获取异步 Redis 客户端。
+
+        过渡委托（Phase 2）：进程内已装配 Redis Provider 适配层时返回其
+        redis-py 原生视图（与 server lifespan 注入的客户端同一对象）；
+        未装配时回退 legacy 单例（builder / 独立使用场景行为不变）。
+        """
+        provider_client = _provider_native_view_or_none()
+        if provider_client is not None:
+            return provider_client
         if self._client is None:
             raise RuntimeError("Redis client not initialized. Call init() first.")
         return self._client
 
     @property
     def is_initialized(self) -> bool:
-        return self._client is not None
+        """是否可用：Provider 适配层已装配，或 legacy 异步客户端已初始化。"""
+        return _provider_is_initialized() or self._client is not None
 
     async def close(self) -> None:
-        """关闭 Redis 客户端（异步 + 同步）。"""
+        """关闭 Redis 客户端（异步 + 同步）。
+
+        过渡委托：已装配 Provider 适配层时一并关闭。Provider 客户端与 legacy
+        实例是不同连接池，二者均幂等关闭；未装配/包未安装时仅关 legacy。
+        同步兼容桥随 Provider 关闭一并释放（桥自持循环与专属客户端）。
+        """
+        if self._sync_compat is not None:
+            try:
+                self._sync_compat.close()
+            except Exception as e:  # noqa: BLE001 - 关闭尽力而为
+                logger.warning("Sync compat client close failed: %s", e)
+        type(self)._sync_compat = None
+        if _provider_is_initialized():
+            await _provider_aclose()
+            logger.info("Redis provider client closed.")
         if self._client is not None:
             await self._client.aclose()
             self._client = None
@@ -333,6 +419,7 @@ class RedisClientManager:
         cls._client = None
         cls._sync_client = None
         cls._settings = None
+        cls._sync_compat = None
 
 
 def get_redis_client() -> Union[Redis, RedisCluster]:

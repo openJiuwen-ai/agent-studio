@@ -163,7 +163,7 @@ class TimeParser(TimeUtility):
     def _get_norm_month_order_week(day_1, day_offset):
         day_weekday_1 = int(day_1.strftime("%w"))
         if day_weekday_1 == 1:
-            pass
+            pass  # Monday: day_offset unchanged.
         elif day_weekday_1 == 0:
             day_offset += 1
         else:
@@ -919,7 +919,7 @@ class TimeParser(TimeUtility):
                 or "同一" in limit_day_str
                 or "当" in limit_day_str
             ):
-                pass
+                pass  # Relative day is today; no date shift.
             elif "明" in limit_day_str or "次" in limit_day_str:
                 time_base_datetime += datetime.timedelta(days=1)
             elif "大大后" in limit_day_str:
@@ -1459,17 +1459,16 @@ class TimeParser(TimeUtility):
 
             four_season_str = "春夏秋冬春"
             for idx, item in enumerate(four_season_str):
-                if idx != 4:
-                    if item in solar_season:
-                        month_1, first_day = self._parse_solar_terms(
-                            first_tp.year, "立" + item
-                        )
-                        month_2, second_day = self._parse_solar_terms(
-                            first_tp.year, "立" + four_season_str[idx + 1]
-                        )
-                        if idx == 3:
-                            second_tp.year += 1
-                        break
+                if idx != 4 and item in solar_season:
+                    month_1, first_day = self._parse_solar_terms(
+                        first_tp.year, "立" + item
+                    )
+                    month_2, second_day = self._parse_solar_terms(
+                        first_tp.year, "立" + four_season_str[idx + 1]
+                    )
+                    if idx == 3:
+                        second_tp.year += 1
+                    break
             else:
                 raise ValueError("the season str {} is illegal.".format(time_str))
 
@@ -1501,9 +1500,7 @@ class TimeParser(TimeUtility):
             elif "下" in week_str:
                 time_base_datetime += one_week
             elif "本" in week_str or "这" in week_str:
-                pass
-            else:
-                pass
+                pass  # Current week; no week offset.
 
         def compute_week_day(cur, target_week_day):
             one_day = datetime.timedelta(days=1)
@@ -1860,15 +1857,12 @@ class TimeParser(TimeUtility):
             if "大前" in year_str:
                 year_1 = time_base_handler[0] - 3
                 year_2 = time_base_handler[0] - 3
-            elif "前一" in year_str:
+            elif "前一" in year_str or "去" in year_str or "上" in year_str:
                 year_1 = time_base_handler[0] - 1
                 year_2 = time_base_handler[0] - 1
             elif "前" in year_str:
                 year_1 = time_base_handler[0] - 2
                 year_2 = time_base_handler[0] - 2
-            elif "去" in year_str or "上" in year_str:
-                year_1 = time_base_handler[0] - 1
-                year_2 = time_base_handler[0] - 1
             elif _condition_one(year_str, time_str):
                 year_1 = time_base_handler[0]
                 year_2 = time_base_handler[0]
@@ -2363,13 +2357,13 @@ class TimeParser(TimeUtility):
             elif matched_unit in ["时", "点"]:
                 if full_time_handler_1[3] != -1 and self.base_handler[3] != -1:
                     if full_time_handler_1[3] > self.base_handler[3]:
-                        pass
+                        pass  # Parsed hour after base; keep same calendar day.
                     elif full_time_handler_1[3] < self.base_handler[3]:
                         time_str = TOMORROW_ZH + time_str
                     else:
                         if full_time_handler_1[4] != -1 and self.base_handler[4] != -1:
                             if full_time_handler_1[4] > self.base_handler[4]:
-                                pass
+                                pass  # Parsed minute after base; keep same day.
                             elif full_time_handler_1[4] < self.base_handler[4]:
                                 time_str = TOMORROW_ZH + time_str
                             else:

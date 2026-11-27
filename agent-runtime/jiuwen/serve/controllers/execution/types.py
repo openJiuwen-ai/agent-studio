@@ -160,17 +160,16 @@ class ModelConfigValidator(BaseModel):
                 ),
             )
         thinking = v.get("thinking")
-        if thinking is not None:
-            if not isinstance(thinking, dict) or thinking.get("type") not in (
-                "enabled",
-                "disabled",
-            ):
-                raise JiuWenBaseException(
-                    StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
-                    StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
-                        error_msg="model thinking type is not valid"
-                    ),
-                )
+        if thinking is not None and (
+            not isinstance(thinking, dict)
+            or thinking.get("type") not in ("enabled", "disabled")
+        ):
+            raise JiuWenBaseException(
+                StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.code,
+                StatusCode.LLM_AGENT_IR_VALIDATE_ERROR.errmsg.format(
+                    error_msg="model thinking type is not valid"
+                ),
+            )
         return v
 
 

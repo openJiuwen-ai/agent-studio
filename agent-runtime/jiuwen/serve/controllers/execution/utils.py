@@ -71,12 +71,7 @@ from jiuwen.serve.controllers.execution.enum import (
     PlanModeType,
     AsyncExecutionStatus,
 )
-from jiuwen.serve.controllers.execution.manager import (
-    StateManager,
-    ExecutionResultManager,
-    AsyncStateManager,
-    AsyncExecAsyncStateManager,
-)
+from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
     async_ir_load_batch,
@@ -486,25 +481,6 @@ async def _execute_workflow(req: ExecutionRequest, execution_data: ExecutionData
     wf_performance_buffer.info("workflow_execution", duration)
     wf_performance_buffer.record(req.conversation_id)
     return resp
-
-
-def update_state_of_workflow(
-    conversation_id: str, workflow_instance: Workflow, error_flag: bool = False
-):
-    """更新workflow的状态"""
-    state_manager = StateManager()
-    if error_flag:
-        # 发生错误
-        state_manager.delete_state(conversation_id)
-    elif (
-        workflow_instance.get_workflow_execute_status() == ExecutionStatus.USER_INTERACT
-    ):
-        # 正常执行，且未执行完毕，导出workflow的状态，并保存进存储介质
-        state = workflow_instance.get_state()
-        state_manager.save_state(conversation_id, serialize_object(state))
-    else:
-        # 正常执行完毕
-        state_manager.delete_state(conversation_id)
 
 
 async def async_update_state_of_workflow(
@@ -1300,8 +1276,12 @@ async def post_process_workflow_streaming_output(
             error_flag = True
         elif item.code == StreamCode.WORKFLOW_EXCEPTION.value:
             error_flag = True
-        if item.code in [StreamCode.PARTIAL_CONTENT.value, StreamCode.ERROR.value]:
-            if "workflow_id" not in item.data:
+        if item.code in [
+            StreamCode.PARTIAL_CONTENT.value,
+            StreamCode.ERROR.value,
+            StreamCode.WORKFLOW_START.value,
+        ]:
+            if item.data is not None and "workflow_id" not in item.data:
                 item.data.update(dict(workflow_id=workflow_id))
         if item.code == StreamCode.FINISH.value:
             # 更新或者删除存储介质中的workflow state
@@ -1324,77 +1304,6 @@ async def post_process_workflow_streaming_output(
         "workflow_execution_output", duration, uid=conversation_id
     )
     wf_performance_buffer.record(conversation_id)
-
-
-async def post_process_workflow_streaming_output_async(
-    conversation_id: str, origin_output: Iterable, workflow_instance: Workflow
-) -> AsyncExecutionStatus:
-    """
-    Processes the original workflow streaming output result in a structured manner.
-    Processing may be accompanied by state update operations.
-    """
-    # 每次对话都需要先生成一个start标识
-    start_flag = True
-    execution_id = ""
-    error_flag = False
-    for item in origin_output:
-        if not execution_id:
-            execution_id = item.execution_id
-        if start_flag:
-            start_stream_data = StreamingChatResponse(
-                event=ConversationEvent.START,
-                index=0,
-                executionId=item.execution_id,
-                data={},
-                createdTime=get_current_time_ms(),
-                isStructMessage=item.is_struct_message,
-            )
-            start_flag = False
-            ExecutionResultManager().append_message(execution_id, start_stream_data)
-
-        if item.code == StreamCode.ERROR.value:
-            code_of_data = item.data.get("code") or ""
-            item.data.update(
-                dict(
-                    message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
-                        code_of_data, _SAFE_PUBLIC_ERROR_MESSAGE
-                    )
-                )
-            )
-            error_flag = True
-        static_data_res = StreamingChatResponse(
-            event=item_code_to_conversation_event_type.get(item.code),
-            data=item.data,
-            index=item.index,
-            executionId=item.execution_id,
-            createdTime=get_current_time_ms(),
-            isStructMessage=item.is_struct_message,
-        )
-        ExecutionResultManager().append_message(execution_id, static_data_res)
-
-    execution_status: ExecutionStatus = workflow_instance.get_workflow_execute_status()
-
-    # 修改AsyncExecutionState
-    async_exec_status: AsyncExecutionStatus = _get_conv_status_by_exec_status(
-        execution_status
-    )
-    async_exec_state = AsyncExecutionState(
-        status=async_exec_status, exec_id=execution_id
-    )
-
-    await AsyncExecAsyncStateManager().set_state_structure(
-        conversation_id, async_exec_state
-    )
-
-    # 更新或者删除存储介质中的workflow state
-    await async_update_state_of_workflow(
-        conversation_id=conversation_id,
-        workflow_instance=workflow_instance,
-        error_flag=error_flag,
-    )
-    # 流式执行结束，清理workflow对象
-    await workflow_instance.clean_up()
-    return async_exec_status
 
 
 def prepare_params(req: Union[ExecutionRequest, ComponentExecutionRequest]):

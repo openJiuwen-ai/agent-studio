@@ -42,7 +42,7 @@ class ToolUseMode(BaseMode):
             else:
                 yield {"ret_code": RetCode.FAILED, "result": "任务执行未返回任何结果"}
                 termination_signal = True
-        return last_message, termination_signal
+        return
 
     async def stream(self, **kwargs) -> AsyncGenerator:
         """流式调用控制器处理用户查询"""
@@ -56,6 +56,10 @@ class ToolUseMode(BaseMode):
                 "contexts": request.contexts,
                 "runtime_context": request.runtime_context,
                 "multimodal_image": request.multimodal_image,
+                # OTel：透传 trace_handlers——ToolUsePlanner 经 message.runtime_data
+                # 构造插件/MCP 任务，包装器内部 TraceManager 据此发射
+                # on_plugin_start/end/error（react_mode 同款供给）
+                "trace_handlers": request.trace_handlers,
             }
             self.task_planner.update_plugins(request.plugins)
             self.task_planner.update_mcps(request.mcps)

@@ -197,8 +197,8 @@ export_dep_images() {
     local dep_images=(
         "mysql:8.0"
         "redis:7"
-        "minio/minio:latest"
-        "minio/mc:latest"
+        "pgsty/silo:RELEASE.2026-10-18T00-00-00Z"
+        "pgsty/mc:RELEASE.2026-10-18T00-00-00Z"
         "victoriametrics/victoria-logs:v1.50.0"
         "timberio/vector:0.55.0-alpine"
     )

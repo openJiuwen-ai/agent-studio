@@ -65,7 +65,7 @@ public interface AppMapper {
 
     int deleteByPrimaryKeys(@Param("appIds") List<String> appIds);
 
-    void updateProjectIdByAppIds(String opSvcProjectId, List<String> appIds);
+    void updateProjectIdByAppIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("appIds") List<String> appIds);
 
     /**
      * 根据 resource ids 从数据库获取apps信息

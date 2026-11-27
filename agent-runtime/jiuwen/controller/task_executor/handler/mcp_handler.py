@@ -40,11 +40,15 @@ class McpHandler(BaseHandler):
         start_time = time.time()
         if tool_name == mcp.name:
             kwargs_new = kwargs.copy()
+            # planner tool_call 标识经 ainvoke kwargs 透传给 MCP 侧 tracer，
+            # 供 OTel 双写盖 gen_ai.tool.call.id / gen_ai.tool.type
             function_exec_res = await mcp.ainvoke(
                 inputs=json.loads(tool_arguments),
                 tool_id=mcp.tool_id,
                 agent_id=mcp.agent_id,
                 session_id=mcp.session_id,
+                tool_call_id=function_call.get("tool_call_id", ""),
+                tool_type="mcp",
                 **kwargs_new,
             )
             exec_latency = round(time.time() - start_time, 2)  # 工具执行耗时

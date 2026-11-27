@@ -437,13 +437,17 @@ def _find_sse_line_end(buffer: bytes):
 async def _iter_relay_with_reasoning_transform(response: httpx.Response):
     """按行缓冲转发流式响应：跨包拆行、``\\r\\n``/裸 ``\\r`` 行尾重组为完整行后走归一变换。
 
+    使用 ``aiter_bytes`` 读取已按 ``Content-Encoding`` 解码的响应体。若使用
+    ``aiter_raw``，gzip 压缩的 SSE 会被原样转发，下游 SSE 解析器将无法识别
+    ``data:`` 帧。
+
     保留原始行终止符字节，无需补齐的行原样直通；单行超过 ``_MAX_SSE_LINE_BUFFER`` 时把
     已缓冲字节直接放行并清空缓冲（该行整体降级为字节直通、不再累积后续字节参与拼接），
     防止异常或恶意上游持续发送无换行数据导致内存无界增长。流结束时若仍有残余缓冲
     （末行无终止符），按原样再走一次变换，不额外补 ``\\n``。
     """
     buffer = b""
-    async for chunk in response.aiter_raw():
+    async for chunk in response.aiter_bytes():
         buffer += chunk
         while True:
             idx, sep = _find_sse_line_end(buffer)

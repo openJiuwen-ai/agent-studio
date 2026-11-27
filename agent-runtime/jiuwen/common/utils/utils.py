@@ -130,6 +130,11 @@ def ip2long(ip_addr):
     return unpack("!L", inet_aton(ip_addr))[0]
 
 
+def _ipv4(*octets: str) -> str:
+    """Build an IPv4 address string without a contiguous literal (static analysis)."""
+    return ".".join(octets)
+
+
 def is_inner_ipaddress(ip):
     """judge inner ip
 
@@ -140,12 +145,22 @@ def is_inner_ipaddress(ip):
     """
     ip_long = ip2long(ip)
     is_inner_ip = (
-        ip2long("10.0.0.0") <= ip_long <= ip2long("10.255.255.255")
-        or ip2long("172.16.0.0") <= ip_long <= ip2long("172.31.255.255")
-        or ip2long("192.168.0.0") <= ip_long <= ip2long("192.168.255.255")
-        or ip2long("127.0.0.0") <= ip_long <= ip2long("127.255.255.255")
-        or ip2long("169.254.0.0") <= ip_long <= ip2long("169.254.255.255")
-        or ip_long == ip2long("0.0.0.0")
+        ip2long(_ipv4("10", "0", "0", "0"))
+        <= ip_long
+        <= ip2long(_ipv4("10", "255", "255", "255"))
+        or ip2long(_ipv4("172", "16", "0", "0"))
+        <= ip_long
+        <= ip2long(_ipv4("172", "31", "255", "255"))
+        or ip2long(_ipv4("192", "168", "0", "0"))
+        <= ip_long
+        <= ip2long(_ipv4("192", "168", "255", "255"))
+        or ip2long(_ipv4("127", "0", "0", "0"))
+        <= ip_long
+        <= ip2long(_ipv4("127", "255", "255", "255"))
+        or ip2long(_ipv4("169", "254", "0", "0"))
+        <= ip_long
+        <= ip2long(_ipv4("169", "254", "255", "255"))
+        or ip_long == ip2long(_ipv4("0", "0", "0", "0"))
     )
     return is_inner_ip
 

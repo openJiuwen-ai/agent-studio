@@ -40,7 +40,7 @@ import { EditAgentNameComponent } from '@routes/ai-assist-create-agent/edit-agen
 interface QuestionItem {
   question: string;
   options: string[];
-  selected?: string;
+  selected?: string[];
 }
 
 interface TimelineGroup {
@@ -498,7 +498,16 @@ export class AiAssistCreateAgentComponent
   }
 
   onToggleOption(q: any, opt: string): void {
-    q.selected = q.selected === opt ? undefined : opt;
+    // 需求澄清选项支持多选（如"需要集成以下哪些能力"），点击切换选中态
+    if (!Array.isArray(q.selected)) {
+      q.selected = [];
+    }
+    const index = q.selected.indexOf(opt);
+    if (index > -1) {
+      q.selected.splice(index, 1);
+    } else {
+      q.selected.push(opt);
+    }
   }
 
   async createAgentApp(config: any) {
@@ -516,6 +525,7 @@ export class AiAssistCreateAgentComponent
         tool_details: config.tools || [],
         knowledge_repos: config.knowledge_repos || [],
         workflow_details: config.workflows || [],
+        skills: config.skills || [],
         scheduling_mode: 'ReAct',
       };
 
@@ -532,7 +542,14 @@ export class AiAssistCreateAgentComponent
           );
 
           const lastMsg = this.chatHistory[this.chatHistory.length - 1];
-          const successMsg = `已为您生成${result.name}智能体`;
+          let successMsg = `已为您生成${result.name}智能体`;
+          // 展示对话式生成集成的技能，与插件/知识库保持一致的提示方式
+          const skillNames = (config.skills || [])
+            .map((skill: any) => skill?.skill_name)
+            .filter(Boolean);
+          if (skillNames.length) {
+            successMsg += `，已集成技能：${skillNames.join('、')}`;
+          }
           if (lastMsg && lastMsg.role === 'assistant') {
             lastMsg.content = lastMsg.content ? lastMsg.content + `\n\n${successMsg}` : successMsg;
           }
@@ -578,8 +595,8 @@ export class AiAssistCreateAgentComponent
 
   onSubmitSelections(m: any) {
     const sel = m.questions
-      .filter((q: any) => q.selected)
-      .map((q: any) => `${q.question}：${q.selected}；`);
+      .filter((q: any) => Array.isArray(q.selected) && q.selected.length)
+      .map((q: any) => `${q.question}：${q.selected.join('、')}；`);
 
     if (sel.length) {
       this.promptValue = sel.join('\n');

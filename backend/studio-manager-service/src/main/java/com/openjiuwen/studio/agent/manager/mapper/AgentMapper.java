@@ -171,7 +171,7 @@ public interface AgentMapper {
     int selectByDomainId(@Param("domainId") String domainId, @Param("status") String status,
         @Param("publishedOn") Timestamp date);
 
-    void updateProjectIdByAgentIds(String opSvcProjectId, List<String> agentIds);
+    void updateProjectIdByAgentIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("agentIds") List<String> agentIds);
 
     void updateAgentShareStatus(@Param("agentId") String agentId, @Param("status") int status);
 

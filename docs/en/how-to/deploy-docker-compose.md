@@ -142,8 +142,8 @@ The script automatically pulls and exports the following images:
 |-------|---------|
 | mysql | 8.0 |
 | redis | 7 |
-| minio/minio | RELEASE.2024-11-07T00-52-20Z |
-| minio/mc | RELEASE.2024-11-05T11-29-45Z |
+| pgsty/silo | RELEASE.2026-10-18T00-00-00Z |
+| pgsty/mc | RELEASE.2026-10-18T00-00-00Z |
 
 After export, transfer the `~/dep-images/` directory to the target machine's `dep-images/` directory.
 

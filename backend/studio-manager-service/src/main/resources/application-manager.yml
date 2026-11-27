@@ -484,6 +484,12 @@ env-management:
     limit-quota: ${env_mgmt_variables_limit_quota:500}
     max-upload-file-size-kb: ${env_mgmt_max_upload_file_size_kb:10240}
 
+manager:
+  # 定制:转发 runtime/builder 的 OkHttp 出站请求时跳过的入站 header 名单(逗号分隔,大小写不敏感)。
+  # 空/缺省 = 不过滤(全量透传旧行为)。域名入口按 Host 路由类部署的标准值:
+  # host,connection,keep-alive,transfer-encoding,content-length,accept-encoding
+  skip-outbound-header-list: ${manager_skip_outbound_header_list:}
+
 file:
   img-type: ${file_img_type:.png,.jpg,.jpeg,.bmp,.gif}
   icon-type: ${file_icon_type:.jpg,.jpeg,.png,.gif}
@@ -508,6 +514,10 @@ export:
   signature:
     enable: ${export_signature_enable:false}
     key: ${export_signature_key:}
+  # 运行时资产导出（SDD 4.5.1）
+  runtime-asset:
+    max-concurrent: ${asset_runtime_export_max_concurrent:5}
+    max-assets: ${asset_runtime_export_max_assets:100}
 
 # 委托换取token
 agency:
@@ -519,7 +529,7 @@ delegate:
 
 jackson:
   # Jackson 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制。
-  # 用于 Spring 容器全局 ObjectMapper，影响 RedisTemplate 等使用容器 ObjectMapper 的组件。默认 50MB。
+  # 用于 Spring 容器全局 ObjectMapper，影响所有使用容器 ObjectMapper 的组件。默认 50MB。
   max-string-length: ${jackson_max_string_length:50000000}
   # Jackson 反序列化允许的最大 token 数，防止超大 JSON 解析时 token 数爆炸。默认 10M。
   max-token-limit: ${jackson_max_token_limit:10000000}

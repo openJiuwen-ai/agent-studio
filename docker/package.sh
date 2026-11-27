@@ -116,6 +116,12 @@ function runtime_copy() {
   rm -rf ${RUNTIME_TARGET_PATH}/common_utils
   cp -rf ${WORKSPACE}/packages/common_utils/common_utils ${RUNTIME_TARGET_PATH}/common_utils
 
+  # Redis 适配层共享包（packages/redis_spi + redis_native）：同上，靠 PYTHONPATH=app 导入
+  rm -rf ${RUNTIME_TARGET_PATH}/redis_spi
+  cp -rf ${WORKSPACE}/packages/redis_spi/redis_spi ${RUNTIME_TARGET_PATH}/redis_spi
+  rm -rf ${RUNTIME_TARGET_PATH}/redis_native
+  cp -rf ${WORKSPACE}/packages/redis_native/redis_native ${RUNTIME_TARGET_PATH}/redis_native
+
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
 
@@ -176,6 +182,12 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/common_utils" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/common_utils
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/redis_spi" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/redis_spi
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/redis_native" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/redis_native
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin

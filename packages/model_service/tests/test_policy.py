@@ -3,6 +3,8 @@
 """Unit tests for model_service.policy (audit / alarm / invoke_with_strategy)."""
 
 import asyncio
+import json
+import logging
 
 import pytest
 
@@ -52,6 +54,15 @@ class TestAuditLog:
     @staticmethod
     def test_alarm_does_not_raise():
         alarm("LLM", "res", "cause")
+
+    @staticmethod
+    def test_alarm_create_time_is_milliseconds(caplog):
+        """create_time 与 Java AlarmLogUtil 契约一致为毫秒级时间戳。"""
+        with caplog.at_level(logging.WARNING, logger="model_service.alarm"):
+            alarm("LLM", "res", "cause")
+        payload = json.loads(caplog.records[-1].getMessage())
+        # 毫秒级 ≈ 1.7e12；秒级 ≈ 1.7e9（缺陷形态）
+        assert payload["create_time"] > 10 ** 12
 
 
 class TestInvokeModelStrategy:

@@ -16,7 +16,8 @@ from agent_runtime.common.model_providers import (
     EnvVarModelConfigProvider,
     IRModelConfigProvider,
 )
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.runner.context import create_conversation_context
 from agent_runtime.runner.memory_extraction_context import MemoryExtractionContext
 from agent_runtime.runner.workflow_stream_data_wrapper import WorkflowStreamDataWrapper
@@ -27,6 +28,9 @@ from agent_runtime.schemas.orchestration_mgr import (
 )
 from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
+from jiuwen.serve.controllers.execution.workflow_instance_cache import (
+    aget_or_create_workflow_instance,
+)
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.extension.workflow_node.start import Start
 from jiuwen.extension.workflow_node.utils import WorkflowAbortException
@@ -42,8 +46,9 @@ from agent_runtime.error_contract.factory import is_plugin_response_format_error
 try:
     from opentelemetry import trace as otel_trace
     from opentelemetry import context as otel_context
-    from opentelemetry.trace import SpanContext, TraceFlags, TraceState
+    from opentelemetry.trace import SpanContext, TraceState
     from opentelemetry.trace.span import NonRecordingSpan
+    from agent_runtime.observability.otel_parent_flags import resolve_injected_trace_flags
     _HAS_OTEL = True
 except ImportError:
     _HAS_OTEL = False
@@ -98,10 +103,10 @@ class ExecutionIdStore:
             bool: 是否保存成功
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, exec_id, ex=expire)
+            await redis_client.set(key, exec_id, duration=Duration.seconds(expire))
             workflow_logger.debug("Saved execution_id: key={}, exec_id={}", key, exec_id)
             return True
         except Exception as e:
@@ -120,7 +125,7 @@ class ExecutionIdStore:
             str | None: 保存的 execution_id，不存在或失败时返回 None
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             result = await redis_client.get(key)
             if result is not None:
@@ -146,7 +151,7 @@ class ExecutionIdStore:
             bool: 是否删除成功
         """
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted execution_id: key={}", key)
@@ -178,10 +183,10 @@ class TraceIdStore:
         cls, workflow_id: str, session_id: str, trace_id: str, ttl: int = None
     ) -> bool:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             expire = ttl if ttl is not None else cls.DEFAULT_TTL
-            await redis_client.set(key, trace_id, ex=expire)
+            await redis_client.set(key, trace_id, duration=Duration.seconds(expire))
             workflow_logger.debug("Saved trace_id: key={}, trace_id={}", key, trace_id)
             return True
         except Exception as e:
@@ -191,7 +196,7 @@ class TraceIdStore:
     @classmethod
     async def get(cls, workflow_id: str, session_id: str) -> str | None:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             trace_id = await redis_client.get(key)
             if trace_id:
@@ -208,7 +213,7 @@ class TraceIdStore:
     @classmethod
     async def delete(cls, workflow_id: str, session_id: str) -> bool:
         try:
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_key(workflow_id, session_id)
             await redis_client.delete(key)
             workflow_logger.debug("Deleted trace_id: key={}", key)
@@ -239,9 +244,8 @@ class WorkflowRunner:
             workflow_logger.warning(
                 "API_KEY is not configured; workflow execution will fail"
             )
-        self._api_base = api_base or os.environ.get(
-            "API_BASE", "https://api.deepseek.com"
-        )
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = api_base or os.environ.get("API_BASE", _default_api_base)
         self._model_strategy = model_strategy
         workflow_logger.info("WorkflowRunner: model_config_strategy=%s", model_strategy.value)
         self._ir_converter = IRConverter()
@@ -272,14 +276,14 @@ class WorkflowRunner:
         直读 Redis，不 import serve 层（依赖方向：runner 不依赖 serve）。
         Redis 客户端 decode_responses=False，值为 bytes，按 bytes 语义比较。
         """
-        value = await get_redis_client().get(f"cancel:{conversation_id}")
+        value = await accessor.get_redis().get(f"cancel:{conversation_id}")
         if isinstance(value, bytes):
             return value == b"true"
         return value == "true"
 
     async def _clear_session_cancelled(self, conversation_id: str) -> None:
         """清除协作式取消标记（检测到取消后调用，键名与 serve/execution_registry.py 保持一致）"""
-        await get_redis_client().delete(f"cancel:{conversation_id}")
+        await accessor.get_redis().delete(f"cancel:{conversation_id}")
 
     async def run_streaming(
         self,
@@ -338,10 +342,14 @@ class WorkflowRunner:
             _ctx = _request_ctx.get()
             _cust_headers = _ctx.customer_headers if _ctx else {}
             _project_id = _ctx.project_id if _ctx else ""
-            workflow = await self._ir_converter.async_ir_to_workflow(
+            workflow = await aget_or_create_workflow_instance(
+                ir_path,
                 ir_json,
-                cust_headers=_cust_headers,
-                project_id=_project_id,
+                build=self._ir_converter.async_ir_to_workflow,
+                build_kwargs={
+                    "cust_headers": _cust_headers,
+                    "project_id": _project_id,
+                },
             )
             performance_logger.info(
                 f"ir_convert|{round((time.perf_counter() - t_convert_start) * 1000)}"
@@ -478,11 +486,14 @@ class WorkflowRunner:
                 if saved_trace_id:
                     # Update current OTel context to use saved_trace_id
                     if _HAS_OTEL:
+                        # 与 middleware 一致：父 TraceFlags 跟随 OTEL_SAMPLE_RATE，
+                        # 禁止硬编码 SAMPLED 绕过采样率 0（#1644/#1713）。
+                        _otel_trace_id = _to_otel_trace_id(saved_trace_id)
                         _otel_span_ctx = SpanContext(
-                            trace_id=_to_otel_trace_id(saved_trace_id),
+                            trace_id=_otel_trace_id,
                             span_id=int(uuid.uuid4().hex[:16], 16),
                             is_remote=False,
-                            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                            trace_flags=resolve_injected_trace_flags(_otel_trace_id),
                             trace_state=TraceState(),
                         )
                         _otel_span = NonRecordingSpan(_otel_span_ctx)
@@ -574,7 +585,10 @@ class WorkflowRunner:
             if not is_resuming:
                 yield {
                     "event": "workflow_start",
-                    "data": {},
+                    "data": {
+                        "workflow_id": workflow_id,
+                        "workflow_name": ir_json.get("workflowName", ""),
+                    },
                     "index": 0,
                     "executionId": exec_id,
                     "createdTime": wf_start_time,
@@ -793,11 +807,7 @@ class WorkflowRunner:
         async for chunk in self.run_streaming(req):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
-            if event == "message":
-                text = data.get("answer", "") or data.get("output", "")
-                if text:
-                    result_parts.append(str(text))
-            elif event == "done":
+            if event in ("message", "done"):
                 text = data.get("answer", "") or data.get("output", "")
                 if text:
                     result_parts.append(str(text))

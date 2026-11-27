@@ -10,6 +10,8 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
+
 /**
  * 国际化Util类
  *
@@ -33,6 +35,27 @@ public class I18nUtil {
         // 导致全局异常处理器自己崩掉、客户端收不到可读错误（表现为"空响应/语法错误"）。
         try {
             return messageSource.getMessage(code, args, code, LanguageUtils.getLanguageLocale());
+        } catch (Exception e) {
+            return code;
+        }
+    }
+
+    /**
+     * 按错误码 + 显式 locale 获取错误信息。
+     * <p>COM-03 builder 传 locale 解析文案，不可把 locale 当作 varargs 的 args[0] 填占位符
+     * （否则 {0} 占位被填成 locale.toString()）。显式重载避免落入 getMessage(String, Object...) 的 varargs。
+     *
+     * @param code   错误码 i18n key
+     * @param args   i18n 占位符填充值（资源未发布时为资源类型等业务参数）
+     * @param locale 显式 locale，不被当作占位符参数
+     * @return 异常信息；资源缺失时返回 code 本身
+     */
+    public String getMessage(String code, Object[] args, Locale locale) {
+        try {
+            // 空 args 归一为 null：MessageFormat 对 null/空数组 + {0} 占位符不抛异常（已实证），
+            // 但留 {0} 原文。归一为 null 统一"空 args"契约，便于上层判断；defaultMessage=code 兜底防崩。
+            Object[] effective = (args != null && args.length == 0) ? null : args;
+            return messageSource.getMessage(code, effective, code, locale);
         } catch (Exception e) {
             return code;
         }

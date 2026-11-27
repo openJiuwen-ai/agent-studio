@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from agent_runtime.common.config import settings
 from agent_runtime.context.request_context import _request_ctx
 from agent_runtime.serve.error_rsp import build_error_response
+from redis_spi import accessor
+from redis_spi.types import Duration
 
 
 # Redis key 格式: global.vals.{resourceId}.{conversationId}
@@ -91,9 +93,7 @@ async def get_conversation_variables(
     redis_key = _build_redis_key(agent_id, conversation_id)
 
     try:
-        from common_utils.redis_manager import get_redis_client
-
-        redis_client = get_redis_client()
+        redis_client = accessor.get_redis()
         raw = await redis_client.get(redis_key)
     except Exception as e:
         workflow_logger.error(
@@ -138,9 +138,7 @@ async def update_conversation_variable(
     redis_key = _build_redis_key(agent_id, conversation_id)
 
     try:
-        from common_utils.redis_manager import get_redis_client
-
-        redis_client = get_redis_client()
+        redis_client = accessor.get_redis()
         raw = await redis_client.get(redis_key)
     except Exception as e:
         workflow_logger.error(
@@ -171,8 +169,9 @@ async def update_conversation_variable(
 
     try:
         await redis_client.set(
-            redis_key, json.dumps(obj, ensure_ascii=False),
-            ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
+            redis_key,
+            json.dumps(obj, ensure_ascii=False),
+            duration=Duration.seconds(_DEFAULT_CONVERSATION_VARIABLE_TTL),
         )
     except Exception as e:
         workflow_logger.error(

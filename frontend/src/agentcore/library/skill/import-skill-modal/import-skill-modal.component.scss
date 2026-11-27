@@ -26,6 +26,36 @@
     button {
       margin-left: 8px;
     }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 4px 8px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      max-width: 100%;
+
+      .file-name {
+        color: #595959;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .file-remove {
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: #999;
+        cursor: pointer;
+
+        &:hover {
+          color: #f23030;
+        }
+      }
+    }
   }
 
   .parse-result {

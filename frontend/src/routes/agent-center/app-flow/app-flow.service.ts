@@ -2044,6 +2044,30 @@ export class AppFlowService {
         // do nth
       }
     }
+    // FEAT-093 动态鉴权：auth_keys 的 target_name 追加为 Headers 参数（值留空，编排期绑定 literal/ref）
+    if (type === 'Mcp' && mcpInfo.auth_info?.scope === 'DYNAMIC' && Array.isArray(mcpInfo.auth_info.auth_keys)) {
+      // HTTP 头名大小写不敏感：与 server_config headers 仅大小写不同视为同名，防重复节点参数
+      const existingNames = new Set(headerInput.map(item => (item.name || '').toLowerCase()));
+      mcpInfo.auth_info.auth_keys.forEach(authKey => {
+        const targetName = (authKey?.target_name || '').trim();
+        if (!targetName || existingNames.has(targetName.toLowerCase())) {
+          return;
+        }
+        headerInput.push({
+          name: targetName,
+          type: 'string',
+          description: '',
+          required: false,
+          source: 'user',
+          reflection: false,
+          value: {
+            type: 'literal',
+            content: '',
+            hint: ''
+          },
+        });
+      });
+    }
     if (mcpInfo && mcpInfo.tools && Array.isArray(mcpInfo.tools)) {
       const tools = mcpInfo.tools;
       tool_name = tools.length ? tools[0].name : '';

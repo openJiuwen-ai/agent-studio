@@ -34,7 +34,7 @@ class FakeRedis:
     async def get(self, key):
         return self.store.get(key)
 
-    async def set(self, key, value, ex=None):
+    async def set(self, key, value, duration=None):
         if self.set_delay:
             await asyncio.sleep(self.set_delay)
         self.store[key] = value

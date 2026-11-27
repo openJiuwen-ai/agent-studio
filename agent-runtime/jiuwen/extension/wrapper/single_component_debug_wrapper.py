@@ -902,21 +902,20 @@ class SingleComponentDebugWrapper:
         # dict 类型（LLMChain 等）
         if isinstance(chunk, dict):
             user_fields = chunk.get(_USER_FIELDS, chunk)
-            if isinstance(user_fields, dict):
-                if "raw_output" in user_fields:
-                    return StreamData(
-                        code=StreamCode.PARTIAL_CONTENT.value,
-                        msg=StreamDataMsg.SUCCESS.value,
-                        data={"answer": user_fields["raw_output"]},
-                        execution_id=execution_id,
-                    )
-                if "final_output" in user_fields:
-                    return StreamData(
-                        code=StreamCode.MESSAGE_END.value,
-                        msg=StreamDataMsg.SUCCESS.value,
-                        data={"answer": user_fields["final_output"]},
-                        execution_id=execution_id,
-                    )
+            if isinstance(user_fields, dict) and "raw_output" in user_fields:
+                return StreamData(
+                    code=StreamCode.PARTIAL_CONTENT.value,
+                    msg=StreamDataMsg.SUCCESS.value,
+                    data={"answer": user_fields["raw_output"]},
+                    execution_id=execution_id,
+                )
+            if isinstance(user_fields, dict) and "final_output" in user_fields:
+                return StreamData(
+                    code=StreamCode.MESSAGE_END.value,
+                    msg=StreamDataMsg.SUCCESS.value,
+                    data={"answer": user_fields["final_output"]},
+                    execution_id=execution_id,
+                )
             # 兜底
             return StreamData(
                 code=StreamCode.PARTIAL_CONTENT.value,

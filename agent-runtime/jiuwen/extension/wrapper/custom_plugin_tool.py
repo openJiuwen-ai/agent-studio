@@ -22,6 +22,8 @@ from pydantic import Field
 
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
+from jiuwen.insight.manager import TraceManager
+from jiuwen.insight.utils import get_instance_info
 from jiuwen.orchestration.flow.component_class_pool import component_class_pool
 from jiuwen.plugin.models.param import Param
 from openjiuwen.core.foundation.tool import Tool
@@ -29,6 +31,27 @@ from openjiuwen.core.foundation.tool.base import ToolCard
 
 # 自定义插件执行错误码（105001，落在插件错误码区间 105000-105999）
 _CUSTOM_PLUGIN_ERROR_CODE = 105001
+
+
+async def _emit_plugin_event(trace_manager, method_name: str, *args):
+    """安全发射插件遥测事件：manager 为 None 时跳过，handler 异常只告警。
+
+    对齐 stream_post_utils.emit_trace_event 的隔离语义——insight 层
+    _trace_event 直接调用 handler 并传播异常，遥测事件若与业务逻辑共用
+    try 块，任一 handler 抛错会把成功的插件调用误判进业务失败分支；
+    此处统一兜底，遥测失败不改变调用方业务语义。
+    """
+    if trace_manager is None:
+        return
+    try:
+        await getattr(trace_manager, method_name)(*args)
+    except Exception as e:
+        logger.warning(
+            "CustomPlugin trace event %s failed: %s: %s",
+            method_name,
+            type(e).__name__,
+            e,
+        )
 
 
 class CustomPluginCard(ToolCard):
@@ -123,12 +146,34 @@ class CustomPluginTool(Tool):
 
     async def ainvoke(self, inputs: dict, **kwargs) -> dict:
         """非流式执行：委托 PluginBase.invoke，包装为统一输出格式"""
+        # 与 RestfulApiToolNew/MCP 包装器同构：规划/工具模式下 ainvoke 收到
+        # runtime_data 透传的 trace_handlers 时经 TraceManager 发射插件事件。
+        # 遥测与业务隔离（对齐 plan_execute_mode StepExecute 的 safely/emit
+        # 范式，见 stream_post_utils.create_trace_manager_safely /
+        # emit_trace_event）：manager 构造失败或任一 handler 抛错只告警，
+        # 不影响插件调用与返回值；业务失败（非 0 errCode）按 REST 包装器
+        # 口径发 on_plugin_error 而非 on_plugin_end。trace_handlers 在此
+        # 弹出，不泄入插件实现入参。
+        trace_handlers = kwargs.pop("trace_handlers", None)
+        trace_manager = self._create_tracer_manager(trace_handlers)
         try:
+            await _emit_plugin_event(trace_manager, "on_plugin_start", inputs)
             result = await self._plugin_instance.invoke(inputs, **kwargs)
             if isinstance(result, dict) and "errCode" in result:
-                return result
-            return {"data": result, "errCode": 0, "errMessage": ""}
+                exec_result = result
+            else:
+                exec_result = {"data": result, "errCode": 0, "errMessage": ""}
+            if exec_result.get("errCode", 0) != 0:
+                await _emit_plugin_event(
+                    trace_manager,
+                    "on_plugin_error",
+                    Exception(exec_result.get("errMessage") or "plugin error"),
+                )
+            else:
+                await _emit_plugin_event(trace_manager, "on_plugin_end", exec_result)
+            return exec_result
         except Exception as e:
+            await _emit_plugin_event(trace_manager, "on_plugin_error", e)
             logger.error(
                 "CustomPlugin[%s] invoke error: %s: %s",
                 self._component_type,
@@ -140,6 +185,31 @@ class CustomPluginTool(Tool):
                 "errCode": _CUSTOM_PLUGIN_ERROR_CODE,
                 "errMessage": f"Custom plugin execution failed: {type(e).__name__}",
             }
+
+    def _create_tracer_manager(self, trace_handlers):
+        """创建追踪管理器（与 mcp_tool_wrapper 同构）。
+
+        构造失败只告警并返回 None（遥测停用），异常不外传——对齐
+        create_trace_manager_safely 的语义，遥测故障不变业务故障。
+        instance_info 显式排除对象值成员（插件实例 / 卡片）——
+        get_instance_info 逐键整拷 __dict__，黑名单只按顶层键精确
+        匹配，放行 _plugin_instance 会把插件内部状态整对象带进遥测。
+        """
+        try:
+            return TraceManager.generate_manager(
+                trace_handlers,
+                get_instance_info(
+                    self, blacklist=["auth", "headers", "_plugin_instance", "_card"]
+                ),
+            )
+        except Exception as e:
+            logger.warning(
+                "CustomPlugin[%s] tracer manager init failed: %s: %s",
+                self._component_type,
+                type(e).__name__,
+                e,
+            )
+            return None
 
     def stream(self, inputs: dict, **kwargs) -> AsyncIterator[str]:
         """Tool 接口：流式调用（委托 astream）"""

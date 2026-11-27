@@ -70,6 +70,7 @@ public interface AgentRuntimeClient {
     ResponseEntity<Object> runAgentWithConversation(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @RequestHeader(value = CommonConstant.AUTHORIZATION, required = false) String authorization,
+        @RequestHeader(value = CommonConstant.CustomModel.CUSTOM_USER_ID, required = false) String custUserId,
         @PathVariable(value = "project_id") String projectId, @PathVariable(value = "agent_id") String agentId,
         @PathVariable(value = "conversation_id") String conversationId,
         @RequestParam(value = "workspace_id") String workspaceId, @RequestParam(value = "agent_type") String agentType,
@@ -99,6 +100,7 @@ public interface AgentRuntimeClient {
     @PostMapping("/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}")
     ResponseEntity<Object> runWorkflowWithConversation(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+        @RequestHeader(value = CommonConstant.CustomModel.CUSTOM_USER_ID, required = false) String custUserId,
         @PathVariable(value = "project_id") String projectId, @PathVariable(value = "workflow_id") String workflowId,
         @PathVariable(value = "conversation_id") String conversationId,
         @RequestParam(value = "workspace_id") String workspaceId,
@@ -232,6 +234,7 @@ public interface AgentRuntimeClient {
     @PostMapping("/v1/workflows/chat/{short_code}/conversations/{conversation_id}")
     ResponseEntity<Object> runWebWorkflow(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+        @RequestHeader(value = CommonConstant.CustomModel.CUSTOM_USER_ID, required = false) String custUserId,
         @PathVariable("short_code") String shortCode,
         @PathVariable("conversation_id") String conversationId, @RequestParam("workspace_id") String workspaceId,
         @RequestParam(value = "environment_id", required = false) String environmentId,
@@ -240,6 +243,7 @@ public interface AgentRuntimeClient {
     @PostMapping("/v1/agents/chat/{short_code}")
     ResponseEntity<Object> runWebAgent(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+        @RequestHeader(value = CommonConstant.CustomModel.CUSTOM_USER_ID, required = false) String custUserId,
         @PathVariable("short_code") String shortCode,
         @RequestParam("workspace_id") String workspaceId, @RequestHeader("stream") Boolean stream,
         @RequestParam(value = "environment_id", required = false) String environmentId,

@@ -16,8 +16,9 @@ import time
 from typing import Any, Optional
 
 from cachetools import LRUCache
-from common_utils.redis_manager import get_redis_client
-from redis import RedisError
+from redis_spi import accessor
+from redis_spi.exceptions import RedisError
+from redis_spi.types import Duration
 
 from storage import get_storage_provider
 from agent_runtime.common.config import settings
@@ -91,14 +92,14 @@ class CacheUtils:
     def redis_cache(self):
         """惰性获取 Redis 客户端"""
         if self._redis_cache is None:
-            self._redis_cache = get_redis_client()
+            self._redis_cache = accessor.get_redis()
         return self._redis_cache
 
     @property
     def async_redis_cache(self):
         """惰性获取异步 Redis 客户端"""
         if self._async_redis_cache is None:
-            self._async_redis_cache = get_redis_client()
+            self._async_redis_cache = accessor.get_redis()
         return self._async_redis_cache
 
     async def aput(self, key: str, value: Any, ttl: Optional[int] = None):
@@ -121,11 +122,19 @@ class CacheUtils:
             self._update_memory_cache(unique_key, value)
             if self.should_serialize:
                 await self.async_redis_cache.set(
-                    unique_key, serialize_object(value), ex=effective_ttl
+                    unique_key,
+                    serialize_object(value),
+                    duration=Duration.seconds(effective_ttl)
+                    if effective_ttl is not None
+                    else None,
                 )
             else:
                 await self.async_redis_cache.set(
-                    unique_key, value, ex=effective_ttl
+                    unique_key,
+                    value,
+                    duration=Duration.seconds(effective_ttl)
+                    if effective_ttl is not None
+                    else None,
                 )
             self._mark_redis_refreshed(unique_key)
             logger.info(
@@ -152,10 +161,20 @@ class CacheUtils:
             self._update_memory_cache(unique_key, value)
             if self.should_serialize:
                 self.redis_cache.set(
-                    unique_key, serialize_object(value), ex=effective_ttl
+                    unique_key,
+                    serialize_object(value),
+                    duration=Duration.seconds(effective_ttl)
+                    if effective_ttl is not None
+                    else None,
                 )
             else:
-                self.redis_cache.set(unique_key, value, ex=effective_ttl)
+                self.redis_cache.set(
+                    unique_key,
+                    value,
+                    duration=Duration.seconds(effective_ttl)
+                    if effective_ttl is not None
+                    else None,
+                )
             self._mark_redis_refreshed(unique_key)
             logger.info(
                 f"put {key} in {self.cache_name} memory and redis, "
@@ -204,7 +223,7 @@ class CacheUtils:
                         # expire 对不存在的 key 返回 False（非异常），仅在续期成功时才标记
                         refreshed = bool(
                             await self.async_redis_cache.expire(
-                                unique_key, self.redis_ttl
+                                unique_key, Duration.seconds(self.redis_ttl)
                             )
                         )
                         if refreshed:
@@ -258,7 +277,9 @@ class CacheUtils:
                     # 与 aget 同款防护：redis_ttl>0 防 expire 负 TTL 删 key；
                     # 独立 try 防续期失败拖垮整个 get（外层 except 会误返回 None）
                     try:
-                        self.redis_cache.expire(unique_key, self.redis_ttl)
+                        self.redis_cache.expire(
+                            unique_key, Duration.seconds(self.redis_ttl)
+                        )
                         self._record_direct_renew(unique_key)
                     except Exception as e:
                         logger.warning(f"cache ttl refresh failed for {key}: {e}")
@@ -403,7 +424,9 @@ class CacheUtils:
             # 超时保护：防 Redis 半开连接（TCP 建立但不应答）导致后台任务
             # 长期挂起、_BACKGROUND_TTL_TASKS 缓慢累积
             refreshed = await asyncio.wait_for(
-                self.async_redis_cache.expire(unique_key, self.redis_ttl),
+                self.async_redis_cache.expire(
+                    unique_key, Duration.seconds(self.redis_ttl)
+                ),
                 timeout=5,
             )
             if not refreshed:
@@ -509,7 +532,7 @@ class CacheUtils:
                     # expire 对不存在的 key 返回 False（非异常），仅在续期成功时才标记
                     refreshed = bool(
                         await self.async_redis_cache.expire(
-                            unique_key, self.redis_ttl
+                            unique_key, Duration.seconds(self.redis_ttl)
                         )
                     )
                     if refreshed:

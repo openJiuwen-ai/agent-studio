@@ -13,6 +13,8 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { Subject } from 'rxjs';
 import { handleCommonReqError } from 'src/utils/utils';
 import { CommonUtils } from 'src/utils/common.util';
+import { SpaceTeamManagementService } from '@services/space-team-management.service';
+import { ContextService } from '@services/context.service';
 import { PluginCredentialStatus } from '@enums/agent-center.enum';
 import { AddPluginAuthComponent } from '@routes/plugin-market/add-plugin/add-plugin-auth.component';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -29,6 +31,7 @@ import {
   ShareTypeTag,
 } from '@routes/app-center/app-center-management/app-center-management.config';
 import { EditShareModalComponent } from '@routes/app-center/components/edit-share-modal/edit-share-modal.component';
+import { PublishAssetModalComponent } from '@routes/agent-center/component-library/shelf-modal/publish-asset-modal.component';
 import { SHARE_PAGE } from '@routes/app-center/components/edit-share-modal/edit-share-modal.config';
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
@@ -66,6 +69,8 @@ const MAX_HEIGHT = 1270;
   ],
 })
 export class PluginMarketComponent implements OnInit {
+  pluginHovered = '';
+  canPublish = true;
   @Input() needRefresh = '';
   @Input() isShowDom: boolean = true;
   @Input() limit: number = -1;
@@ -255,7 +260,9 @@ export class PluginMarketComponent implements OnInit {
     private cardService: CardService,
     private nzModalService: NzModalService,
     private promptService: PromptService,
-    private sidebarServ: SetSidebarVisibilityService
+    private sidebarServ: SetSidebarVisibilityService,
+    private spaceTeamManagementService: SpaceTeamManagementService,
+    private ctxServ: ContextService
   ) {
     this.isHC = false;
     this.lang = CommonUtils.getLanguage();
@@ -264,6 +271,7 @@ export class PluginMarketComponent implements OnInit {
 
   ngOnInit() {
     this.sidebarServ.setSidebarsVisibilityByState('hideSidebar');
+    this.checkPublishPermission();
     const cur_space_option_str = StorageService.getSessionStorage('CUR_SPACE_OPTIONS');
     if (cur_space_option_str !== '{}') {
       try {
@@ -517,6 +525,100 @@ export class PluginMarketComponent implements OnInit {
       this.AppShareTabs.forEach((t, i) => (t.active = i === index));
       this.shareTabChange(tab);
     }
+  }
+
+  async checkPublishPermission() {
+    try {
+      const res = await this.spaceTeamManagementService.getWorkspaceDetial(this.ctxServ.currentWorkspaceId);
+      if (res?.type === 'TEAM' && res?.role && res.role !== 'OWNER' && res.role !== 'ADMIN') {
+        this.canPublish = false;
+      }
+    } catch {
+      this.canPublish = false;
+    }
+  }
+
+  public openPublishModal() {
+    this.nzModalService.create({
+      nzContent: PublishAssetModalComponent,
+      nzWidth: 560,
+      nzTitle: this.i18n.transform('plaza_onshelf'),
+      nzFooter: null,
+      nzData: {
+        assetType: 'plugin',
+        onPublished: () => this.onSearch(),
+      },
+    });
+  }
+
+  unpublishPlugin(plugin: any, $event?: Event): void {
+    $event?.stopPropagation();
+    // 下架前查引用：存量引用会因下架失效，引用确认让用户知情（方案 B，#1733）
+    // 按 plugin_id 查引用：后端 selectByResourceIdAndVersionId 用 `resource_id=#{pluginId}
+    //   OR resource_id like concat(pluginId,'#%')` 匹配，插件引用记录 resource_id 为
+    //   pluginId#toolId，故按 plugin_id 一次查询即可覆盖该插件所有工具引用，无需遍历 tool_id。
+    const param = {
+      offset: 0,
+      limit: 100,
+      resource_type: 'tool',
+    };
+    this.cardService
+      .selectQuoteList(plugin.plugin_id, param, true)
+      .then(res => {
+        const relations = (res && res.relations) || [];
+        const count = (res && res.count) || 0;
+        this.confirmUnpublishPlugin(plugin, relations, count);
+      })
+      .catch(() => {
+        // 引用查询失败不应阻塞下架（引用确认是增强提示，非权限拦截）：降级走无引用通用确认
+        this.confirmUnpublishPlugin(plugin, [], 0);
+      });
+  }
+
+  private confirmUnpublishPlugin(plugin: any, relations: any[], count: number): void {
+    const confirmTitle =
+      count > 0
+        ? this.buildPluginReferenceWarningTitle(relations, count)
+        : this.i18n.transform('plaza_offshelf_confirm');
+    this.nzModalService.confirm({
+      nzTitle: confirmTitle,
+      nzOkText: this.i18n.transform('plaza_offshelf'),
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOkDanger: true,
+      nzOnOk: () => {
+        return this.appPluginRepoServ
+          .unpublishPlugin(plugin.plugin_id)
+          .then(() => {
+            MessageComponent.showSuccess(this.i18n.transform('plaza_offshelf_success'));
+            this.onSearch();
+            return null;
+          })
+          .catch(() => null);
+      },
+    });
+  }
+
+  private buildPluginReferenceWarningTitle(relations: any[], count: number): string {
+    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
+    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
+    const separator = this.i18n.transform('plaza_offshelf_referenced_name_separator');
+    const names = relations
+      .map(r => r?.app_name)
+      .filter((n): n is string => !!n)
+      .slice(0, 3)
+      .join(separator);
+    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', {
+      workflow: workflowCount,
+      agent: agentCount,
+    });
+    // count>relations.length 说明 relations 被 limit 截断，分类计数不全，补总数兜底
+    const total = count > relations.length
+      ? this.i18n.transform('plaza_offshelf_referenced_total', { count })
+      : '';
+    const tail = names
+      ? this.i18n.transform('plaza_offshelf_referenced_names', { names })
+      : this.i18n.transform('plaza_offshelf_referenced_no_names');
+    return `${this.i18n.transform('plaza_offshelf_referenced_prefix')}${summary}${total}${tail}`;
   }
 
   public creatShare() {

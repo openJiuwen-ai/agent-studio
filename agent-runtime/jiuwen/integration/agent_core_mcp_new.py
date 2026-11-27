@@ -20,6 +20,22 @@ class McpCallContext:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class AgentCoreMcpLayerOptions:
+    """Optional MCP tool metadata when constructing AgentCoreMcpLayer without mcp_api."""
+
+    name: str = ""
+    description: str = ""
+    parameters: dict[str, Any] | None = None
+    headers: dict[str, Any] | None = None
+    auth: dict[str, Any] | None = None
+    plugin_dependency: dict[str, Any] | None = None
+    server_name: str = ""
+    server_url: str = ""
+    transport_type: str = ""
+    params: list[Any] | None = None
+
+
 class _FallbackMcpAPIState:
     """Lightweight metadata holder when legacy MCP dependencies are unavailable."""
 
@@ -53,6 +69,22 @@ class _FallbackMcpAPIState:
 class AgentCoreMcpLayer(Invokable[dict[str, Any], dict[str, Any]]):
     """Adapt agent-core MCP runtime to jiuwen's historical McpAPI-like contract."""
 
+    # 旧版关键字参数（经 **legacy_tool_meta 接收，保持对外兼容且避免形参过多）
+    _LEGACY_OPTION_KEYS = frozenset(
+        {
+            "name",
+            "description",
+            "parameters",
+            "headers",
+            "auth",
+            "plugin_dependency",
+            "server_name",
+            "server_url",
+            "transport_type",
+            "params",
+        }
+    )
+
     def __init__(
         self,
         runtime: Any | None = None,
@@ -61,19 +93,23 @@ class AgentCoreMcpLayer(Invokable[dict[str, Any], dict[str, Any]]):
         tool_id: str = "",
         agent_id: str = "",
         session_id: str = "",
-        name: str = "",
-        description: str = "",
-        parameters: dict[str, Any] | None = None,
-        headers: dict[str, Any] | None = None,
-        auth: dict[str, Any] | None = None,
-        plugin_dependency: dict[str, Any] | None = None,
-        server_name: str = "",
-        server_url: str = "",
-        transport_type: str = "",
-        params: list[Any] | None = None,
+        options: AgentCoreMcpLayerOptions | None = None,
+        **legacy_tool_meta: Any,
     ) -> None:
-        """Initialize a compatibility layer for a single MCP tool runtime."""
+        """Initialize a compatibility layer for a single MCP tool runtime.
+
+        Prefer ``options=AgentCoreMcpLayerOptions(...)``. Legacy keyword args
+        (``name`` / ``description`` / ``parameters`` / ...) remain accepted and
+        merge into options for backward compatibility.
+        """
         super().__init__()
+        unknown = set(legacy_tool_meta) - self._LEGACY_OPTION_KEYS
+        if unknown:
+            raise TypeError(
+                "AgentCoreMcpLayer.__init__() got unexpected keyword argument(s): "
+                f"{sorted(unknown)}"
+            )
+        opts = self._merge_options(options, legacy_tool_meta)
         self.runtime = runtime or self._create_runtime(
             tool_id=tool_id,
             agent_id=agent_id,
@@ -85,24 +121,49 @@ class AgentCoreMcpLayer(Invokable[dict[str, Any], dict[str, Any]]):
             getattr(self.runtime, "_session_id", "") or ""
         )
         self.mcp_api = mcp_api or self._create_mcp_api(
-            server_url=server_url or str(getattr(self.runtime, "server_url", "") or ""),
-            name=name or str(getattr(self.runtime, "name", "") or self._tool_id),
-            parameters=parameters
+            server_url=opts.server_url
+            or str(getattr(self.runtime, "server_url", "") or ""),
+            name=opts.name or str(getattr(self.runtime, "name", "") or self._tool_id),
+            parameters=opts.parameters
             or dict(getattr(self.runtime, "parameters", {}) or {}),
-            headers=headers or dict(getattr(self.runtime, "headers", {}) or {}),
-            server_name=server_name
+            headers=opts.headers or dict(getattr(self.runtime, "headers", {}) or {}),
+            server_name=opts.server_name
             or str(getattr(self.runtime, "server_name", "") or ""),
-            transport_type=transport_type
+            transport_type=opts.transport_type
             or str(getattr(self.runtime, "transport_type", "") or ""),
-            plugin_dependency=plugin_dependency
+            plugin_dependency=opts.plugin_dependency
             or dict(getattr(self.runtime, "plugin_dependency", {}) or {}),
-            auth=auth or dict(getattr(self.runtime, "auth", {}) or {}),
-            description=description
+            auth=opts.auth or dict(getattr(self.runtime, "auth", {}) or {}),
+            description=opts.description
             or str(getattr(self.runtime, "description", "") or ""),
-            params=params
-            if params is not None
+            params=opts.params
+            if opts.params is not None
             else list(getattr(self.runtime, "params", []) or []),
         )
+
+    @staticmethod
+    def _merge_options(
+        options: AgentCoreMcpLayerOptions | None,
+        legacy_tool_meta: dict[str, Any],
+    ) -> AgentCoreMcpLayerOptions:
+        """Merge options dataclass with legacy kwargs; explicit legacy wins."""
+        base = options or AgentCoreMcpLayerOptions()
+        if not legacy_tool_meta:
+            return base
+        merged = {
+            "name": base.name,
+            "description": base.description,
+            "parameters": base.parameters,
+            "headers": base.headers,
+            "auth": base.auth,
+            "plugin_dependency": base.plugin_dependency,
+            "server_name": base.server_name,
+            "server_url": base.server_url,
+            "transport_type": base.transport_type,
+            "params": base.params,
+        }
+        merged.update(legacy_tool_meta)
+        return AgentCoreMcpLayerOptions(**merged)
 
     @staticmethod
     def _create_runtime(*, tool_id: str, agent_id: str, session_id: str) -> Any:

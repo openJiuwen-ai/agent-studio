@@ -113,23 +113,27 @@ public class UrlCheckUtils {
         }
         // 非整串占位符：URL 任何位置含 { 或 } 一律拒绝（禁止内联占位符），与前端 USER_URL_PATTERN 的 [^{}\s]+ 对齐。
         if (trimmed.indexOf('{') >= 0 || trimmed.indexOf('}') >= 0) {
-            log.error("URL must not contain inline placeholder/braces (only whole-string placeholder allowed): [{}]", url);
+            log.error("URL must not contain inline placeholder/braces (only whole-string placeholder allowed): [{}]",
+                SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         URI parsedUri;
         try {
             parsedUri = new URI(trimmed);
         } catch (URISyntaxException e) {
-            log.error("Invalid URL syntax [{}]", url, e);
+            // URISyntaxException.getMessage() 会携带未脱敏的原始 URL，不能作为日志参数（会绕过脱敏），
+            // 只记录脱敏后的 url 与异常原因/位置
+            log.error("Invalid URL syntax [{}], reason: {} at index {}", SensitiveLogContext.mask(url), e.getReason(),
+                e.getIndex());
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         String scheme = parsedUri.getScheme();
         if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
-            log.error("URL scheme must be http or https: [{}]", url);
+            log.error("URL scheme must be http or https: [{}]", SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         if (StringUtils.isEmpty(parsedUri.getHost())) {
-            log.error("URL has no host: [{}]", url);
+            log.error("URL has no host: [{}]", SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
     }
@@ -175,8 +179,8 @@ public class UrlCheckUtils {
     public InetAddress[] checkUrlAndResolve(String projectId, String url) {
         // URL 查询串可能携带 OBS 预签名 AccessKeyId/Signature 等凭据，
         // 查询串对 host/IP 校验无意义——校验类日志一律脱敏（与 Python 侧
-        // _redact_urls 同语义），避免抵消调用侧的脱敏意图
-        log.info("start to checkUrl {}", redactUrlQuery(url));
+        // _redact_urls 同语义），再叠加本次请求登记的敏感值脱敏，避免抵消调用侧的脱敏意图
+        log.info("start to checkUrl {}", SensitiveLogContext.mask(redactUrlQuery(url)));
         // 未开启检查（默认开启），返回
         if (!enableUrlCheck || StringUtils.isEmpty(url)) {
             log.info("not check url");
@@ -195,21 +199,24 @@ public class UrlCheckUtils {
         try {
             parsedUri = new URI(trimmed);
         } catch (URISyntaxException e) {
-            log.error("Fail to parse url [{}]", redactUrlQuery(url), e);
+            // URISyntaxException.getMessage() 会携带未脱敏的原始 URL，不能作为日志参数（会绕过脱敏），
+            // 只记录脱敏后的 url 与异常原因/位置
+            log.error("Fail to parse url [{}], reason: {} at index {}", SensitiveLogContext.mask(redactUrlQuery(url)),
+                e.getReason(), e.getIndex());
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
         String host = parsedUri.getHost();
 
         // 1. 检查黑名单
         if (toolUrlBlackList.contains(host)) {
-            log.error("URL is blocked by blacklist [{}]", redactUrlQuery(url));
+            log.error("URL is blocked by blacklist [{}]", SensitiveLogContext.mask(redactUrlQuery(url)));
             throw new AgentStudioException(StudioError.INVALID_URL);
         }
 
         // 2. 检查白名单（白名单优先级高于其他规则）——白名单 host 未做
         // IP 校验，返回 null 不钉死
         if (toolUrlWhiteList.contains(host)) {
-            log.info("URL is in whitelist [{}]", redactUrlQuery(url));
+            log.info("URL is in whitelist [{}]", SensitiveLogContext.mask(redactUrlQuery(url)));
             return null;
         }
 
@@ -219,7 +226,7 @@ public class UrlCheckUtils {
             addresses = InetAddress.getAllByName(host);
         } catch (UnknownHostException e) {
             // 如果无法解析域名，放通处理
-            log.warn("can not get host [{}], url check interrupt", redactUrlQuery(url));
+            log.warn("can not get host [{}], url check interrupt", SensitiveLogContext.mask(redactUrlQuery(url)));
             return null;
         }
         for (InetAddress addr : addresses) {
@@ -281,17 +288,20 @@ public class UrlCheckUtils {
         }
         // 整串 ${...} 但形态非法（不是 ${_env.plugin_url_params.VAR}）→ 拒绝
         if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
-            log.error("Invalid full-string env var placeholder (not ${_env.plugin_url_params.VAR}): [{}]", url);
+            log.error("Invalid full-string env var placeholder (not ${_env.plugin_url_params.VAR}): [{}]",
+                SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
         }
         // 整串 {...}（用户形态 {VAR}）：前端提交前已转换为后端格式，入库/导入文件均不应出现此形态 → 拒绝
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-            log.error("User-format placeholder {VAR} must be converted to backend format before save: [{}]", url);
+            log.error("User-format placeholder {VAR} must be converted to backend format before save: [{}]",
+                SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
         }
         // 其他情况（URL 中间嵌 ${...}、未闭合花括号、裸 {/}）一律拒绝——创建页不允许，导入侧对齐。
         if (trimmed.indexOf('{') >= 0 || trimmed.indexOf('}') >= 0) {
-            log.error("URL must not contain inline placeholder/braces (only whole-string placeholder allowed): [{}]", url);
+            log.error("URL must not contain inline placeholder/braces (only whole-string placeholder allowed): [{}]",
+                SensitiveLogContext.mask(url));
             throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
         }
     }
@@ -326,7 +336,7 @@ public class UrlCheckUtils {
      * @throws AgentStudioException 如果URL不在白名单中，或者URL格式错误，或者无法解析主机名
      */
     public void checkUrlInWhiteList(String url) {
-        log.info("Starting URL check for: {}", redactUrlQuery(url));
+        log.info("Starting URL check for: {}", SensitiveLogContext.mask(redactUrlQuery(url)));
 
         if (!enableUrlCheck || StringUtils.isEmpty(url)) {
             log.info("URL check is disabled or URL is empty");
@@ -339,7 +349,7 @@ public class UrlCheckUtils {
 
             // 判断白名单中是否存在该URL
             if (toolUrlWhiteList.contains(host)) {
-                log.info("URL is in whitelist: {}", redactUrlQuery(url));
+                log.info("URL is in whitelist: {}", SensitiveLogContext.mask(redactUrlQuery(url)));
                 return;
             }
 
@@ -348,16 +358,19 @@ public class UrlCheckUtils {
             for (InetAddress addr : addresses) {
                 String ip = addr.getHostAddress();
                 if (toolUrlWhiteList.contains(ip)) {
-                    log.info("IP is in whitelist: {}", redactUrlQuery(url));
+                    log.info("IP is in whitelist: {}", SensitiveLogContext.mask(redactUrlQuery(url)));
                     return;
                 }
             }
             throw new AgentStudioException(StudioError.URL_WHITELIST_CHECK_ERROR);
         } catch (URISyntaxException e) {
-            log.error("Invalid URL: {}", redactUrlQuery(url), e);
+            // URISyntaxException.getMessage() 会携带未脱敏的原始 URL，不能作为日志参数（会绕过脱敏），
+            // 只记录脱敏后的 url 与异常原因/位置
+            log.error("Invalid URL: {}, reason: {} at index {}", SensitiveLogContext.mask(redactUrlQuery(url)),
+                e.getReason(), e.getIndex());
             throw new AgentStudioException(StudioError.INVALID_URL);
         } catch (UnknownHostException e) {
-            log.warn("can not get host [{}], url check interrupt", redactUrlQuery(url));
+            log.warn("can not get host [{}], url check interrupt", SensitiveLogContext.mask(redactUrlQuery(url)));
             throw new AgentStudioException(StudioError.URL_WHITELIST_CHECK_ERROR);
         }
     }

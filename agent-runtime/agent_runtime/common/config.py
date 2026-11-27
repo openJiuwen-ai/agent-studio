@@ -32,6 +32,14 @@ class ServerSettings(BaseSettings):
     docs_enabled: bool = Field(default=False, validation_alias="API_DOCS_ENABLED")
     # 性能日志开关，默认开启。设为 false 关闭 performance_logger 输出
     performance_log_enabled: bool = Field(default=True, validation_alias="PERFORMANCE_LOG_ENABLED")
+    # 性能日志级别，默认 WARNING (静默)；设为 INFO 才真正打印 perf 指标
+    performance_log_level: str = Field(default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL")
+
+    @field_validator("performance_log_level", mode="before")
+    @classmethod
+    def _perf_level_default(cls, v):
+        """空字符串按默认 WARNING 处理。"""
+        return v or "WARNING"
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -173,8 +181,10 @@ class SecuritySandboxSettings(BaseSettings):
     idle_ttl_seconds: int = Field(
         default=600, validation_alias="SECURITY_SANDBOX_IDLE_TTL"
     )
+    # 沙箱内层超时：与代码节点异常处理外层超时（exceptionProcess.timeout）取小生效；
+    # 节点级配置值大于此处时会被沙箱在本值处截断，需联动调大本值才可生效
     timeout_seconds: int = Field(
-        default=300, validation_alias="SECURITY_SANDBOX_TIMEOUT"
+        default=900, validation_alias="SECURITY_SANDBOX_TIMEOUT"
     )
     sandbox_type: str = Field(
         default="aio", validation_alias="SECURITY_SANDBOX_TYPE"
@@ -192,6 +202,11 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+    # 性能埋点级别（workflow_cache|hit/miss、ir_convert|、agent_group_stream| 等）。
+    # 缺省 WARNING 保持静默；排查性能问题时设为 INFO 打开埋点。
+    performance_level: str = Field(
+        default="WARNING", validation_alias="PERFORMANCE_LOG_LEVEL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -234,6 +249,24 @@ class OtelSettings(BaseSettings):
     schedule_delay_millis: int = Field(
         default=5000, validation_alias="OTEL_SCHEDULE_DELAY_MILLIS"
     )
+
+    @field_validator("sample_rate", mode="after")
+    @classmethod
+    def _validate_sample_rate(cls, v) -> float:
+        """保证有限且落在 [0, 1]；nan/inf 回退默认 1.0，避免 TraceIdRatioBased 抛错。"""
+        import math
+
+        try:
+            rate = float(v)
+        except (TypeError, ValueError):
+            return 1.0
+        if not math.isfinite(rate):
+            return 1.0
+        if rate < 0.0:
+            return 0.0
+        if rate > 1.0:
+            return 1.0
+        return rate
     export_timeout_ms: int = Field(default=30000, validation_alias="OTEL_EXPORT_TIMEOUT_MS")
     max_export_batch_size: int = Field(
         default=512, validation_alias="OTEL_MAX_EXPORT_BATCH_SIZE"
@@ -289,6 +322,13 @@ class CacheSettings(BaseSettings):
     )
     workflow_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="WORKFLOW_CACHE_TTL_SECONDS", ge=1
+    )
+    # Workflow 实例复用（issue #1555）：恒为静态图复用（引擎 reentrant compile
+    # + Patch B + LazyWorkflow 保留制缓存）；能力探测失败时进程级自动降级为直建。
+    # 注意与 MAX_WORKFLOW_CACHE_NUM 区分：后者是 BPMN spec 缓存队列（jiuwen
+    # orchestration 路径）的容量，本配置是 openjiuwen Workflow 实例缓存的容量。
+    workflow_instance_cache_num: int = Field(
+        default=100, ge=1, validation_alias="WORKFLOW_INSTANCE_CACHE_NUM"
     )
     agent_cache_ttl_seconds: int = Field(
         default=24 * 60 * 60, validation_alias="AGENT_CACHE_TTL_SECONDS", ge=1
@@ -410,11 +450,26 @@ class CodeExecutionSettings(BaseSettings):
     LOCAL_CODE_EXEC_MODE 环境变量控制代码节点的本地执行方式：
     - inprocess: 进程内 exec() 执行（默认，高性能，无隔离）
     - subprocess: 子进程执行（有进程级隔离，但启动开销约 50-200ms）
+
+    ALLOW_LOCAL_CODE_EXEC 控制是否允许本地代码执行：
+    - false（默认）: 拒绝本地执行，必须使用沙箱模式
+    - true: 允许本地执行（⚠️ 仅限可信内网环境，无安全隔离）
     """
 
     local_exec_mode: Literal["inprocess", "subprocess"] = Field(
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
+    )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
+    )
+    # 本地执行的兜底超时（秒）：异常处理未配 exceptionProcess.timeout 时使用。
+    # 与沙箱超时（SECURITY_SANDBOX_TIMEOUT）解耦，避免混用。
+    local_exec_timeout: int = Field(
+        default=900,
+        gt=0,
+        validation_alias="LOCAL_CODE_EXEC_TIMEOUT",
     )
 
     model_config = SettingsConfigDict(

@@ -89,6 +89,14 @@ public class McpServiceDetailInfoDto implements Serializable {
     @Valid
     private McpFailReasonDetailDto failReasonDetail = null;
 
+    @JsonProperty("import_config_pending")
+    @Schema(description = "FEAT-134：导入后待补配提示标记（true=有配置项需在目标环境补配）", example = "false")
+    private Boolean importConfigPending = null;
+
+    @JsonProperty("import_config_paths")
+    @Schema(description = "FEAT-134：待补配的路径清单（仅路径不含值，逗号分隔）", example = "/headers/Authorization,/env/API_KEY")
+    private String importConfigPaths = null;
+
     @JsonProperty("apig_group_id")
     @Schema(description = "API网关分组ID", example = "group-001")
     private String apigGroupId = null;
@@ -287,6 +295,24 @@ public class McpServiceDetailInfoDto implements Serializable {
 
     public McpServiceDetailInfoDto setFailReasonDetail(McpFailReasonDetailDto failReasonDetail) {
         this.failReasonDetail = failReasonDetail;
+        return this;
+    }
+
+    public Boolean getImportConfigPending() {
+        return importConfigPending;
+    }
+
+    public McpServiceDetailInfoDto setImportConfigPending(Boolean importConfigPending) {
+        this.importConfigPending = importConfigPending;
+        return this;
+    }
+
+    public String getImportConfigPaths() {
+        return importConfigPaths;
+    }
+
+    public McpServiceDetailInfoDto setImportConfigPaths(String importConfigPaths) {
+        this.importConfigPaths = importConfigPaths;
         return this;
     }
 

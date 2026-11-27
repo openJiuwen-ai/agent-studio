@@ -149,7 +149,7 @@ class PluginAdapterImplTest {
             // 告诉 Mock：当代码请求 DomainID 时，返回 "test_domain_id"
             mockedRequestContext.when(RequestContextUtils::getRequestUserDomainId).thenReturn("test_domain_id");
 
-            when(redisClient.get(any(), any())).thenReturn("5");
+            when(redisClient.get(anyString())).thenReturn("5");
             when(pluginMapper.selectByPrimaryIdAndToolIdsWithSearchCriteria(any(), any(), any(),
                     eq(null))).thenReturn(pluginEntities);
             when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(shareResourceEntities);

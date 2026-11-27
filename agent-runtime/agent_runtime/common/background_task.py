@@ -47,6 +47,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from openjiuwen.core.common.logging import workflow_logger
+from redis_spi.types import Duration
 
 # 强引用集合：防止 create_task 返回的 Task 在完成前被垃圾回收。
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
@@ -77,11 +78,10 @@ POLL_INTERVAL_SECONDS = 0.05
 def _get_redis():
     """惰性获取 Redis 客户端；未初始化或导入失败返回 None（跨进程 join 降级）."""
     try:
-        from common_utils.redis_manager import RedisClientManager
+        from redis_spi import accessor
 
-        mgr = RedisClientManager.get_instance()
-        if mgr.is_initialized:
-            return mgr.get_client()
+        if accessor.is_initialized():
+            return accessor.get_redis()
     except Exception as e:
         workflow_logger.warning(
             f"background_task: Redis client unavailable, "
@@ -158,14 +158,15 @@ async def _mark_inflight(track_key: str, task_id: str) -> bool:
         return False
     key = f"{INFLIGHT_KEY_PREFIX}{track_key}"
     try:
-        await redis.hset(key, task_id, str(time.time()))
+        # SPI hset 无 (key, field, value) 位置形态——field/value 具名传参
+        await redis.hset(key, field=task_id, value=str(time.time()))
     except Exception as e:
         workflow_logger.warning(
             f"inflight HSET failed, key={key}, cross-process join degraded: {e}"
         )
         return False
     try:
-        await redis.expire(key, INFLIGHT_TTL_SECONDS)
+        await redis.expire(key, Duration.seconds(INFLIGHT_TTL_SECONDS))
     except Exception as e:
         workflow_logger.warning(f"inflight EXPIRE failed, key={key}: {e}")
     return True

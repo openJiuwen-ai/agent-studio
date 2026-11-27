@@ -175,32 +175,43 @@ export class TriggerHalfmodalComponent {
 
   public weekOptions = [
     {
+      // Quartz cron day-of-week 支持数字（1=周日 ... 7=周六）与英文名称
+      // （SUN/MON/.../SAT）两种形式。本组件写入统一使用英文名称：
+      // 与历史数字数据天然可区分，回显时可对存量数字按旧语义兼容换算，
+      // 新保存数据零漂移。label 仍按中文习惯周一→周日排列
       label: this.i18n.transform("commonlogicagent_6"),
-      value: "1"
+      value: "2",
+      cronName: "MON"
     },
     {
       label: this.i18n.transform("commonlogicagent_7"),
-      value: "2"
+      value: "3",
+      cronName: "TUE"
     },
     {
       label: this.i18n.transform("commonlogicagent_8"),
-      value: "3"
+      value: "4",
+      cronName: "WED"
     },
     {
       label: this.i18n.transform("commonlogicagent_9"),
-      value: "4"
+      value: "5",
+      cronName: "THU"
     },
     {
       label: this.i18n.transform("commonlogicagent_10"),
-      value: "5"
+      value: "6",
+      cronName: "FRI"
     },
     {
       label: this.i18n.transform("commonlogicagent_11"),
-      value: "6"
+      value: "7",
+      cronName: "SAT"
     },
     {
       label: this.i18n.transform("commonlogicagent_5"),
-      value: "7"
+      value: "1",
+      cronName: "SUN"
     }
   ];
 
@@ -302,7 +313,7 @@ export class TriggerHalfmodalComponent {
             prompt: "",
             periodType: "day",
             periodMonthDay: "1",
-            periodWeek: "1",
+            periodWeek: "2",
             periodTime: this.getNextFullHourNew(),
             IntervalType: "day",
             IntervalDay: "1"
@@ -484,7 +495,7 @@ export class TriggerHalfmodalComponent {
       prompt: ["", [Validators.maxLength(500)]],
       periodType: ["day", []],
       periodMonthDay: ["1", [this.monthDayValidator()]],
-      periodWeek: ["1", []],
+      periodWeek: ["2", []],
       periodTime: [this.getNextFullHourNew(), []],
       IntervalType: ["day", []],
       IntervalDay: ["1", [this.dayValidator()]]
@@ -993,7 +1004,15 @@ export class TriggerHalfmodalComponent {
         }
         if (periodType === "week") {
           const periodWeek = this.timeTriggerForm?.controls.periodWeek.value;
-          return `${seconds} ${minutes} ${hours} ? * ${periodWeek}`;
+          // 标准单选（1~7）映射为英文名称写入；非标准值（编辑存量
+          // MON-FRI / 1,3,5 等多值或范围表达式时，该域原样保留在
+          // periodWeek 中，不匹配任何选项）兜底原样写回，保证合法
+          // 的存量表达式不被改坏
+          const matched = this.weekOptions.find(
+            (option) => option.value === periodWeek
+          );
+          const cronName = matched?.cronName ?? periodWeek;
+          return `${seconds} ${minutes} ${hours} ? * ${cronName}`;
         }
         if (periodType === "month") {
           const periodMonthDay =
@@ -1041,7 +1060,29 @@ export class TriggerHalfmodalComponent {
           this.timeTriggerForm?.controls.periodType.setValue("week");
           this.onDateSelect({ value: "week" });
           this.timeTriggerForm?.controls.periodTime.setValue(newTimeDate);
-          this.timeTriggerForm?.controls.periodWeek.setValue(dayOfWeek);
+          // cron 星期域三种形式的回显：
+          // - 英文名称（MON/SUN 等，本组件修复后写入）→ 直接映射回选项 value，
+          //   新数据编辑零漂移
+          // - 单个数字（历史存量数据，旧语义"1=周一 ... 7=周日"）→ 按旧语义
+          //   逆向换算回用户当初选择的星期对应的 value（n=1..6 → n+1，n=7 → 1），
+          //   重新保存后写入英文名称，存量数据自愈
+          // - 其他非标准值（MON-FRI、1,3,5、5L 等多值/范围/特殊语义表达式，
+          //   Quartz 均合法）→ 原样保留在表单中，保存时原值写回 cron，
+          //   不做任何改写（下拉无法表达多值语义，回显显示原始 token）
+          if (/^\d+$/.test(dayOfWeek)) {
+            const legacyWeek = parseInt(dayOfWeek, 10);
+            if (legacyWeek >= 1 && legacyWeek <= 6) {
+              this.timeTriggerForm?.controls.periodWeek.setValue(
+                String(legacyWeek + 1)
+              );
+            } else if (legacyWeek === 7) {
+              this.timeTriggerForm?.controls.periodWeek.setValue("1");
+            } else {
+              this.timeTriggerForm?.controls.periodWeek.setValue(dayOfWeek);
+            }
+          } else {
+            this.timeTriggerForm?.controls.periodWeek.setValue(dayOfWeek);
+          }
           return "";
         }
         const dayIsNumeric = day !== "*" && day.match(/^\d+$/);

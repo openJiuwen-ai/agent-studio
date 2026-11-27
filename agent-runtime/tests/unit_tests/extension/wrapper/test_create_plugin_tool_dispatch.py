@@ -55,6 +55,12 @@ def test_workflow_wrapper_flow_custom_api_mapping():
     assert _DEBUG_EVENT_RETURN_TO_SERVICE["FlowApi"] == "Api"
 
 
+def test_workflow_wrapper_jiuwen_plugin_mapping():
+    """A37b: _DEBUG_EVENT_RETURN_TO_SERVICE["jiuwen.plugin"] == "Api"（custom 插件调试详情图标）。"""
+    assert "jiuwen.plugin" in _DEBUG_EVENT_RETURN_TO_SERVICE
+    assert _DEBUG_EVENT_RETURN_TO_SERVICE["jiuwen.plugin"] == "Api"
+
+
 # --------------------------------------------------------------------------- #
 # A38: ir_converter callMode=="custom" → FlowCustomApi
 # --------------------------------------------------------------------------- #

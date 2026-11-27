@@ -168,9 +168,13 @@ public class PromptObsService {
     public String downloadObsFile(String relativePath) {
         try {
             return fileStore.read(path(relativePath));
+        } catch (AgentStudioException e) {
+            // 透传: read 抛 OBS_FAILED（404 与 5xx 均抛，透传 cause），不二次包装（同 MgObsService.downloadObsFile）。
+            // 404 在此调用方属数据不一致故障，500 合理（404→null 语义仅收敛到 MgObsService.getObjectOrNull）。
+            throw e;
         } catch (Exception e) {
-            log.error("download file from obs failed!");
-            throw new AgentStudioException(StudioError.OBS_FAILED);
+            log.error("download file from obs failed!", e);
+            throw new AgentStudioException(StudioError.OBS_FAILED, e);
         }
     }
 

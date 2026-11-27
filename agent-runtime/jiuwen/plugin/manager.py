@@ -968,13 +968,12 @@ class PluginManager:
                     logger.info("plugin emb is closed")
                     return MOCK_QUERY_EMBEDDING_RESULT[:emb_dim]
                 self.emb = class_object()
-            if isinstance(self.emb, TextEmbeddingService):
-                if not os.environ.get(
-                    PLUGIN_RECALL_EMB_SERVICE_URL_KEY,
-                    recall_config.get("emb_service_url"),
-                ):
-                    logger.error("TextEmbeddingService miss url")
-                    return MOCK_QUERY_EMBEDDING_RESULT[:emb_dim]
+            if isinstance(self.emb, TextEmbeddingService) and not os.environ.get(
+                PLUGIN_RECALL_EMB_SERVICE_URL_KEY,
+                recall_config.get("emb_service_url"),
+            ):
+                logger.error("TextEmbeddingService miss url")
+                return MOCK_QUERY_EMBEDDING_RESULT[:emb_dim]
             return self.emb.query_embedding(query)[0][:emb_dim]
         except Exception as e:
             logger.error("query_embedding failed!")

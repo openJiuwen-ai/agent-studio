@@ -24,11 +24,11 @@ def _runner() -> WorkflowRunner:
 
 
 def _patch_redis(get=None, delete=None):
-    """workflow_runner 模块顶层 import 的 get_redis_client —— patch 模块命名空间。"""
+    """redis_spi accessor 单例取客户端 —— patch accessor 模块命名空间。"""
     client = AsyncMock()
     client.get = get or AsyncMock(return_value=None)
     client.delete = delete or AsyncMock()
-    return patch("agent_runtime.runner.workflow_runner.get_redis_client", return_value=client)
+    return patch("redis_spi.accessor.get_redis", return_value=client)
 
 
 class TestIsSessionCancelled:

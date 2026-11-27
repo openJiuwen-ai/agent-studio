@@ -210,7 +210,7 @@ class TestConversationReader:  # pylint: disable=protected-access
         mock_redis.get = AsyncMock(return_value=raw_bytes)
 
         with patch(
-            "agent_runtime.additional_questions.conversation_reader.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ), patch(
             "agent_runtime.additional_questions.conversation_reader._request_ctx"
@@ -228,7 +228,7 @@ class TestConversationReader:  # pylint: disable=protected-access
         mock_redis.get = AsyncMock(return_value=None)
 
         with patch(
-            "agent_runtime.additional_questions.conversation_reader.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ), patch(
             "agent_runtime.additional_questions.conversation_reader._request_ctx"
@@ -247,7 +247,7 @@ class TestConversationReader:  # pylint: disable=protected-access
         mock_redis.get = AsyncMock(return_value=raw_bytes)
 
         with patch(
-            "agent_runtime.additional_questions.conversation_reader.get_redis_client",
+            "redis_spi.accessor.get_redis",
             return_value=mock_redis,
         ), patch(
             "agent_runtime.additional_questions.conversation_reader._request_ctx"

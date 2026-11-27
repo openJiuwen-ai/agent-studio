@@ -226,6 +226,7 @@
                       [tiValidation]="{ type: 'changeAlert' }"
                       [placeholder]="'select_placeholder' | i18nextEager"
                       (select)="treeSelect()"
+                      [specifyType]="getDifferentType(param)"
                     ></input-tree-select>
 
                     <div *ngIf="inputForm?.controls['inputFormValue' + i]?.invalid && (inputForm?.controls['inputFormValue' + i]?.dirty || inputForm?.controls['inputFormValue' + i]?.touched)" class="error-tip">
@@ -388,6 +389,7 @@
                       [tiValidation]="{ type: 'changeAlert' }"
                       [placeholder]="'select_placeholder' | i18nextEager"
                       (select)="treeSelect()"
+                      [specifyType]="getDifferentType(origin)"
                     ></input-tree-select>
 
                     <div *ngIf="inputFormContent?.controls['inputFormValue' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValue' + origin.key]?.dirty || inputFormContent?.controls['inputFormValue' + origin.key]?.touched)" class="error-tip">

@@ -12,6 +12,9 @@ from agent_runtime.extension.workflow_node.code_runner.local_code_runner import 
 from agent_runtime.extension.workflow_node.code_runner.sandbox_code_runner import (
     SandboxCodeRunner,
 )
+from agent_runtime.extension.workflow_node.code_runner.base_code_runner import (
+    CodeRunResult,
+)
 
 
 def _mock_sys_op():
@@ -63,6 +66,7 @@ class TestFlowCodeExecEnv:
         with patch("openjiuwen.core.runner.Runner.resource_mgr", mock_mgr), \
              patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "subprocess"
+            mock_settings.code_execution.allow_local_exec = True
             _call_ensure_code_runner(flow_code)
             assert isinstance(_get_code_runner(flow_code), LocalCodeRunner)
 
@@ -84,7 +88,7 @@ class TestFlowCodeExecEnv:
             assert isinstance(_get_code_runner(flow_code), SandboxCodeRunner)
 
     @staticmethod
-    def test_exec_env_sandbox_no_sandbox_sysop_fallback():
+    def test_exec_env_sandbox_no_sandbox_sysop_raises():
         config = FlowCodeConfig(
             code="def main(args): return {}", exec_env="sandbox"
         )
@@ -96,24 +100,25 @@ class TestFlowCodeExecEnv:
         with patch("openjiuwen.core.runner.Runner.resource_mgr", mock_mgr), \
              patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "subprocess"
-            _call_ensure_code_runner(flow_code)
-            assert isinstance(_get_code_runner(flow_code), LocalCodeRunner)
+            with pytest.raises(Exception, match="Failed to create runner.*Fallback.*disabled"):
+                _call_ensure_code_runner(flow_code)
 
     @staticmethod
-    def test_exec_env_empty_defaults_to_local():
+    def test_exec_env_empty_defaults_to_sandbox():
         config = FlowCodeConfig(
             code="def main(args): return {}", exec_env=""
         )
         flow_code = FlowCode(config)
 
-        mock_sys_op = _mock_sys_op()
-        mock_mgr = _mock_resource_mgr(local_op=mock_sys_op)
+        local_op = _mock_sys_op()
+        sandbox_op = _mock_sys_op()
+        mock_mgr = _mock_resource_mgr(local_op=local_op, sandbox_op=sandbox_op)
 
         with patch("openjiuwen.core.runner.Runner.resource_mgr", mock_mgr), \
              patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "subprocess"
             _call_ensure_code_runner(flow_code)
-            assert isinstance(_get_code_runner(flow_code), LocalCodeRunner)
+            assert isinstance(_get_code_runner(flow_code), SandboxCodeRunner)
 
     @staticmethod
     def test_exec_env_local_no_sysop_raises():
@@ -127,6 +132,7 @@ class TestFlowCodeExecEnv:
         with patch("openjiuwen.core.runner.Runner.resource_mgr", mock_mgr), \
              patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "subprocess"
+            mock_settings.code_execution.allow_local_exec = True
             with pytest.raises(Exception, match="flow_code_sys_op.*not found"):
                 _call_ensure_code_runner(flow_code)
 
@@ -136,9 +142,9 @@ class TestFlowCodeExecEnv:
         assert _get_conf(flow_code).exec_env == "sandbox"
 
     @staticmethod
-    def test_dict_config_missing_exec_env_defaults_local():
+    def test_dict_config_missing_exec_env_defaults_sandbox():
         flow_code = FlowCode({"code": "def main(args): return {}"})
-        assert _get_conf(flow_code).exec_env == "local"
+        assert _get_conf(flow_code).exec_env == "sandbox"
 
 
 class TestFlowCodeSandboxFallback:
@@ -152,7 +158,7 @@ class TestFlowCodeSandboxFallback:
         flow_code = FlowCode(config)
 
         mock_runner = AsyncMock()
-        mock_runner.run = AsyncMock(return_value={"result": 1})
+        mock_runner.run = AsyncMock(return_value=CodeRunResult(result={"result": 1}, function_log=""))
         _set_code_runner(flow_code, mock_runner)
 
         mock_session = MagicMock()
@@ -183,7 +189,7 @@ class TestFlowCodeSandboxFallback:
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_sandbox_run_failure_fallback_to_local():
+    async def test_sandbox_run_failure_raises_error():
         config = FlowCodeConfig(
             code="def main(args): return {'result': 'fallback'}",
             exec_env="sandbox",
@@ -193,9 +199,6 @@ class TestFlowCodeSandboxFallback:
         mock_sandbox_runner = AsyncMock()
         mock_sandbox_runner.run = AsyncMock(side_effect=RuntimeError("sandbox down"))
         _set_code_runner(flow_code, mock_sandbox_runner)
-
-        mock_local_runner = AsyncMock()
-        mock_local_runner.run = AsyncMock(return_value={"result": "fallback"})
 
         mock_session = MagicMock()
         mock_session.get_component_id.return_value = "test"
@@ -212,23 +215,17 @@ class TestFlowCodeSandboxFallback:
             side_effect=lambda r, s: r,
         ), patch.object(
             flow_code, "_check_blacklist"
-        ), patch.object(
-            flow_code, "_get_local_runner", return_value=mock_local_runner
         ), patch(
             "agent_runtime.extension.workflow_node.flow_code.workflow_logger"
-        ) as mock_logger:
+        ):
             from openjiuwen.core.common.constants.constant import USER_FIELDS
 
-            result = await flow_code.invoke(
-                inputs={USER_FIELDS: {}},
-                session=mock_session,
-                context=mock_context,
-            )
-            assert result[USER_FIELDS] == {"result": "fallback"}
-            mock_local_runner.run.assert_called_once()
-            mock_logger.warning.assert_any_call(
-                "Sandbox execution failed: sandbox down, fallback to local"
-            )
+            with pytest.raises(Exception, match="Sandbox execution failed.*fallback.*disabled"):
+                await flow_code.invoke(
+                    inputs={USER_FIELDS: {}},
+                    session=mock_session,
+                    context=mock_context,
+                )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -268,7 +265,7 @@ class TestFlowCodeSandboxFallback:
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_sandbox_fallback_local_also_fails():
+    async def test_sandbox_failure_raises_build_error():
         config = FlowCodeConfig(
             code="def main(args): return {}",
             exec_env="sandbox",
@@ -278,9 +275,6 @@ class TestFlowCodeSandboxFallback:
         mock_sandbox_runner = AsyncMock()
         mock_sandbox_runner.run = AsyncMock(side_effect=RuntimeError("sandbox down"))
         _set_code_runner(flow_code, mock_sandbox_runner)
-
-        mock_local_runner = AsyncMock()
-        mock_local_runner.run = AsyncMock(side_effect=RuntimeError("local also down"))
 
         mock_session = MagicMock()
         mock_session.get_component_id.return_value = "test"
@@ -297,10 +291,8 @@ class TestFlowCodeSandboxFallback:
             side_effect=lambda r, s: r,
         ), patch.object(
             flow_code, "_check_blacklist"
-        ), patch.object(
-            flow_code, "_get_local_runner", return_value=mock_local_runner
         ):
-            with pytest.raises(Exception, match="local also down"):
+            with pytest.raises(Exception, match="Sandbox execution failed.*fallback.*disabled"):
                 await flow_code.invoke(
                     inputs={},
                     session=mock_session,
@@ -325,6 +317,7 @@ class TestFlowCodeInprocessMode:
 
         with patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "inprocess"
+            mock_settings.code_execution.allow_local_exec = True
             _call_ensure_code_runner(flow_code)
 
         runner = _get_code_runner(flow_code)
@@ -345,6 +338,7 @@ class TestFlowCodeInprocessMode:
         # inprocess 模式下即使 sys_operation 未注册也不报错
         with patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "inprocess"
+            mock_settings.code_execution.allow_local_exec = True
             _call_ensure_code_runner(flow_code)
 
         runner = _get_code_runner(flow_code)
@@ -363,5 +357,20 @@ class TestFlowCodeInprocessMode:
         with patch("openjiuwen.core.runner.Runner.resource_mgr", mock_mgr), \
              patch("agent_runtime.common.config.settings") as mock_settings:
             mock_settings.code_execution.local_exec_mode = "subprocess"
+            mock_settings.code_execution.allow_local_exec = True
             with pytest.raises(Exception, match="flow_code_sys_op"):
+                _call_ensure_code_runner(flow_code)
+
+    @staticmethod
+    def test_local_exec_disabled_raises():
+        """ALLOW_LOCAL_CODE_EXEC=false 时，local 模式拒绝执行"""
+        config = FlowCodeConfig(
+            code="def main(args): return {}", exec_env="local"
+        )
+        flow_code = FlowCode(config)
+
+        with patch("agent_runtime.common.config.settings") as mock_settings:
+            mock_settings.code_execution.local_exec_mode = "inprocess"
+            mock_settings.code_execution.allow_local_exec = False
+            with pytest.raises(Exception, match="Local code execution is disabled"):
                 _call_ensure_code_runner(flow_code)

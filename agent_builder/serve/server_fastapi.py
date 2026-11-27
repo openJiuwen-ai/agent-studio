@@ -33,13 +33,48 @@ logger = logging.getLogger("agent_builder.server_fastapi")
 apps_map = [builder_router, model_service_router, prompt_manage_app]
 
 
+async def _init_redis_provider() -> None:
+    """装配 Redis Provider（缺省 native=行为不变；企业设 REDIS_PROVIDER 切换）。
+
+    装配含 ping fail-fast；成功后 common_utils 委托层自动切换：
+    异步面（history 存储 SPI 直调）与同步面（get_sync_client 返回同步兼容桥）。
+    适配层包未安装（独立环境）时回退 legacy 客户端；**装配失败则 fail-fast
+    终止启动**——history 异步存储直调 accessor，半可用状态（同步通/异步永久
+    RedisConfigError）是慢性隐蔽故障，显式失败交由进程重启自愈更可运维
+    （与 runtime server lifespan 行为一致）。
+    """
+    try:
+        from common_utils.redis_provider_bootstrap import init_redis_provider
+    except ImportError:
+        logger.warning(
+            "redis adapter packages not installed, fallback to legacy redis client"
+        )
+        return
+    client = await init_redis_provider()
+    if client is None:
+        # Redis 未配置（REDIS_HOST/CLUSTER_NODES 全空）：维持 legacy 行为
+        logger.warning("Redis not configured, provider not initialized")
+        return
+    logger.info("Redis provider initialized (delegation active)")
+
+
 async def _ping_redis() -> None:
     """Best-effort Redis ping at startup (fail-fast on misconfig).
 
     n2l history.py creates its client lazily from the same config_bridge
     settings; this only validates config at boot. Warn-and-continue on failure.
+    Provider 已装配时装配期已 ping fail-fast，直接确认不再重复探活。
     """
     try:
+        try:
+            from redis_spi import accessor
+
+            if accessor.is_initialized():
+                logger.info("Redis connection check passed (provider assembled)")
+                return
+        except ImportError:
+            pass
+
         from common_utils.redis_manager import RedisClientManager
 
         mgr = RedisClientManager.get_instance()
@@ -104,9 +139,13 @@ def _register_model_service_ports() -> None:
     ports.set_env_variables(get_env_variables)
     # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
     ports.set_request_customer_headers(get_request_customer_headers)
+    # builder 无画布试运行 IAM/user_id；空实现保持 ports 契约，避免 client 回退私有 ctx
+    ports.set_request_user_id(lambda: "")
+    ports.set_invoke_mode(lambda: "")
     ports.set_cache_queues(None, None)
     logger.info(
-        "model_service ports registered (storage/llm/request-headers/customer-headers/env-variables; cache disabled)"
+        "model_service ports registered (storage/llm/request-headers/customer-headers/"
+        "user-id/invoke-mode/env-variables; cache disabled)"
     )
 
 
@@ -154,14 +193,38 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     from agent_builder.adapter.llm_bridge import set_main_loop
     set_main_loop(asyncio.get_running_loop())
 
+    # Redis Provider 装配（缺省 native；成功后委托层异步/同步面自动切换）
+    await _init_redis_provider()
+
     await _init_prompt_store()
     await _ping_redis()
     await _init_s3_storage()
     _load_customer_header_profile()
     _register_model_service_ports()
+    # #1655/#1724：消费 settings.otel，避免 OTEL_* 死配置
+    try:
+        from agent_builder.observability import setup_otel_tracer
+
+        setup_otel_tracer()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"OpenTelemetry setup failed (non-critical): {e}")
     try:
         yield
     finally:
+        try:
+            from agent_builder.observability.tracer_otel import force_flush
+
+            force_flush()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"OpenTelemetry flush failed (non-critical): {e}")
+        # 优雅关闭 Redis：同步兼容桥（专用循环+连接池）与 Provider/legacy 客户端
+        # （测试/集成环境反复启停时防泄漏；一次性进程由 daemon 线程兜底）
+        try:
+            from common_utils.redis_manager import RedisClientManager
+
+            await RedisClientManager.get_instance().close()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Redis client close failed (non-critical): {e}")
         try:
             import storage
 
@@ -199,6 +262,34 @@ def instance_app() -> FastAPI:
     # 禁止在保留 establish 为 @app.middleware 后再 add_middleware(dispatcher)——
     # 那样 dispatcher 会跑到 establish 外层，与目标序相反（§6.4 第 4 点）。
     app.add_middleware(FlaskRouteDispatchMiddleware, flask_app=prompt_manage_app)
+
+    @app.middleware("http")
+    async def otel_http_span(request: Request, call_next):
+        """Server HTTP span when OTEL_ENABLED; continues upstream W3C parent if present."""
+        from agent_builder.adapter.config_bridge import settings as builder_settings
+        from agent_builder.observability.tracer_otel import extract_inbound_trace_context
+
+        if not builder_settings.otel.enabled:
+            return await call_next(request)
+        try:
+            from opentelemetry import trace
+        except ImportError:
+            return await call_next(request)
+
+        tracer = trace.get_tracer(builder_settings.otel.service_name or "agent-builder")
+        span_name = f"{request.method} {request.url.path}"
+        parent_context = extract_inbound_trace_context(request.headers)
+        with tracer.start_as_current_span(
+            span_name,
+            context=parent_context,
+            kind=trace.SpanKind.SERVER,
+        ) as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.target", request.url.path)
+            span.set_attribute("http.route", request.url.path)
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
+            return response
 
     @app.middleware("http")
     async def establish_inbound_context(request: Request, call_next):

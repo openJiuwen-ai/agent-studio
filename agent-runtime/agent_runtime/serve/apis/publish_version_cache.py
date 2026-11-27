@@ -17,6 +17,8 @@ from typing import Optional
 
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import BaseModel, Field, ConfigDict
+from redis_spi import accessor
+from redis_spi.types import Duration
 
 
 # Redis key 格式
@@ -87,16 +89,11 @@ class PublishVersionCache:
     async def _read_from_redis(cls, agent_id: str) -> Optional[AgentMetadata]:
         """从 Redis 读取发布版本元数据。"""
         try:
-            from common_utils.redis_manager import (
-                get_redis_client,
-                RedisClientManager,
-            )
-
-            if not RedisClientManager.get_instance().is_initialized:
+            if not accessor.is_initialized():
                 workflow_logger.debug("Redis not initialized, skip Redis read")
                 return None
 
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_redis_key(agent_id)
             raw = await redis_client.get(key)
 
@@ -165,20 +162,17 @@ class PublishVersionCache:
     ) -> None:
         """将发布版本元数据写入 Redis 缓存。"""
         try:
-            from common_utils.redis_manager import (
-                get_redis_client,
-                RedisClientManager,
-            )
-
-            if not RedisClientManager.get_instance().is_initialized:
+            if not accessor.is_initialized():
                 return
 
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             key = cls._build_redis_key(agent_id)
             value = json.dumps(
                 metadata.model_dump(by_alias=True), ensure_ascii=False
             )
-            await redis_client.set(key, value, ex=_PUBLISH_CACHE_TTL)
+            await redis_client.set(
+                key, value, duration=Duration.seconds(_PUBLISH_CACHE_TTL)
+            )
             workflow_logger.debug(
                 "Publish metadata cached to Redis: agent_id=%s", agent_id
             )

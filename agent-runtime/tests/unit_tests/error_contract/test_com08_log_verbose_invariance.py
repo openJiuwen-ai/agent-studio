@@ -22,7 +22,6 @@ from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.diagnostics import DiagnosticPolicy, set_default_policy
 from jiuwen.orchestration.flow.stream.base import StreamCode
 from jiuwen.orchestration.flow.workflow import Workflow
-from jiuwen.serve.controllers.async_execution import utils as async_exec_utils
 from jiuwen.serve.controllers.execution import utils as exec_utils
 
 
@@ -267,32 +266,6 @@ def _noop(*a, **kw):
     return None
 
 
-class _CaptureERM:
-    """替身 ExecutionResultManager：捕获 append_message 的 StreamingChatResponse。"""
-
-    def __init__(self):
-        self.captured = []
-
-    def append_message(self, key, value):
-        self.captured.append((key, value))
-
-    def get_messages(self, key):
-        return [v for k, v in self.captured if k == key]
-
-
-class _FakeAESM:
-    def set_state_status(self, conv, status):
-        pass
-
-    def get_state_parsed(self, conv):  # pylint: disable=add-staticmethod-or-classmethod-decorator
-        return SimpleNamespace(status=None)
-
-
-class _FakeAEASM:
-    async def set_state_structure(self, conv, state):
-        pass
-
-
 def _drive_format_component_output(item, monkeypatch):
     """真实调用 #3 _format_component_output。"""
     monkeypatch.setattr(exec_utils, "async_update_state_of_workflow", _async_noop)
@@ -343,62 +316,6 @@ def _drive_post_process_workflow_streaming_output(item, monkeypatch):
     return asyncio.run(collect())
 
 
-def _drive_post_process_async(item, monkeypatch):
-    """真实调用 #5 post_process_workflow_streaming_output_async，捕获持久化结果。"""
-    from jiuwen.orchestration.flow.enum import ExecutionStatus
-
-    fake_erm = _CaptureERM()
-    monkeypatch.setattr(exec_utils, "ExecutionResultManager", lambda: fake_erm)
-    monkeypatch.setattr(exec_utils, "AsyncExecAsyncStateManager", _FakeAEASM)
-    monkeypatch.setattr(exec_utils, "async_update_state_of_workflow", _async_noop)
-    monkeypatch.setattr(
-        exec_utils, "_get_conv_status_by_exec_status",
-        lambda status: async_exec_utils.AsyncExecutionStatus.FAILED,
-    )
-    stub_wf = SimpleNamespace(
-        get_workflow_execute_status=lambda: ExecutionStatus.END,
-        clean_up=_async_noop,
-    )
-    asyncio.run(
-        exec_utils.post_process_workflow_streaming_output_async(
-            "conv-1", [item], stub_wf
-        )
-    )
-    return fake_erm.captured
-
-
-def _drive_async_exec_post_process_7(item, monkeypatch):
-    """真实调用 #7 async_execution/utils.py::post_process_workflow_streaming_output_async。"""
-    from jiuwen.orchestration.flow.enum import ExecutionStatus
-
-    fake_erm = _CaptureERM()
-    monkeypatch.setattr(async_exec_utils, "ExecutionResultManager", lambda: fake_erm)
-    monkeypatch.setattr(async_exec_utils, "AsyncExecStateManager", _FakeAESM)
-    monkeypatch.setattr(async_exec_utils, "update_state_of_workflow", _noop)
-    monkeypatch.setattr(
-        async_exec_utils, "_get_conv_status_by_exec_status",
-        lambda *a, **kw: async_exec_utils.AsyncExecutionStatus.FAILED,
-    )
-    stub_wf = SimpleNamespace(
-        get_workflow_execute_status=lambda: ExecutionStatus.END,
-        clean_up=_noop,
-    )
-    async_exec_utils.post_process_workflow_streaming_output_async(
-        "conv-1", [item], stub_wf
-    )
-    return fake_erm.captured
-
-
-def _drive_handle_init_exceptions(monkeypatch):
-    """真实调用 #6 handle_init_exceptions，捕获 append_message。"""
-    fake_erm = _CaptureERM()
-    monkeypatch.setattr(async_exec_utils, "ExecutionResultManager", lambda: fake_erm)
-    monkeypatch.setattr(async_exec_utils, "AsyncExecStateManager", _FakeAESM)
-    exc = _make_jiuwen_exc(message=_SENTINEL)
-    async_exec_utils.handle_init_exceptions(exc, "exec-1", "conv-1")
-    return fake_erm.captured
-
-
 # #3 _format_component_output
 def test_format_component_output_no_sensitive_sentinel(monkeypatch):
     wire = _drive_format_component_output(_make_error_item(), monkeypatch)
@@ -432,89 +349,10 @@ def test_post_process_workflow_streaming_output_two_configs_identical(monkeypatc
     assert _wire_list_json(w_false) == _wire_list_json(w_true)
 
 
-# #5 post_process_workflow_streaming_output_async（持久化结果）
-def test_post_process_async_persisted_message_no_sentinel(monkeypatch):
-    captured = _drive_post_process_async(_make_error_item(), monkeypatch)
-    blob = "\n".join(v.model_dump_json(by_alias=True, exclude_none=True)
-                     for _, v in captured if hasattr(v, "model_dump_json"))
-    assert _SENTINEL not in blob
-    assert exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
-
-
-def test_post_process_async_two_configs_identical(monkeypatch):
-    """§4.7C/§6.3/§8: #5 持久化结果 false/true 精确一致（排除 createdTime）。"""
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    c_false = _drive_post_process_async(_make_error_item(), monkeypatch)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    c_true = _drive_post_process_async(_make_error_item(), monkeypatch)
-
-    def _blob(captured):
-        return "\n".join(
-            v.model_dump_json(by_alias=True, exclude_none=True)
-            for _, v in captured if hasattr(v, "model_dump_json")
-        )
-
-    assert _CREATEDTIME_RE.sub("x", _blob(c_false)) == _CREATEDTIME_RE.sub("x", _blob(c_true))
-
-
-# #6 handle_init_exceptions（真实调用，非手工构造）
-def test_handle_init_exceptions_no_sensitive_in_persisted(monkeypatch):
-    captured = _drive_handle_init_exceptions(monkeypatch)
-    blob = "\n".join(
-        v.model_dump_json(by_alias=True, exclude_none=True)
-        for _, v in captured if hasattr(v, "model_dump_json")
-    )
-    assert _SENTINEL not in blob
-    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
-
-
-def test_handle_init_exceptions_two_configs_identical(monkeypatch):
-    """§4.7C/§6.3/§8: #6 持久化结果 false/true 精确一致（排除 createdTime）。"""
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    c_false = _drive_handle_init_exceptions(monkeypatch)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    c_true = _drive_handle_init_exceptions(monkeypatch)
-
-    def _blob(captured):
-        return "\n".join(
-            v.model_dump_json(by_alias=True, exclude_none=True)
-            for _, v in captured if hasattr(v, "model_dump_json")
-        )
-
-    assert _CREATEDTIME_RE.sub("x", _blob(c_false)) == _CREATEDTIME_RE.sub("x", _blob(c_true))
-
-
-# #7 async_execution/utils.py::post_process_workflow_streaming_output_async
-def test_async_exec_post_process_7_no_sentinel(monkeypatch):
-    captured = _drive_async_exec_post_process_7(_make_error_item(), monkeypatch)
-    blob = "\n".join(
-        v.model_dump_json(by_alias=True, exclude_none=True)
-        for _, v in captured if hasattr(v, "model_dump_json")
-    )
-    assert _SENTINEL not in blob
-    assert async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE in blob  # pylint: disable=protected-access
-
-
-def test_async_exec_post_process_7_two_configs_identical(monkeypatch):
-    monkeypatch.setenv("LOG_VERBOSE", "false")
-    c_false = _drive_async_exec_post_process_7(_make_error_item(), monkeypatch)
-    monkeypatch.setenv("LOG_VERBOSE", "true")
-    c_true = _drive_async_exec_post_process_7(_make_error_item(), monkeypatch)
-
-    def _blob(captured):
-        return "\n".join(
-            v.model_dump_json(by_alias=True, exclude_none=True)
-            for _, v in captured if hasattr(v, "model_dump_json")
-        )
-
-    def _norm(s):
-        return _CREATEDTIME_RE.sub('"createdTime":0', s)
-
-    assert _norm(_blob(c_false)) == _norm(_blob(c_true))
-
-
-def test_async_execution_safe_message_constant_no_sentinel():
-    assert _SENTINEL not in async_exec_utils._SAFE_PUBLIC_ERROR_MESSAGE  # pylint: disable=protected-access
+# #5/#6/#7（post_process_workflow_streaming_output_async ×2、handle_init_exceptions、
+# 及 async_execution/utils 的 SAFE 常量测试）随 Phase 4 第五批 async_execution
+# 拓扑下线一并删除：它们的被测函数属于 worker 投递链的 Web 侧配套
+# （新架构无分发入口，引用封闭性核实为死簇）。
 
 
 # ---------------- §4.7C: WorkflowAbortException :729+:843 双路径排除证据 ---

@@ -25,6 +25,7 @@ CLOUD_LLMAGENT_TEMPLATE = {
     "workflows": [],
     "mcp_servers": [],
     "knowledge_repos": [],
+    "skills": [],
     "knowledge_retrieve_policy": {
         "search_mode": "doc",
         "top_k": 3,

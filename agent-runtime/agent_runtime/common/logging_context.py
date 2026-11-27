@@ -88,9 +88,8 @@ def find_secret_env_field_names(config, secret_keys):
                 walk(item, current_field)
         elif isinstance(obj, str):
             m = _ENV_REF_PATTERN.search(obj)
-            if m and m.group(1) in secret_keys_set:
-                if current_field:
-                    secret_fields[current_field] = m.group(1)
+            if m and m.group(1) in secret_keys_set and current_field:
+                secret_fields[current_field] = m.group(1)
 
     walk(config)
     return secret_fields

@@ -5,13 +5,42 @@ import string
 PRESET = "preset"
 
 
+def _process_skill_data(raw_data):
+    """
+    处理技能数据
+    :param raw_data: 原始技能数据（直接是技能列表）
+    :return: 处理后的技能列表
+    """
+    if not raw_data:
+        return []
+
+    processed_skills = []
+    for skill in raw_data:
+        skill_id = skill.get("skill_id", "")
+        last_version_id = skill.get("last_version_id", "")
+        if not skill_id or not last_version_id:
+            # 无标识或无已发布版本的技能不可执行，跳过
+            continue
+        processed_skills.append(
+            {
+                "resource_id": skill_id,
+                "name": skill.get("skill_name", ""),
+                "description": skill.get("description", ""),
+                "icon": skill.get("icon", ""),
+                "version": last_version_id,
+            }
+        )
+
+    return processed_skills
+
+
 class ResourceRetriever:
     def __init__(self, resources, agent_type: str = None):
         """
         初始化资源检索器
 
         Args:
-            resources (dict): 包含plugins、knowledge_base、workflows的字典
+            resources (dict): 包含plugins、knowledge_base、workflows、skills的字典
             agent_type (str): agent类型，如 "agents" 或 "workflows"
         """
         self.resource = resources or {}
@@ -21,14 +50,17 @@ class ResourceRetriever:
         raw_plugin_data = self.resource.get("plugins") or {}
         raw_knowledge_data = self.resource.get("knowledge_base") or {}
         raw_workflow_data = self.resource.get("workflows") or {}
+        raw_skill_data = self.resource.get("skills") or {}
 
         plugin_list = raw_plugin_data.get("plugin_list", [])
         knowledge_list = raw_knowledge_data.get("items", [])  # 知识库数据在 items 键中
         workflow_list = raw_workflow_data.get("workflow_version_list", [])
+        skill_list = raw_skill_data.get("skill_list", [])
 
         self.plugin_data = self._process_plugin_data(plugin_list)
         self.knowledge_data = self._process_knowledge_data(knowledge_list)
         self.workflow_data = self._process_workflow_data(workflow_list)
+        self.skill_data = _process_skill_data(skill_list)
 
     def _process_plugin_data(self, raw_data):
         """
@@ -266,6 +298,21 @@ class ResourceRetriever:
                     resource_list.append(item)
         elif resource_type == "workflow":
             processed_data = self.workflow_data
+            for item in processed_data:
+                # 构建搜索文本（名称 + 描述）
+                search_text = f"{item['name']} {item['description']}"
+
+                # 计算相似度分数
+                similarity_score = self.calculate_similarity_score(
+                    search_text, query_keyword
+                )
+
+                # 只考虑分数不低于最低阈值的候选结果
+                if similarity_score >= min_score:
+                    # 构建返回结果
+                    resource_list.append(item)
+        elif resource_type == "skill":
+            processed_data = self.skill_data
             for item in processed_data:
                 # 构建搜索文本（名称 + 描述）
                 search_text = f"{item['name']} {item['description']}"

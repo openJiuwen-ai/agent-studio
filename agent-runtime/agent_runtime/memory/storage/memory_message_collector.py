@@ -32,8 +32,6 @@ class UserProfileMemoryMessageCollector(StreamingCollector):
 
     async def done(self) -> None:
         filter_messages = self.messages()
-        if not filter_messages:
-            pass
 
         messages_to_extract_memory = [UserMessage(content=self.user_query)]
         for msg in filter_messages:

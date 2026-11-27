@@ -63,6 +63,13 @@ class MessageComponentBase(ABC):
         ).ainvoke(variables)
 
     @staticmethod
+    def _split_answer_and_think(answer: str) -> tuple[str, str]:
+        final_tmp = answer.split(SPLIT_DELIMITER)
+        parsed_answer = final_tmp[0]
+        think = final_tmp[1] if len(final_tmp) > 1 else ""
+        return parsed_answer, think
+
+    @staticmethod
     def _get_message_end_generator(
         answer: str,
         struct_answer: str,
@@ -73,9 +80,7 @@ class MessageComponentBase(ABC):
         enable_history: bool = True,
     ):
         """Construct a generator that yields only MESSAGE_END to indicate node execution completion."""
-        final_tmp = answer.split(SPLIT_DELIMITER)
-        answer = final_tmp[0]
-        think = final_tmp[1] if len(final_tmp) > 1 else ""
+        answer, think = MessageComponentBase._split_answer_and_think(answer)
         data = get_data_of_streaming_with_metadata(
             answer=answer,
             metadata=metadata,
@@ -93,7 +98,6 @@ class MessageComponentBase(ABC):
             execution_id=execution_id,
             is_struct_message=bool(struct_answer),
         )
-        return answer
 
     async def format_message_output(
         self,
@@ -144,7 +148,8 @@ class MessageComponentBase(ABC):
         )
 
         def workflow_end_generator():
-            answer = yield from self._get_message_end_generator(
+            parsed_answer, _ = self._split_answer_and_think(origin_output)
+            yield from self._get_message_end_generator(
                 answer=origin_output,
                 struct_answer=struct_answer,
                 metadata=metadata,
@@ -153,11 +158,11 @@ class MessageComponentBase(ABC):
                 output_mode=output_mode,
             )
             data = get_data_of_streaming_with_metadata(
-                answer=answer, metadata=metadata, output_mode=output_mode
+                answer=parsed_answer, metadata=metadata, output_mode=output_mode
             )
             yield StreamData(
                 code=StreamCode.WORKFLOW_END.value,
-                msg=StreamDataMsg.FINISH.value if answer else "",
+                msg=StreamDataMsg.FINISH.value if parsed_answer else "",
                 data=data,
                 execution_id=stream_data.execution_id,
             )

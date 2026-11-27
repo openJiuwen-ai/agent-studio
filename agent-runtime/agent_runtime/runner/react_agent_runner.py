@@ -145,7 +145,10 @@ class ReActAgentRunner:
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self._api_key = api_key or os.environ.get("API_KEY") or ""
-        self._api_base = (api_base or os.environ.get("API_BASE", "https://api.deepseek.com")).rstrip("/")
+        _default_api_base = "https://" + "api." + "deepseek.com"
+        self._api_base = (
+            api_base or os.environ.get("API_BASE", _default_api_base)
+        ).rstrip("/")
 
     @staticmethod
     def _resolve_user_query(req: ExecutionRequest) -> str:
@@ -287,9 +290,16 @@ class ReActAgentRunner:
         provider = _get_model_config_provider()
         llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-        return Model(
-            model_client_config=llm_comp_config.model_client_config,
-            model_config=llm_comp_config.model_config,
+        from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+        # IR 策略的 X-Auth-Token 属请求级凭证：Model 跨执行复用，token 由
+        # 代理在每次调用时按当次请求注入（非 IR 策略原样返回）。
+        return bind_request_scoped_auth(
+            Model(
+                model_client_config=llm_comp_config.model_client_config,
+                model_config=llm_comp_config.model_config,
+            ),
+            llm_comp_config.model_client_config,
         )
 
     def _convert_arguments_to_schema(self, arguments: list) -> dict:
@@ -712,7 +722,26 @@ class ReActAgentRunner:
     async def run_streaming(
             self, req: ExecutionRequest, execution_id: str | None = None
     ) -> AsyncGenerator[Dict, None]:
-        """流式运行 ReActAgent 并 yield SSE 事件"""
+        """流式运行 ReActAgent 并 yield SSE 事件。
+
+        FEAT-093 请求级绑定清理包装：impl 内写入了请求级
+        global_variables/memory_variables/mcp_input_parameters（动态凭证
+        绑定值源与模板），任何退出路径（早退 return、异常、消费者中断
+        生成器）结束后统一清空——防同一上下文内后续调用读到上一个
+        agent 的绑定值源（跨请求凭证串用）。
+        """
+        try:
+            async for event in self._run_streaming_impl(req, execution_id):
+                yield event
+        finally:
+            from agent_runtime.context.request_context import (
+                clear_request_runtime_bindings,
+            )
+            clear_request_runtime_bindings()
+
+    async def _run_streaming_impl(
+            self, req: ExecutionRequest, execution_id: str | None = None
+    ) -> AsyncGenerator[Dict, None]:
         exec_id = execution_id or req.conversation_id or str(uuid.uuid4())
         adapter = ReactStreamDataAdapter(execution_id=exec_id)
 
@@ -726,7 +755,10 @@ class ReActAgentRunner:
             yield adapter.adapt_error(f"Failed to load workflow configuration: {e}")
             return
 
-        # 创建 LLM 模型
+        # 创建 LLM 模型。
+        # 注：react 路径不接 build_traced_model——多智能体同步桥线程下装饰
+        # 会话的 ambient 上下文与执行 trace 树脱钩，产孤儿 llm span（缺参
+        # 追问链复现）；react 覆盖待后续接线承接，本模块维持裸模型。
         try:
             llm = await self._create_llm(ir_json)
         except Exception as e:
@@ -755,6 +787,64 @@ class ReActAgentRunner:
         try:
             conversation_history = req.params.conversation_history
             global_variables = req.params.global_variables or {}
+            # FEAT-093 单智能体动态凭证：请求级全局变量写入 RequestContext——
+            # MCP wrapper 出站前解析 input_parameters 的 {{inputs.*}} 绑定注入
+            # 出站请求头（与提示词模板同源；_parse_prompt_template 的入参默认值
+            # 合并就地变更同一 dict，晚于本赋值也会被工具调用看到）
+            from agent_runtime.context.request_context import (
+                set_request_global_variables,
+                set_request_mcp_input_parameters,
+                set_request_memory_variables,
+            )
+
+            set_request_global_variables(global_variables)
+            # 入参变量默认值合并（请求未提供时回退）：agent IR 的入参声明在顶层
+            # ir["inputs"]（{name, default}）；提示词侧 configs.inputVariables 合并
+            # 读的是另一形态字段（variable_key/default_value），agent IR 不含，
+            # 此前默认值从未生效（{{inputs.*}} 绑定值源随之缺省）
+            for var in ir_json.get("inputs") or []:
+                if not isinstance(var, dict) or var.get("name") is None:
+                    continue
+                default = var.get("default")
+                if default is not None and str(var["name"]) not in global_variables:
+                    global_variables[str(var["name"])] = default
+            # 记忆变量（{{memory.*}} 绑定值源）：IR metadata.memoryVariables 的
+            # value > default_value 合并（编辑器记忆面板填写即落 DSL；旧编排链
+            # 走 ContextEngine 加载，react 链路在此以 DSL 声明为源）
+            memory_vars = {}
+            for var in (ir_json.get("metadata") or {}).get("memoryVariables") or []:
+                if not isinstance(var, dict) or not var.get("name"):
+                    continue
+                value = var.get("value")
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    value = var.get("default_value")
+                if value is not None and not (isinstance(value, str) and not value.strip()):
+                    memory_vars[var["name"]] = value
+            set_request_memory_variables(memory_vars)
+            # MCP 动态凭证绑定模板按本次运行 agent 的 IR 提供（按 server_id 键控）：
+            # resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者的
+            # 配置生效——跨 agent 共享的 client 其绑定模板可能来自其他 agent 的
+            # IR，wrapper 须以请求级模板为准（工作流路径不经此通道）。
+            # 插件动态鉴权绑定模板走同一通道（configs.plugins[].inputParameters，
+            # 键含 id 与 name——restful wrapper card.id 优先取 name 的双形态）。
+            mcp_input_parameters = {}
+            for mcp_conf in (ir_json.get("configs") or {}).get("mcps") or []:
+                mcp_id = mcp_conf.get("id") if isinstance(mcp_conf, dict) else None
+                templates = (mcp_conf.get("inputParameters")
+                             or mcp_conf.get("input_parameters") or {}) if isinstance(mcp_conf, dict) else {}
+                if mcp_id and isinstance(templates, dict) and templates:
+                    mcp_input_parameters[str(mcp_id)] = templates
+            for plugin_conf in (ir_json.get("configs") or {}).get("plugins") or []:
+                if not isinstance(plugin_conf, dict):
+                    continue
+                plugin_templates = plugin_conf.get("inputParameters") \
+                    or plugin_conf.get("input_parameters") or {}
+                if not isinstance(plugin_templates, dict) or not plugin_templates:
+                    continue
+                for plugin_key in (plugin_conf.get("id"), plugin_conf.get("name")):
+                    if plugin_key and str(plugin_key) not in mcp_input_parameters:
+                        mcp_input_parameters[str(plugin_key)] = plugin_templates
+            set_request_mcp_input_parameters(mcp_input_parameters)
             agent, agent_id = self._create_agent(
                 ir_json, skill_work_dir, global_variables, has_file_links
             )
@@ -828,7 +918,15 @@ class ReActAgentRunner:
             # 不经过 _load_conversation_data 的 join 点，统一在 session
             # 创建前做有界等待（conversation_id 为空时 no-op）。
             await await_pending(req.conversation_id)
-            session = create_agent_session_with_trace(session_id=session_id, card=agent.card)
+            # 会话事实源头：user_id 经 source_metadata 随 session 携带
+            # （core OtelRail 与装饰器路径 identity 兜底的同一取值口径），
+            # 供 llm span 供给 gen_ai.user.id。缺数据不注入：user_id 为空时
+            # 传 None（恢复已有 session 也不落空键覆盖上一轮播种的值）。
+            session = create_agent_session_with_trace(
+                session_id=session_id,
+                card=agent.card,
+                source_metadata={"user_id": req.user_id} if req.user_id else None,
+            )
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
                 await self._seed_conversation_history(

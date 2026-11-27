@@ -202,6 +202,16 @@ export class ComponentCardComponent implements OnInit {
       }
     }
     if (this.isMcp) {
+      // FEAT-134：卡片级"重载工具"操作（仅可重载状态：success/stackFail/pendingTools/deletionFail）
+      const reloadableStatuses = ['success', 'stackFail', 'pendingTools', 'deletionFail'];
+      if (reloadableStatuses.includes(this.data.fc_instance_status)) {
+        this.cardActions.unshift({
+          id: 'reloadTools',
+          label: this.i18n.transform('mcp_reload_tools'),
+          disabled: !this.subscribeBtnStatus || this.mcpReloading,
+          tip: this.i18n.transform('mcp_reload_tools_tip'),
+        });
+      }
       this.addCardActionWithMcpFail();
       this.setMcpDeployFail(this.data.fail_reason_detail || {});
       this.setStatus();
@@ -211,6 +221,7 @@ export class ComponentCardComponent implements OnInit {
 
   ngOnDestroy(): void {
     this.resizeSub.unsubscribe();
+    this.stopMcpReloadPolling();
   }
 
   public getMcpTagName(resource) {
@@ -291,6 +302,9 @@ export class ComponentCardComponent implements OnInit {
       case 'redeploy':
         this.redeployMcp();
         break;
+      case 'reloadTools':
+        this.reloadMcpTools();
+        break;
       case 'remodel':
         this.remodel(data);
         break;
@@ -321,6 +335,95 @@ export class ComponentCardComponent implements OnInit {
       })
       .catch(() => {})
       .finally(() => {});
+  }
+
+  // ==================== FEAT-134: 重载 MCP 工具快照 ====================
+
+  /** 重载中标记（loading 期间禁用按钮） */
+  public mcpReloading = false;
+  /** 重载操作 ID（轮询用） */
+  private mcpReloadOperationId: string | null = null;
+  /** 重载轮询计时器 */
+  private mcpReloadTimer: any = null;
+
+  /**
+   * FEAT-134：卡片级"重载工具"操作——原地刷新工具快照与状态。
+   * 不修改配置、不卸载、不影响挂载引用；失败保留原状。
+   */
+  public reloadMcpTools() {
+    if (this.mcpReloading || this.mcpReloadOperationId) {
+      return;
+    }
+    this.mcpReloading = true;
+    this.api
+      .reloadMcpService(this.data.id)
+      .then(accepted => {
+        if (!accepted || !accepted.operation_id) {
+          MessageComponent.showError(this.i18n.transform('mcp_reload_failed'));
+          this.mcpReloading = false;
+          return;
+        }
+        this.mcpReloadOperationId = accepted.operation_id;
+        this.pollMcpReloadResult(accepted.operation_id);
+      })
+      .catch(err => {
+        // 409 = 已有活动操作
+        const errorCode = err?.error?.error_code || '';
+        if (errorCode.includes('1187') || errorCode.includes('1189')) {
+          MessageComponent.showWarn(this.i18n.transform('mcp_reload_in_progress'));
+        } else {
+          MessageComponent.showError(this.i18n.transform('mcp_reload_failed'));
+        }
+        this.mcpReloading = false;
+      });
+  }
+
+  /** 轮询重载操作结果（终态 → 展示增删 + 重新发布提示 + 刷新列表） */
+  private pollMcpReloadResult(operationId: string, maxAttempts = 150) {
+    let attempts = 0;
+    this.mcpReloadTimer = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        this.stopMcpReloadPolling();
+        return;
+      }
+      try {
+        const result = await this.mcpService.getMcpOperation(operationId);
+        if (result && result.status && result.status !== 'RUNNING') {
+          this.stopMcpReloadPolling();
+          const item = result.items?.[0];
+          if (result.status === 'SUCCESS' && item) {
+            // 成功：展示工具总数与增删 + 重新发布提示
+            const added = item.added_count || 0;
+            const removed = item.removed_count || 0;
+            const total = item.tool_count || 0;
+            let msg = this.i18n.transform('mcp_reload_success', { total, added, removed });
+            if (item.requires_republish) {
+              msg += '\n' + this.i18n.transform('mcp_reload_republish_hint');
+            }
+            MessageComponent.showSuccess(msg, 8000);
+          } else {
+            // 失败/部分成功：展示原因 + 原状保留提示
+            const reason = item?.reason || result.safe_reason || '';
+            MessageComponent.showWarn(
+              this.i18n.transform('mcp_reload_failed_preserved', { reason }), 8000,
+            );
+          }
+          this.refreshMcpListEmit.emit(true);
+        }
+      } catch {
+        // 轮询异常不中断
+      }
+    }, 2000);
+  }
+
+  private stopMcpReloadPolling() {
+    if (this.mcpReloadTimer) {
+      clearInterval(this.mcpReloadTimer);
+      this.mcpReloadTimer = null;
+    }
+    this.mcpReloadOperationId = null;
+    this.mcpReloading = false;
   }
 
   // 点击弹框的编辑mcp

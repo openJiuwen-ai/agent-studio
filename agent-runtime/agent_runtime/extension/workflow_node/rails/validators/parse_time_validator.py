@@ -230,9 +230,8 @@ class TimeParseAction(FormatAction):
                     minute = int(groups[4]) if len(groups) > 4 else 0
 
                     # 处理下午
-                    if "下午" in time_str or "晚上" in time_str:
-                        if hour < 12:
-                            hour += 12
+                    if ("下午" in time_str or "晚上" in time_str) and hour < 12:
+                        hour += 12
 
                     try:
                         dt = datetime(year, month, day, hour, minute)
@@ -298,9 +297,8 @@ class TimeParseAction(FormatAction):
                 if time_match:
                     hour = int(time_match.group(1))
                     minute = int(time_match.group(2) or 0)
-                    if "下午" in time_str or "晚上" in time_str:
-                        if hour < 12:
-                            hour += 12
+                    if ("下午" in time_str or "晚上" in time_str) and hour < 12:
+                        hour += 12
                     dt = dt.replace(hour=hour, minute=minute)
                 return dt.strftime(target_format)
 

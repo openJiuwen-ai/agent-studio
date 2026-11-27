@@ -300,7 +300,6 @@ export class LeftMenuComponent implements OnInit, OnChanges {
   }
 
   async onSpaceSelect(option: any) {
-    console.log(this.space_value);
     this.isRotate = false;
     this.space_value = option.id;
     this.space_name = option.name;

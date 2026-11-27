@@ -31,6 +31,7 @@ import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
 import com.openjiuwen.studio.agent.manager.dto.PluginListRsp;
+import com.openjiuwen.studio.agent.manager.dto.PluginShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.VersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.plugin.BasicInfo;
@@ -50,6 +51,8 @@ import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.AgentCommonService;
+import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
+import com.openjiuwen.studio.agent.manager.service.AssetCategoryValidator;
 import com.openjiuwen.studio.agent.manager.service.ToolManagementService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginAdapterImpl;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
@@ -59,6 +62,7 @@ import com.openjiuwen.studio.common.service.service.EncryptionAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -116,11 +120,18 @@ class PluginServiceTest {
     @Mock
     private ShareInnerService shareInnerService;
 
+    @Mock
+    private AssetShelfPermissionValidator shelfPermissionValidator;
+
+    @Mock
+    private AssetCategoryValidator assetCategoryValidator;
+
     @InjectMocks
     private PluginService pluginService;
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(pluginService, "assetCategoryValidator", assetCategoryValidator);
         ReflectionTestUtils.setField(pluginService, "opSvcProjectId", "op-project-id");
         ReflectionTestUtils.setField(pluginService, "toolNameBlackList", "blacklisted");
         ReflectionTestUtils.setField(pluginService, "defaultIcon", "default-icon");
@@ -401,6 +412,21 @@ class PluginServiceTest {
     }
 
     @Test
+    void testValidPlugins_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间引用应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("other-ws");
+        pluginEntity.setPlatformPublished(1);
+
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        Set<String> ids = new HashSet<>();
+        ids.add("p-1");
+        assertDoesNotThrow(() -> pluginService.validPlugins(ids, "proj-1", "ws-1"));
+    }
+
+    @Test
     void testAnonymizeAuthInfo_NullAuthInfo() {
         AuthInfo result = pluginService.anonymizeAuthInfo(null);
         assertNull(result);
@@ -530,6 +556,243 @@ class PluginServiceTest {
         AgentStudioException ex = assertThrows(AgentStudioException.class,
             () -> pluginService.createTool("proj-1", "ws-1", req));
         assertEquals(StudioError.TOOL_NOT_EXIST, ex.getErrorCode());
+    }
+
+    @Test
+    void testCreateTool_RejectsMissingParamDescription() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_desc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[description]"));
+        verify(toolManagementService).checkToolInfo(eq("bad_desc_tool"), anyString(), anyString(), isNull(),
+            eq("blocking"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsInvalidLocation() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_loc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Invalid\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[location]"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsNestedArray() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_matrix_tool",
+            "{\"type\":\"object\",\"properties\":{\"matrix\":{\"type\":\"array\",\"description\":\"二维\",\"location\":\"Body\",\"items\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}},\"required\":[\"matrix\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The parameter [matrix] cannot be nested array.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsEmptyOutputProperties() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_out_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            "{\"type\":\"object\",\"properties\":{}}");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testModifyTool_RejectsMissingParamDescription() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_desc_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertTrue(ex.getDetails().get(0).contains("[city]"));
+        assertTrue(ex.getDetails().get(0).contains("[description]"));
+        verify(toolManagementService).checkToolInfo(eq("bad_desc_tool"), anyString(), anyString(), isNull(),
+            eq("blocking"));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testModifyTool_RejectsEmptyOutputProperties() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "bad_out_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            "{\"type\":\"object\",\"properties\":{}}");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.modifyTool("proj-1", "ws-1", "tool-1", req));
+        assertEquals(StudioError.TOOL_OUTPUT_SCHEMA_INVALID, ex.getErrorCode());
+        assertEquals("The schema root field [properties] cannot be empty.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreateTool_RejectsNullRequestInfo() {
+        stubPluginReadyForCreateTool();
+        stubCheckToolInfoWithRealValidation();
+
+        CreatePluginToolReq req = baseCreatePluginToolReq(
+            "no_ri_tool",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市\",\"location\":\"Body\"}},\"required\":[\"city\"]}",
+            VALID_OUTPUT_SCHEMA);
+        req.setRequestInfo(null);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.createTool("proj-1", "ws-1", req));
+        assertEquals(StudioError.TOOL_INPUT_INVALID, ex.getErrorCode());
+        assertEquals("request_info is required.", ex.getDetails().get(0));
+        verify(pluginMapper, never()).updateByPrimaryKeySelective(any());
+    }
+
+    @Test
+    void testCreatePlugin_DefaultsVisibilityToProjectWhenMissing() {
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("uid-1");
+            ctx.when(RequestContextUtils::getRequestUserName).thenReturn("user1");
+
+            when(pluginMapper.selectByDisplayNameAndWorkspaceId(anyString(), anyString())).thenReturn(0);
+            when(pluginBase.transformDTOtoNewEntity(any(PluginDTO.class))).thenAnswer(invocation -> {
+                PluginDTO dto = invocation.getArgument(0);
+                PluginEntity entity = new PluginEntity();
+                entity.setPluginId(dto.getPluginId());
+                entity.setVisibility(dto.getVisibility());
+                return entity;
+            });
+
+            CreatePluginToolReq req = new CreatePluginToolReq();
+            req.setToolDisplayName("NoVisPlugin");
+            req.setToolChineseName("无可见性插件");
+            req.setToolDesc("visibility 不传应默认 project");
+            RequestInfo ri = new RequestInfo();
+            ri.setUrl("https://example.com/api");
+            ri.setMethod(RequestInfo.MethodEnum.GET);
+            req.setRequestInfo(ri);
+            // visibility 不传
+
+            CreatePluginToolRsp rsp = pluginService.createPlugin("proj-1", "ws-1", req);
+
+            assertNotNull(rsp.getToolId());
+            ArgumentCaptor<PluginEntity> captor = ArgumentCaptor.forClass(PluginEntity.class);
+            verify(pluginMapper).insert(captor.capture());
+            assertEquals("project", captor.getValue().getVisibility());
+        }
+    }
+
+    private static final String VALID_OUTPUT_SCHEMA =
+        "{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\",\"description\":\"ok\"}}}";
+
+    /** 插件存在 + 可 transform；schema 负向用例在 checkToolInfo 就会失败，不会写库。 */
+    private void stubPluginReadyForCreateTool() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        ToolRequestInfo requestInfo = new ToolRequestInfo();
+        requestInfo.setToolsInfoList(new ArrayList<>());
+        BasicInfo basicInfo = BasicInfo.builder().host("example.com").protocol("https").path("/api").build();
+        requestInfo.setBasicInfo(basicInfo);
+        pluginDTO.setToolRequestInfo(requestInfo);
+        pluginDTO.setToolInputSchemaList(new ArrayList<>());
+        pluginDTO.setToolOutputSchemaList(new ArrayList<>());
+        pluginDTO.setToolIntfTypeList(new ArrayList<>());
+        pluginDTO.setToolTestStatusList(new ArrayList<>());
+        pluginDTO.setIsInputList(new ArrayList<>());
+        pluginDTO.setIsOutputList(new ArrayList<>());
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+    }
+
+    /** 委托真实 checkToolInfo / requireHttpRequestInfo，避免只测 mock 透传。 */
+    private void stubCheckToolInfoWithRealValidation() {
+        ToolManagementService real = new ToolManagementService(
+            mock(ToolMapper.class),
+            mock(MappingMapper.class),
+            mock(UrlCheckUtils.class),
+            mock(MgObsService.class),
+            mock(ReleaseVersionMapper.class),
+            mock(AgentCommonService.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper.class),
+            mock(MessageSource.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.AgentMapper.class),
+            mock(com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper.class),
+            mock(I18nUtil.class),
+            mock(PluginMapper.class),
+            mock(com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService.class));
+        ReflectionTestUtils.setField(real, "maxPropNum", 50);
+        ReflectionTestUtils.setField(real, "maxPropDepth", 5);
+        ReflectionTestUtils.setField(real, "toolNameBlackList", "");
+        doAnswer(invocation -> {
+            real.checkToolInfo(
+                invocation.getArgument(0),
+                invocation.getArgument(1),
+                invocation.getArgument(2),
+                invocation.getArgument(3),
+                invocation.getArgument(4));
+            return null;
+        }).when(toolManagementService).checkToolInfo(any(), any(), any(), any(), any());
+        // schema 负向用例在 checkToolInfo 就失败，未必走到 requireHttpRequestInfo
+        lenient().doAnswer(invocation -> {
+            real.requireHttpRequestInfo(invocation.getArgument(0));
+            return null;
+        }).when(toolManagementService).requireHttpRequestInfo(any());
+    }
+
+    private CreatePluginToolReq baseCreatePluginToolReq(String displayName, String inputSchema, String outputSchema) {
+        CreatePluginToolReq req = new CreatePluginToolReq();
+        req.setPluginId("p-1");
+        req.setToolDisplayName(displayName);
+        req.setToolChineseName("坏工具");
+        req.setToolDesc("schema 负向");
+        req.setIntfType("blocking");
+        RequestInfo ri = new RequestInfo();
+        ri.setUrl("https://example.com/api/x");
+        ri.setMethod(RequestInfo.MethodEnum.POST);
+        req.setRequestInfo(ri);
+        req.setInputSchema(inputSchema);
+        req.setOutputSchema(outputSchema);
+        return req;
     }
 
     @Test
@@ -767,6 +1030,36 @@ class PluginServiceTest {
     }
 
     @Test
+    void testRetrievePlugin_CustomPublishedToPlazaVisible() {
+        // 已上架到资产广场（platform_published=1 and published=1）的自定义插件，跨工作空间应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("other-ws");
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setPublished(1);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setToolRequestInfo(ToolRequestInfo.builder()
+            .basicInfo(BasicInfo.builder().host("host").protocol("https").build())
+            .toolsInfoList(new ArrayList<>(List.of(
+                ToolInfo.builder().toolId("t-1").build())))
+            .build());
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspaceAndCredential("p-1", null, "ws-1")).thenReturn(pluginEntity);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("workflow"), isNull()))
+            .thenReturn(Collections.emptyList());
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("agent"), isNull()))
+            .thenReturn(Collections.emptyList());
+
+        BaseResp resp = pluginService.retrievePlugin("proj-1", "p-1", "ws-1");
+
+        assertEquals(200, resp.getCode());
+    }
+
+    @Test
     void testRetrievePlugin_ToolDependencyDedupByApp() {
         // 工具引用数口径：与引用插件列表(listResourceRelations)完全一致，仅按工具粒度分组。
         // SQL 前缀匹配捞取 pluginId 与 pluginId#* 全部行（含双后缀脏数据）；
@@ -958,5 +1251,202 @@ class PluginServiceTest {
         assertEquals(3, response.getCount());
         assertEquals(List.of("new-plugin", "existing-plugin"), response.getSucceedIds());
         assertEquals(List.of("failed-plugin"), response.getFailedIds());
+    }
+
+    @Test
+    void testPublishPlugin_NotPublished_Rejected() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(0);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.publishPlugin("proj-1", "ws-1", "p-1", new PluginShelfReq()));
+        assertEquals(StudioError.ASSET_NOT_PUBLISHABLE, ex.getErrorCode());
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testPublishPlugin_Success_AnchorLatestWithCategory() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+        ReleaseVersion releaseVersion = new ReleaseVersion();
+        releaseVersion.setVersionId("v2");
+        when(releaseVersionMapper.selectByAppIdWithLimit("p-1", 1)).thenReturn(List.of(releaseVersion));
+        PluginShelfReq body = new PluginShelfReq();
+        body.setCategory("cat-1");
+
+        String anchorVersion = pluginService.publishPlugin("proj-1", "ws-1", "p-1", body);
+
+        assertEquals("v2", anchorVersion);
+        verify(pluginMapper).updateCategoryById("p-1", "proj-1", "cat-1");
+        verify(pluginMapper).updatePlazaShelf("p-1", 1, "v2");
+    }
+
+    @Test
+    void testPublishPlugin_InnerPreset_Rejected() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.INNER.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace("p-1", "proj-1", "ws-1")).thenReturn(pluginEntity);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.publishPlugin("proj-1", "ws-1", "p-1", new PluginShelfReq()));
+        assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testUnpublishPlugin_NotPublished_Idempotent() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        String pluginId = pluginService.unpublishPlugin("proj-1", "ws-1", "p-1");
+
+        assertEquals("p-1", pluginId);
+        verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void testUnpublishPlugin_NotOwner_Forbidden() {
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setPublished(1);
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setCreatorId("other-user");
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(pluginEntity);
+
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestUserId).thenReturn("request-user");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> pluginService.unpublishPlugin("proj-1", "ws-1", "p-1"));
+            assertEquals(StudioError.USER_NO_PERMISSION_DO_THIS, ex.getErrorCode());
+            verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+        }
+    }
+
+    @Test
+    void testGetPluginVersion_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件跨工作空间查看版本应放行（FRS-091）
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-other");
+        pluginEntity.setPlatformPublished(1);
+        pluginEntity.setRequestInfo("{\"basic_info\":{},\"tool_info\":[{\"tool_id\":\"t1\"}]}");
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(pluginEntity);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        BaseResp resp = pluginService.getPluginVersion("proj-1", "v1", "p-1", qo);
+
+        assertEquals(200, resp.getCode());
+        verify(shareScopeMapper, never()).selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString());
+    }
+
+    @Test
+    void testGetPluginVersion_NotPlazaPublished_CrossWorkspaceRejected() {
+        // 未上架尚未共享的自定义插件跨工作空间查看版本应拒绝
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-other");
+        pluginEntity.setPlatformPublished(0);
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(pluginEntity);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(pluginEntity);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginService.getPluginVersion("proj-1", "v1", "p-1", qo));
+        assertEquals(StudioError.PLUGIN_PRIVILEGE_ERROR, ex.getErrorCode());
+    }
+
+    @Test
+    void testGetPluginVersion_SnapshotNoFlag_DbPlazaPublished_CrossWorkspaceAllowed() {
+        // 版本快照无上架标记时回查数据库，数据库已上架 → 放行（FRS-091）
+        PluginEntity snapshot = new PluginEntity();
+        snapshot.setPluginId("p-1");
+        snapshot.setType(ToolType.CUSTOM.type);
+        snapshot.setWorkspaceId("ws-other");
+        snapshot.setPlatformPublished(null);
+
+        PluginEntity dbPlugin = new PluginEntity();
+        dbPlugin.setPluginId("p-1");
+        dbPlugin.setWorkspaceId("ws-other");
+        dbPlugin.setPlatformPublished(1);
+
+        when(pluginBase.getPluginEntityByVersion("p-1", "v1")).thenReturn(snapshot);
+        when(pluginMapper.selectInfo("p-1")).thenReturn(snapshot);
+        when(pluginMapper.selectByPrimaryKey("p-1", null)).thenReturn(dbPlugin);
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setType(ToolType.CUSTOM.type);
+        when(pluginBase.transformEntityToDTO(snapshot)).thenReturn(pluginDTO);
+
+        GetPluginVersionQo qo = new GetPluginVersionQo();
+        qo.setWorkspaceId("ws-1");
+
+        BaseResp resp = pluginService.getPluginVersion("proj-1", "v1", "p-1", qo);
+
+        assertEquals(200, resp.getCode());
+        verify(shareScopeMapper, never()).selectShareScopesByResourceIdAndWorkspaceId(anyString(), anyString());
+    }
+
+    /**
+     * #1731：publishPlugin 校验 category 存在性——不存在于 t_pe_industry(library_type='plugin')时
+     * 抛 INDUSTRY_ID_NOT_EXIST，fail-closed 不写 category 不写 platform_published，无半成品。
+     * 覆盖 consistency-check 同类入口点：plugin 上架链路也接入了 AssetCategoryValidator。
+     */
+    @Test
+    void testPublishPlugin_NonExistCategory_Rejected() {
+        String pluginId = "p-shelf-001";
+        String projectId = "proj-1";
+        String workspaceId = "ws-1";
+        String nonExistCategory = "bbbb2222-3333-4444-5555-666677778888";
+        try (MockedStatic<RequestContextUtils> mockedReq = mockStatic(RequestContextUtils.class)) {
+            mockedReq.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            PluginEntity plugin = new PluginEntity();
+            plugin.setPluginId(pluginId);
+            plugin.setType(ToolType.CUSTOM.type);
+            plugin.setPublished(1); // 已发布，过上架门槛
+            plugin.setCategory("a1020001-0000-4000-8000-000000000001"); // 既有合法分类
+            when(pluginMapper.selectByPrimaryKeyAndWorkspace(pluginId, projectId, workspaceId)).thenReturn(plugin);
+            ReleaseVersion latest = new ReleaseVersion();
+            latest.setVersionId("v-1");
+            when(releaseVersionMapper.selectByAppIdWithLimit(pluginId, 1)).thenReturn(List.of(latest));
+            // category 校验失败：抛 INDUSTRY_ID_NOT_EXIST
+            doThrow(new AgentStudioException(StudioError.INDUSTRY_ID_NOT_EXIST, nonExistCategory))
+                .when(assetCategoryValidator).validateCategoryExists(eq(nonExistCategory),
+                eq(AssetCategoryValidator.LIBRARY_TYPE_PLUGIN));
+            PluginShelfReq body = new PluginShelfReq().setCategory(nonExistCategory);
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+                pluginService.publishPlugin(projectId, workspaceId, pluginId, body));
+            assertEquals(StudioError.INDUSTRY_ID_NOT_EXIST, ex.getErrorCode());
+            verify(pluginMapper, never()).updateCategoryById(anyString(), anyString(), anyString());
+            verify(pluginMapper, never()).updatePlazaShelf(anyString(), anyInt(), anyString());
+        }
     }
 }

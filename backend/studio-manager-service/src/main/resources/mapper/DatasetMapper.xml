@@ -81,10 +81,10 @@
     </insert>
 
     <!-- 根据ID删除数据集信息 -->
-    <delete id="deleteDataset" parameterType="java.lang.String">
-        DELETE
-        FROM t_dataset
-        WHERE DATASET_ID = #{datasetId} AND WORKSPACE_ID = #{workspaceId}
+    <delete id="deleteDataset">
+       DELETE
+       FROM t_dataset
+       WHERE DATASET_ID = #{datasetId} AND WORKSPACE_ID = #{workspaceId}
     </delete>
 
     <select id="isIdExist" resultType="java.lang.Boolean">

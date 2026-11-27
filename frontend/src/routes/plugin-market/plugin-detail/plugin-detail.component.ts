@@ -23,6 +23,8 @@ import { coverPluginInfo } from '@routes/agent-center/app-plugin/utils';
 import { getPluginQuota } from '../../agent-center/utils';
 import { AddPluginAuthComponent } from '@routes/plugin-market/add-plugin/add-plugin-auth.component';
 import { CommonService } from '@services/common.service';
+import { MessageComponent } from '@shared/services/cfdata.service';
+import { PlazaVersionUpdateModalComponent } from './plaza-version-update-modal/plaza-version-update-modal.component';
 
 @Component({
   selector: 'meta-plugin-market-detail',
@@ -98,6 +100,10 @@ export class PluginMarketDetailComponent implements OnInit {
   public previewVersionName = '';
 
   public previewVersionId = '';
+
+  // 资产广场上架版本相关（FRS-091）
+  public plazaVersions: any[] = [];
+  public latestVersionId = '';
 
   public isPluginMarket = true;
 
@@ -189,6 +195,71 @@ export class PluginMarketDetailComponent implements OnInit {
     this.agentDataServe.setPreviewVersion(undefined);
   }
 
+  /**
+   * 详情页"更新上架"入口：弹出资产广场上架版本选择弹窗（FRS-091）
+   */
+  openPlazaVersionUpdateModal() {
+    this.nzModalService.create({
+      nzContent: PlazaVersionUpdateModalComponent,
+      nzWidth: 420,
+      nzTitle: this.i18n.transform('plaza_update_anchor'),
+      nzFooter: null,
+      nzData: {
+        versions: this.plazaVersions,
+        currentAnchorVersionId: this.plugin?.plaza_version_id || '',
+        latestVersionId: this.latestVersionId,
+        currentAnchorName: this.currentPlazaAnchorName,
+        onUpdate: (versionId: string) => {
+          this.updatePlazaAnchorToSelected(versionId);
+        },
+      },
+    });
+  }
+
+  /**
+   * 将选定发布版本设为资产广场上架锚定（重新上架，FRS-091）
+   */
+  updatePlazaAnchorToSelected(versionId: string) {
+    this.nzModalService.confirm({
+      nzTitle: this.i18n.transform('plaza_anchor_select_confirm'),
+      nzOkText: this.i18n.transform('ok'),
+      nzCancelText: this.i18n.transform('cancel'),
+      nzOnOk: () => {
+        return this.appPluginRepoServ
+          .publishPlugin(this.plugin.plugin_id, versionId)
+          .then(() => {
+            MessageComponent.showSuccess(this.i18n.transform('plaza_onshelf_success'));
+            this.getPluginDetails();
+            return null;
+          })
+          .catch(() => null);
+      },
+    });
+  }
+
+  /**
+   * 加载插件发布版本列表（供详情页"更新上架"选择锚定版本，FRS-091）
+   */
+  async loadPlazaVersions() {
+    if (this.plugin?.platform_published !== 1 || !this.toolId || !this.plugin?.is_owner) {
+      return;
+    }
+    try {
+      const res = await this.agentRepoServe.getPluginVersionList(this.toolId);
+      this.plazaVersions = res?.version_list || res?.versions || [];
+      this.latestVersionId = this.plazaVersions?.[0]?.version_id || '';
+      // 版本号展示直接读后端 retrievePlugin 返回的 plugin.plaza_version_name（属主/他人一致），
+      // 不再用本地版本列表匹配覆盖（避免非属主拿不到列表、跨空间 find 不到导致脏展示或 "--"）
+    } catch (e) {
+      // 忽略版本列表加载失败，仅影响详情页版本切换能力
+    }
+  }
+
+  get currentPlazaAnchorName(): string {
+    const hit = this.plazaVersions.find(v => v.version_id === this.plugin?.plaza_version_id);
+    return hit?.version_name || this.plugin?.plaza_version_id || '--';
+  }
+
   coverPluginInfo() {
     coverPluginInfo(this);
     this.displayedData = this.srcData.data;
@@ -218,6 +289,7 @@ export class PluginMarketDetailComponent implements OnInit {
           this.coverPluginInfo();
         }
       }
+      this.loadPlazaVersions();
     } finally {
       this.isLoading = false;
     }

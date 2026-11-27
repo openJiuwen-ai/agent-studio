@@ -31,7 +31,8 @@ from enum import Enum
 from typing import Any
 
 from agent_runtime.common.config import settings
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.common.session_state_access import get_state_info
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from jiuwen.orchestration.flow.constant import REQUEST_VARIABLES
@@ -334,15 +335,16 @@ class Start(WorkflowComponent):
                     if data_type == DataType.ARRAY.value:
                         # 数组的 schema 是元素类型定义(标量或 object 皆同),
                         # default_value 在本层。空默认(None/''/'[]' 及各空写法)
-                        # 统一归一为 None:渲染为空且不出现 '[]' 字面量,但 key
-                        # 保留在 values_define —— Redis 会话变量存取与
-                        # SetVariable 持久化都以 values_define 成员为门控,
-                        # key 缺失会导致跨轮丢值;引用解析层 None 与
-                        # key 缺失等价(未命中同返 None)
+                        # 统一归一为 []：key 仍保留在 values_define（Redis /
+                        # SetVariable 门控依赖成员资格）；容器用 [] 而非 None，
+                        # 避免下游对 memory.a[0].b 一类下标引用时对 None 做
+                        # `x in ...` 抛 TypeError。
                         converted = Start._transform_type(
                             data_type, default_val, var_id
                         )
-                        result[var_id] = None if converted == [] else converted
+                        result[var_id] = (
+                            [] if converted is None or converted == [] else converted
+                        )
                     elif data_type == DataType.OBJECT.value:
                         # 对象:整体 default_value 优先;空默认(None/''/'{}')
                         # 时从子字段默认值组装,组装仍空则 None(注册语义同上),
@@ -480,7 +482,7 @@ class Start(WorkflowComponent):
         try:
             if not (workflow_id and conversation_id and values_define):
                 return {}
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             store_key = f"{REDIS_GLOBAL_VALS_NAME}.{workflow_id}.{conversation_id}"
             memory_values = await redis_client.get(store_key)
             if memory_values:
@@ -523,7 +525,7 @@ class Start(WorkflowComponent):
         try:
             if not (workflow_id and conversation_id and values_define):
                 return None
-            redis_client = get_redis_client()
+            redis_client = accessor.get_redis()
             store_key = f"{REDIS_GLOBAL_VALS_NAME}.{workflow_id}.{conversation_id}"
             # 只存values_define中的变量和memory_vars中的值
             new_memory_vars = {
@@ -538,7 +540,7 @@ class Start(WorkflowComponent):
                 new_memory_vars = {**old_values, **new_memory_vars}
             await redis_client.set(
                 store_key, json.dumps(new_memory_vars, ensure_ascii=False),
-                ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
+                duration=Duration.seconds(_DEFAULT_CONVERSATION_VARIABLE_TTL),
             )
         except Exception as e:
             workflow_logger.error(

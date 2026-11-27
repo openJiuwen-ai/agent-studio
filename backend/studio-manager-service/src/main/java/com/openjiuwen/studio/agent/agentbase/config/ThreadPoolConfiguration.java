@@ -4,7 +4,7 @@
 
 package com.openjiuwen.studio.agent.agentbase.config;
 
-import com.openjiuwen.studio.agent.agentbase.model.obs.RequestContextTaskDecorator;
+import com.openjiuwen.studio.agent.manager.observability.MdcTaskDecorator;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,6 +35,7 @@ public class ThreadPoolConfiguration {
         executor.setKeepAliveSeconds(180);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
         executor.setThreadNamePrefix("knowledgeRepoCopyExecutor-");
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         executor.setDaemon(true);
         return executor;
@@ -48,6 +49,7 @@ public class ThreadPoolConfiguration {
         executor.setQueueCapacity(1000);
         executor.setThreadNamePrefix("licenseReportTaskExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }
@@ -60,7 +62,7 @@ public class ThreadPoolConfiguration {
         executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("obsTaskExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        executor.setTaskDecorator(new RequestContextTaskDecorator());
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }
@@ -73,7 +75,7 @@ public class ThreadPoolConfiguration {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("templateRepoMgmtExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        executor.setTaskDecorator(new RequestContextTaskDecorator());
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }
@@ -92,7 +94,7 @@ public class ThreadPoolConfiguration {
         executor.setKeepAliveSeconds(120);
         executor.setThreadNamePrefix("tenantDataCleanTaskExecutor-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-        executor.setTaskDecorator(new RequestContextTaskDecorator());
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }

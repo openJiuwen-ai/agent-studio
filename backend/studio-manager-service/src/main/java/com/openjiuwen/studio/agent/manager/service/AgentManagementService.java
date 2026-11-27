@@ -356,6 +356,9 @@ public class AgentManagementService implements IAgentManagementService {
     private AgentExportService agentExportService;
 
     @Autowired
+    private RuntimeAssetExporter runtimeAssetExporter;
+
+    @Autowired
     private ShareResourceMapper shareResourceMapper;
 
     /**
@@ -1822,7 +1825,7 @@ public class AgentManagementService implements IAgentManagementService {
         if (body.getSkills() != null) {
             // 0. 还原版本场景，根据传入的skills，构造List<AgentSkillDetail>
             List<String> skillIds = body.getSkills().stream().map(SkillReference::getSkillId).toList();
-            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds);
+            List<SkillDetails> skillDetails = skillMapper.searchBySkillIds(skillIds, RequestContextUtils.getRequestUserDomainId());
             List<AgentSkillDetail> agentSkillDetails = new ArrayList<>();
             skillDetails.forEach(skill -> {
                 AgentSkillDetail agentSkillDetail = new AgentSkillDetail().setSkillId(skill.getSkillId())
@@ -2018,7 +2021,7 @@ public class AgentManagementService implements IAgentManagementService {
             .map(AgentSkillDetail::getSkillId)
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
-        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds);
+        List<SkillDetails> skillDetailsList = skillMapper.searchBySkillIds(skillIds, RequestContextUtils.getRequestUserDomainId());
         if (CollectionUtils.isEmpty(skillDetailsList)) {
             return new HashMap<>();
         }
@@ -4025,6 +4028,16 @@ public class AgentManagementService implements IAgentManagementService {
     public ExportResourceRsp exportResource(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         return agentExportService.exportResource(projectId, workspaceId, accept, body);
+    }
+
+    @Override
+    public Resource exportRuntimeAssetZip(String projectId, String workspaceId,
+        String resourceType, String resourceId, String version) {
+        // 巡检 #14：与 exportAgents/exportResource 一致，强制校验导出能力 SKU 开关，
+        // 防未开通导出权限用户绕过 SKU 限制导出运行时资产。
+        skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
+        return runtimeAssetExporter.exportRuntimeAssetZip(projectId, workspaceId,
+            resourceType, resourceId, version);
     }
 
     /**

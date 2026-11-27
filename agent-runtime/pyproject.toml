@@ -8,7 +8,9 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.4.0",
     "pydantic-settings~=2.14.2",
-    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@develop",
+    # agent-core 官方 0.1.17_hotfix 分支（compile 可重入 + 执行期状态
+    # ContextVar 化，静态图实例复用的引擎前置）；分支 HEAD 即 v0.1.17.post3
+    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@0.1.17_hotfix",
     "boto3",
     "aioboto3",
     "aiohttp",
@@ -36,12 +38,18 @@ dependencies = [
     "model-service",
     "storage",
     "common-utils",
+    "redis-spi",
+    "redis-native",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "fakeredis==2.41.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    # fakeredis 2.41.0 已移除构造自省崩溃代码（_get_args_to_warn），
+    # 与任何 redis-py 版本组合均无 __closure__/FakeWriter 崩溃
+    "fakeredis==2.41.0",
 ]
 tracer-otel = [
     "opentelemetry-api>=1.20.0",
@@ -77,3 +85,6 @@ default = true
 model-service = { path = "../packages/model_service", editable = true }
 storage = { path = "../packages/storage", editable = true }
 common-utils = { path = "../packages/common_utils", editable = true }
+# Redis 适配层（Phase 2 接线）：SPI 抽象 + redis-py 原生实现
+redis-spi = { path = "../packages/redis_spi", editable = true }
+redis-native = { path = "../packages/redis_native", editable = true }

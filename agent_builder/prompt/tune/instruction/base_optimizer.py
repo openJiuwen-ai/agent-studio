@@ -74,8 +74,6 @@ class BasicOptimizer(ABC):
                 "{{APIS_DESCRIPTION}}", str(self._tools) if self._tools else "None"
             )
             prompt = system_prompt_prefix + prompt
-        else:
-            prompt = prompt
 
         meta_critique_prompt = self._prompt_pool["meta_critique_template"].format(
             instruction=prompt,

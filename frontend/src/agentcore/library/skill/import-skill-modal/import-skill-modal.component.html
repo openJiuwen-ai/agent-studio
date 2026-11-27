@@ -12,12 +12,21 @@
     </div>
     <div class="import-button">
       @if (importType === importTypeEnum.ZIP) {
-        <nz-upload [nzAccept]="'.zip'" [nzLimit]="1" [(nzFileList)]="fileList" [nzShowUploadList]="true" (nzChange)="handleUploadChange($event)">
+        <nz-upload [nzAccept]="'.zip'" [nzLimit]="1" [(nzFileList)]="fileList" [nzShowUploadList]="false" (nzChange)="handleUploadChange($event)">
           <button nz-button>
             <span nz-icon nzType="upload"></span>
             {{ (selectedFile ? 'skill.import.reselect.file' : 'skill.import_add_file') | i18nextEager }}
           </button>
         </nz-upload>
+        @if (selectedFile) {
+          <div class="file-item">
+            <span nz-icon nzType="file-zip"></span>
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <button type="button" class="file-remove" [attr.aria-label]="'skill.import.remove.file' | i18nextEager" (click)="onRemoveItems()">
+              <span nz-icon nzType="close"></span>
+            </button>
+          </div>
+        }
       }
       @if (importType === importTypeEnum.OBS) {
         <form vertical [formGroup]="obsForm">

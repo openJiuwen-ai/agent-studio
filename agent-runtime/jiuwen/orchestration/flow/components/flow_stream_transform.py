@@ -3,12 +3,20 @@
 Flow stream transform component.
 
 This component is designed to post-process an async stream of dict frames using
-`AsyncDictStreamTransformer`, and emit workflow streaming events similarly to `FlowMessage`.
+AsyncDictStreamTransformer, and emit workflow streaming events similarly to FlowMessage.
+
+Supports two modes:
+1. **Template mode** (new): Use \	emplate\ config to render each frame with Jinja2-like syntax
+   - Supports {{raw_output}} for full dict
+   - Supports {{raw_output.field}} for specific fields
+2. **Transformer mode** (legacy): Use \	ransformer\ config with AsyncDictStreamTransformer
 """
 
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import replace
 from typing import Any, AsyncIterable, AsyncIterator, Dict, Optional
 
 from jiuwen.common.exception.base import JiuWenBaseException
@@ -38,7 +46,11 @@ class FlowStreamTransform(Invokable):
     Transform an async dict stream and emit StreamData events.
 
     Config (snake_case recommended):
-        - transformer: dict, required. Transformer config passed to AsyncDictStreamTransformConfig.from_dict().
+        - template: str, optional. Template string for rendering each frame.
+          Supports Jinja2-like syntax: {{raw_output}} or {{raw_output.field}}.
+          If provided, takes precedence over transformer config.
+        - transformer: dict, optional. Transformer config passed to AsyncDictStreamTransformConfig.from_dict().
+          Used when template is not provided.
         - parse_json_strings: bool, optional. If True, attempts to parse string/bytes chunks as JSON dicts.
           Default: True.
         - userFields: dict, optional. Defines input and (optional) output fields.
@@ -57,6 +69,10 @@ class FlowStreamTransform(Invokable):
         self._conf = conf or {}
         self.runtime_context = runtime_context
         self.metadata = metadata
+
+        # Check if template mode is enabled
+        self._template_content: Optional[str] = self._conf.get("template")
+        self._use_template_mode = bool(self._template_content)
 
         self._transformer_conf: dict = self._conf.get("transformer") or {}
         self._parse_json_strings: bool = bool(
@@ -88,13 +104,15 @@ class FlowStreamTransform(Invokable):
                 self._output_field = first_output["id"]
                 self._direct_assign_output = False
 
-        if not isinstance(self._transformer_conf, dict):
-            raise JiuWenBaseException(
-                error_code=StatusCode.WORKFLOW_INITIAL_CONFIG_ERROR.code,
-                message=StatusCode.WORKFLOW_INITIAL_CONFIG_ERROR.errmsg.format(
-                    error_msg="'transformer' must be a dict"
-                ),
-            )
+        # Only validate transformer config if not using template mode
+        if not self._use_template_mode:
+            if not isinstance(self._transformer_conf, dict):
+                raise JiuWenBaseException(
+                    error_code=StatusCode.WORKFLOW_INITIAL_CONFIG_ERROR.code,
+                    message=StatusCode.WORKFLOW_INITIAL_CONFIG_ERROR.errmsg.format(
+                        error_msg="'transformer' must be a dict"
+                    ),
+                )
 
     def invoke(self, inputs: Dict[str, Any], **kwargs):
         logger.info(
@@ -122,9 +140,23 @@ class FlowStreamTransform(Invokable):
                 ),
             )
 
-        cfg = AsyncDictStreamTransformConfig.from_dict(self._transformer_conf)
-        transformer = AsyncDictStreamTransformer(cfg)
-        out_stream = transformer.transform(self._iter_dict_frames(origin_stream))
+        # Use template mode if configured
+        if self._use_template_mode:
+            out_stream = self._apply_template_to_frames(origin_stream)
+        else:
+            # Legacy transformer mode
+            cfg = AsyncDictStreamTransformConfig.from_dict(self._transformer_conf)
+            # Clear src_path for pure placeholder variables so whole frame is returned
+            if self._direct_assign_output and self._source_field:
+                new_vars = [
+                    replace(v, src_path="")
+                    if v.name == self._source_field and v.src_path == v.name
+                    else v
+                    for v in cfg.variables
+                ]
+                cfg = replace(cfg, variables=new_vars)
+            transformer = AsyncDictStreamTransformer(cfg)
+            out_stream = transformer.transform(self._iter_dict_frames(origin_stream))
 
         if stream_callback is None:
             last_frame = None
@@ -136,6 +168,72 @@ class FlowStreamTransform(Invokable):
             out_stream, stream_callback, execution_id
         )
         return self._build_result(last_frame)
+
+    def _render_template(self, template: str, variables: dict) -> str:
+        """Render template with variable substitution.
+        
+        Supports {{variable}} and {{variable.field}} syntax.
+        
+        Args:
+            template: Template string with placeholders
+            variables: Dictionary of variables to substitute
+            
+        Returns:
+            Rendered string with placeholders replaced
+        """
+        def replace_placeholder(match):
+            placeholder = match.group(1).strip()
+            if not placeholder:
+                return match.group(0)  # Empty placeholder, return as-is
+            
+            # Split by dot to support nested field access
+            parts = placeholder.split(".")
+            value = variables
+            
+            try:
+                for part in parts:
+                    if isinstance(value, dict):
+                        value = value.get(part)
+                    elif hasattr(value, part):
+                        value = getattr(value, part)
+                    else:
+                        # Field not found, return empty string
+                        return ""
+                    
+                    if value is None:
+                        return ""
+                
+                # Convert to string
+                if isinstance(value, (str, int, float, bool)):
+                    return str(value)
+                else:
+                    # For dict/list, use JSON serialization
+                    return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                # Any error during rendering, return empty string
+                return ""
+        
+        # Find all {{...}} placeholders and replace them
+        return re.sub(r"\{\{([^{}]+)\}\}", replace_placeholder, template)
+
+    async def _apply_template_to_frames(
+        self, origin_stream: AsyncIterable
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Apply template rendering to each frame in the stream."""
+        async for frame in self._iter_dict_frames(origin_stream):
+            try:
+                # Build variables dict with raw_output
+                variables = {"raw_output": frame}
+                
+                # Render template
+                rendered = self._render_template(self._template_content, variables)
+                
+                # Return rendered string as answer
+                yield rendered
+            except Exception as e:
+                logger.warning(f"Failed to render template for frame: {e}")
+                # Fallback to original frame if template rendering fails
+                yield frame
 
     async def _iter_dict_frames(
         self, origin_stream: AsyncIterable
@@ -175,22 +273,28 @@ class FlowStreamTransform(Invokable):
                 if isinstance(obj, dict):
                     yield obj
 
-    def _build_result(self, value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_result(self, value: Optional[Any]) -> Dict[str, Any]:
         if self._direct_assign_output:
             return {USER_FIELDS: value}
         return {USER_FIELDS: {self._output_field: value}}
 
+    def _format_answer(self, frame):
+        """Serialize dict/list frames to JSON string for frontend display."""
+        if isinstance(frame, (dict, list)):
+            return json.dumps(frame, ensure_ascii=False, default=str)
+        return frame
+
     async def _handle_streaming(
         self,
-        out_stream: AsyncIterator[Dict[str, Any]],
+        out_stream: AsyncIterator[Any],
         stream_callback,
         execution_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
         stream_related_info = WorkflowStreamingData(
             stream_callback=stream_callback, execution_id=execution_id
         )
         idx = 0
-        prev: Optional[Dict[str, Any]] = None
+        prev: Optional[Any] = None
 
         async for frame in out_stream:
             if prev is not None:
@@ -199,7 +303,7 @@ class FlowStreamTransform(Invokable):
                         code=StreamCode.PARTIAL_CONTENT.value,
                         msg=StreamDataMsg.SUCCESS.value,
                         data=get_data_of_streaming_with_metadata(
-                            answer=prev, metadata=self.metadata
+                            answer=self._format_answer(prev), metadata=self.metadata
                         ),
                         execution_id=stream_related_info.execution_id,
                         index=idx,
@@ -214,7 +318,7 @@ class FlowStreamTransform(Invokable):
                     code=StreamCode.MESSAGE_END.value,
                     msg=StreamDataMsg.MESSAGE_END.value,
                     data=get_data_of_streaming_with_metadata(
-                        answer=prev, metadata=self.metadata
+                        answer=self._format_answer(prev), metadata=self.metadata
                     ),
                     execution_id=stream_related_info.execution_id,
                     index=idx,

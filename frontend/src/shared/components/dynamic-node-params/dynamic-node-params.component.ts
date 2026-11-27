@@ -368,6 +368,12 @@ export class DynamicNodeParamsComponent {
     return this.parameterFromGroup.get([`${controlName}`])?.value;
   }
 
+  /** 根据控件名称，判断表单控件是否未被用户编辑过（pristine），用于区分默认值与用户手输 */
+  public isControlPristine(controlName: string): boolean {
+    const control = this.parameterFromGroup.get([`${controlName}`]);
+    return !!control && control.pristine;
+  }
+
   /** 根据控件名称，获取 <ngx-monaco-editor> 编辑器双向绑定的输入值 */
   public getEditorValueByName(controlName: string): any {
     const inputItem = this.inputList.find((item) => item.name === controlName);

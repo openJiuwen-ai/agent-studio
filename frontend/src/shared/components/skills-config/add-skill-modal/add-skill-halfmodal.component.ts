@@ -200,7 +200,8 @@ export class AddSkillHalfModalComponent implements OnInit, OnDestroy {
       limit: this.pageLimit,
       offset,
       priority_status: SkillStatus.DEVELOPED,
-      published_asset: tabId === SkillTabId.SKILL_MARKET ? SkillPublishedAsset.PUBLISHED : SkillPublishedAsset.NOT_PUBLISHED,
+      // 广场tab：仅已上架（published=1）；组件库tab：查全部（含已上架，FRS-091 上架不改变组件库可见性）
+      published_asset: tabId === SkillTabId.SKILL_MARKET ? SkillPublishedAsset.PUBLISHED : undefined,
     };
 
     if (this.searchValue) {

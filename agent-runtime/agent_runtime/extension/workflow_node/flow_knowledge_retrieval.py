@@ -17,7 +17,8 @@ from typing import AsyncIterator, Dict, List, Optional, Union
 from agent_runtime.common.kb_config_providers import OBSKnowledgeBaseConfigProvider
 import logging
 
-from common_utils.redis_manager import get_redis_client
+from redis_spi import accessor
+from redis_spi.types import Duration
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
 from agent_runtime.extension.workflow_node.kb_adapter.base import clamp_threshold
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
@@ -57,6 +58,9 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         super().__init__()
         self._conf: Optional[FlowKnowledgeRetrievalConfig] = None
         self._kb_config: Optional[dict] = None  # 从 OBS 加载的完整配置
+        # 懒加载双检锁：实例跨执行复用，并发首调只从 OBS 加载一次
+        # （ensure_kb_config 的 check-then-act 与 await 非原子）。
+        self._init_lock: asyncio.Lock = asyncio.Lock()
         if conf is not None:
             self._init_conf(conf)
 
@@ -102,6 +106,30 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
     def component_type(self) -> str:
         """获取组件类型标识"""
         return JIUWEN_KNOWLEDGE_RETRIEVAL_TYPE
+
+    def trace_metadata(self) -> Optional[dict]:
+        """检索静态事实导出，供 core 组件 span 盖 GenAI 属性。
+
+        core 引擎在组件 span 开启时拾取返回值并入组件 metadata，tracer_otel
+        handler 消费：top_k -> gen_ai.retrieval.top_k、knowledge_base_ids ->
+        gen_ai.data_source.id。top_k 仅在 topK 显式配置且可收敛为 int 时导出
+        （未配置不猜缺省——实际检索缺省随引擎类型变化）；纯读取无副作用，
+        任何配置形态不抛错，异常由引擎侧钩子兜底。
+        """
+        if self._conf is None:
+            return None
+        metadata: Dict = {}
+        # retrievalConfig 可能显式为 null（_init_conf 原样透传 None）：非 dict
+        # 不取值不抛错；topK 未显式配置时同样不导出
+        retrieval_config = self._conf.retrieval_config
+        if isinstance(retrieval_config, dict) and "topK" in retrieval_config:
+            try:
+                metadata["top_k"] = int(retrieval_config["topK"])
+            except (TypeError, ValueError):
+                pass
+        if self._conf.knowledge_base_ids:
+            metadata["data_source_ids"] = list(self._conf.knowledge_base_ids)
+        return metadata or None
 
     @staticmethod
     def _resolve_query_from_session(session: Session) -> str:
@@ -174,24 +202,29 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
         """确保知识库配置已加载
 
         通过 Provider 从 OBS 加载连接和知识库配置。
+        双检加锁（照 FlowMcp api 范式）：并发首调只加载一次。
         """
         if self._kb_config is not None:
             return self._kb_config
 
-        # 通过 Provider 从 OBS 加载
-        if self._kb_provider is None:
-            self._kb_provider = OBSKnowledgeBaseConfigProvider()
+        async with self._init_lock:
+            if self._kb_config is not None:
+                return self._kb_config
 
-        ir_node = {
-            "configs": {
-                "connectionId": self._conf.connection_id,
-                "knowledgeBaseIds": self._conf.knowledge_base_ids,
-                "retrievalConfig": self._conf.retrieval_config,
+            # 通过 Provider 从 OBS 加载
+            if self._kb_provider is None:
+                self._kb_provider = OBSKnowledgeBaseConfigProvider()
+
+            ir_node = {
+                "configs": {
+                    "connectionId": self._conf.connection_id,
+                    "knowledgeBaseIds": self._conf.knowledge_base_ids,
+                    "retrievalConfig": self._conf.retrieval_config,
+                }
             }
-        }
 
-        self._kb_config = await self._kb_provider.get_kb_config(ir_node)
-        return self._kb_config
+            self._kb_config = await self._kb_provider.get_kb_config(ir_node)
+            return self._kb_config
 
     async def _search_with_faq_fallback(
         self,
@@ -283,8 +316,10 @@ class FlowKnowledgeRetrieval(WorkflowComponent):
 
     async def _cache_redis(self, key: str, value: str, ttl_seconds: int) -> None:
         try:
-            redis_client = get_redis_client()
-            await redis_client.set(key, value, ex=ttl_seconds)
+            redis_client = accessor.get_redis()
+            await redis_client.set(
+                key, value, duration=Duration.seconds(ttl_seconds)
+            )
         except Exception as e:
             workflow_logger.warning("FlowKnowledgeRetrieval failed to cache redis key=%s: %s", key, e)
 

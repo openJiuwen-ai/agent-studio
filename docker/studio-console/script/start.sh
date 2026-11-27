@@ -132,6 +132,25 @@ function init_static_index(){
       && { echo "[ERROR]: large_dsl_placeholder remains after replace"; exit 1; }
     echo "[INFO]: largeDslBytesThreshold = ${val}"
 
+    # 3. iframe SSO 极简接入开关注入：IFRAME_SSO_TOKEN_PARAM 非空才启用（默认关闭）
+    #    值须与后端 auth_sso_header 同值（URL 参数名/Cookie 名/后端提取名三处对齐）
+    local sso_param="${IFRAME_SSO_TOKEN_PARAM:-}"
+    if [[ -n "$sso_param" && ! "$sso_param" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "[WARN]: invalid IFRAME_SSO_TOKEN_PARAM '${sso_param}', fallback to empty (disabled)"
+      sso_param=""
+    fi
+    grep -q "iframe_sso_token_placeholder" "$index_html" \
+      || { echo "[ERROR]: iframe_sso_token_placeholder not found (start.sh 与前端产物版本不匹配)"; exit 1; }
+    sed -i "s/iframe_sso_token_placeholder/${sso_param}/g" "$index_html" \
+      || { echo "[ERROR]: iframe_sso_token replace failed"; exit 1; }
+    grep -q "iframe_sso_token_placeholder" "$index_html" \
+      && { echo "[ERROR]: iframe_sso_token_placeholder remains after replace"; exit 1; }
+    if [[ -n "$sso_param" ]]; then
+      echo "[INFO]: iframeSsoTokenParam = ${sso_param} (iframe SSO bridge enabled)"
+    else
+      echo "[INFO]: iframeSsoTokenParam empty (iframe SSO bridge disabled)"
+    fi
+
     # 首页为静态资源，nginx 需读取；644 保证 owner 可写、others 可读
     # （原 add_context_path 用 500 owner-only，但该分支仅在配 context_path 时执行；
     #  本函数无条件执行，500 会让非 service 用户的 nginx worker 读不了 → 部署 403）

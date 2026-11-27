@@ -44,12 +44,12 @@ class Auth:
             if (
                 os.getenv("SERVICE_TYPE", "xiaoyi") == "xiaoyi"
                 and os.getenv("STS_API_AUTH_ENABLE") == "true"
+                and not is_valide_sign()
             ):
-                if not is_valide_sign():
-                    raise JiuWenBaseException(
-                        error_code=StatusCode.AUTHENTICATION_ERROR.code,
-                        message=StatusCode.AUTHENTICATION_ERROR.errmsg,
-                    )
+                raise JiuWenBaseException(
+                    error_code=StatusCode.AUTHENTICATION_ERROR.code,
+                    message=StatusCode.AUTHENTICATION_ERROR.errmsg,
+                )
             return func(*args, **kwargs)
 
         return decorator

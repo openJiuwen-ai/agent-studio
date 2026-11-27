@@ -149,6 +149,16 @@ public class WorkflowUtils {
             oauthConfig.setScope(authInfo.getScope().toString());
             return oauthConfig;
         } else if (authInfo != null && authInfo.getScope() != null
+                && AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            // FEAT-093 动态鉴权：IR 保留 scope 身份（值经 arguments→inputs 注入，
+            // headers/query 恒空）——使运行期可区分 DYNAMIC 与无鉴权，
+            // 否则 wrapper 只能按空 scope 放行，DYNAMIC 分支形同虚设
+            AuthServiceConfig authServiceConfig = new AuthServiceConfig();
+            authServiceConfig.setScope(authInfo.getScope().toString());
+            authServiceConfig.setHeaders(new HashMap<>());
+            authServiceConfig.setQuery(new HashMap<>());
+            return authServiceConfig;
+        } else if (authInfo != null && authInfo.getScope() != null
                 && AuthInfo.ScopeEnum.SERVICE.equals(authInfo.getScope())) {
             AuthServiceConfig authServiceConfig = new AuthServiceConfig();
             authServiceConfig.setScope(authInfo.getScope().toString());
@@ -300,6 +310,15 @@ public class WorkflowUtils {
             authUserConfig.setSource(source);
             authUserConfig.setTarget(target);
             return authUserConfig;
+        } else if (authInfo != null && authInfo.getScope() != null
+            && AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            // FEAT-093 动态鉴权：IR 保留 scope 身份（与三参重载同构，
+            // 值经 arguments→inputs 注入，headers/query 恒空）
+            AuthServiceConfig authServiceConfig = new AuthServiceConfig();
+            authServiceConfig.setScope(authInfo.getScope().toString());
+            authServiceConfig.setHeaders(new HashMap<>());
+            authServiceConfig.setQuery(new HashMap<>());
+            return authServiceConfig;
         } else if (authInfo != null && authInfo.getScope() != null
             && AuthInfo.ScopeEnum.SERVICE.equals(authInfo.getScope())) {
             AuthServiceConfig authServiceConfig = new AuthServiceConfig();

@@ -26,7 +26,11 @@ from openjiuwen.core.foundation.llm.schema.tool_call import ToolCall
 from openjiuwen.core.foundation.tool.schema import ToolInfo
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.agent import create_agent_session
-from agent_runtime.common.trace_compat import create_agent_session_with_trace
+from agent_runtime.common.trace_compat import (
+    callable_accepts_kwarg,
+    create_agent_session_with_trace,
+    current_user_id,
+)
 
 BJ_TZ = datetime.timezone(datetime.timedelta(hours=8), name="Asia/Beijing")
 
@@ -322,6 +326,134 @@ class ModelWrapper:
         # 构建 AIMessage
         return AIMessage(**convert_dict), tool_calls
 
+    @staticmethod
+    def _trace_identity_kwargs(kwargs: dict, session_id: str = "", message_count: int | None = None) -> dict:
+        """调用方 kwargs 里的归因与调用事实 → core llm span identity 片段。
+
+        双写桥场景会话是裸会话（无 agent card），core rail 的 common-info
+        路径取不到控制器层 agent_id/agent_name——壳下 llm span 缺身份即此
+        缺口；经 get_model(identity=) 显式带入（core 在 span 上
+        write-if-absent 盖 gen_ai.agent.* 属性）。同一条通道还携带：
+
+        - (parent_trace_id, parent_span_id[, parent_trace_flags]) 显式父级：
+          嵌入桥的 llm span 逻辑父不在 core agent handler 的 span manager
+          表里，环境回退会被链路中的上下文污染破坏（部署实证：与 node
+          span 并列、误挂死根），core 据显式 refs 构造 NonRecordingSpan
+          父——显式 > 逻辑 > 环境三级；
+        - request_params / message_count：请求参数与消息数（与 rail 侧
+          before_model_call 同口径），core on_llm_start 平铺消费落
+          gen_ai.request.* / 消息数属性；
+        - conversation_id（= 会话 id，rail common-info 同口径）与
+          user_id：会话事实——kwargs 显式值优先，缺省回落 runner 建会话
+          时播种的 current_user_id()（source_metadata 同源；controller
+          规划链上游不携带 user_id，靠该兜底让装饰器路径 span 得
+          gen_ai.user.id）。
+
+        本线配套新版 core（identity 参数贯通 get_model 链路）；旧 core 的
+        get_model 为 keyword-only 签名（无 identity 无 **kwargs），带上即
+        TypeError——按能力门控探测，不支持时不产出该参数、退既有两参调用
+        形态（新 studio × 旧 core 最差=现状，绝不崩；span 缺归因属性但模型
+        解析不受影响）。无任何事实时同样返回空片段（不产生空 identity 参数）。
+        """
+        # 能力门控在事实解析之前：不支持时零开销短路
+        get_model = getattr(getattr(Runner, "resource_mgr", None), "get_model", None)
+        if not callable_accepts_kwarg(get_model, "identity"):
+            return {}
+        identity: dict = {}
+        agent_id = kwargs.get("agent_id") or ""
+        if agent_id:
+            identity["agent_id"] = str(agent_id)
+        agent_name = kwargs.get("agent_name") or ""
+        if agent_name:
+            identity["agent_name"] = str(agent_name)
+        if session_id:
+            identity["conversation_id"] = str(session_id)
+        user_id = kwargs.get("user_id") or current_user_id() or ""
+        if user_id:
+            identity["user_id"] = str(user_id)
+        parent_span_id = kwargs.get("parent_span_id") or ""
+        parent_trace_id = kwargs.get("parent_trace_id") or ""
+        if parent_span_id and parent_trace_id:
+            identity["parent_span_id"] = str(parent_span_id)
+            identity["parent_trace_id"] = str(parent_trace_id)
+            # 始终携带 parent_trace_flags，避免上游 _explicit_parent_context
+            # 在缺省时强制 SAMPLED（#1713）。kwargs 未给时按 OTEL_SAMPLE_RATE 决策。
+            parent_trace_flags = kwargs.get("parent_trace_flags")
+            if parent_trace_flags is None:
+                try:
+                    from agent_runtime.observability.otel_parent_flags import (
+                        resolve_injected_trace_flags,
+                    )
+
+                    tid = int(str(parent_trace_id), 16)
+                    parent_trace_flags = f"{int(resolve_injected_trace_flags(tid)):02x}"
+                except (ValueError, ImportError, TypeError):
+                    parent_trace_flags = "00"
+            identity["parent_trace_flags"] = str(parent_trace_flags)
+        request_params = ModelWrapper._llm_request_params(kwargs)
+        if request_params:
+            identity["request_params"] = request_params
+        if message_count is not None:
+            identity["message_count"] = int(message_count)
+        return {"identity": identity} if identity else {}
+
+    @staticmethod
+    def _llm_request_params(kwargs: dict) -> dict:
+        """模型调用参数 → core 侧 gen_ai.request.* 消费口径。
+
+        core handler 从 identity 平铺键 ``request_params`` 里读
+        temperature / top_p / top_k / max_tokens / stop_sequences /
+        reasoning_level（与 rail before_model_call 同键名）；按同一口径从
+        调用 kwargs 提取，缺的键不写。
+        """
+        params: dict = {}
+        for key in ("temperature", "top_p", "top_k", "max_tokens", "reasoning_level"):
+            value = kwargs.get(key)
+            if value is not None:
+                params[key] = value
+        stop = kwargs.get("stop")
+        if stop is not None:
+            params["stop_sequences"] = stop
+        return params
+
+    @staticmethod
+    async def _resolve_model_display_name(model_id: str) -> str:
+        """modelServiceId → 模型显示名（元数据 model_name，走既有缓存）。
+
+        与 OBSModelConfigProvider._resolve_display_name 同源同契约：仅供
+        遥测展示（identity.class_name 覆盖探针），未配置/查询失败一律
+        返回空串——缺名即"不覆盖"，绝不影响模型解析与调用。
+        """
+        try:
+            from model_service import query_model_display_name
+
+            return await query_model_display_name(model_id)
+        except Exception:  # noqa: BLE001 - 显示名缺失不影响模型调用
+            return ""
+
+    async def _trace_identity_kwargs_resolved(
+        self, kwargs: dict, model_id: str, session_id: str, message_count: int | None
+    ) -> dict:
+        """identity 片段增补模型显示名后返回（调用方直接展开进 get_model）。
+
+        控制器路径的模型经 resource_mgr 按 modelServiceId 解析：core 装饰
+        器探针在两处来源都落空（路由 model_name 装的是服务 id；
+        client_config 的显示名供给只在 OBS IR provider），llm span 名与
+        gen_ai.request.model 因此显示 UUID。此处按 id 查显示名写入
+        identity.class_name——core 侧 instance_info.update 为覆盖通道，
+        写即赢，与 build_traced_model 的工作流路径同构；缺名不覆盖探针
+        结果。查询放在能力门控之后：旧 core 零开销短路红线不破（缓存
+        命中也非零成本）。
+        """
+        identity_kwargs = self._trace_identity_kwargs(
+            kwargs, session_id=session_id, message_count=message_count
+        )
+        if identity_kwargs:
+            display_name = await self._resolve_model_display_name(model_id)
+            if display_name:
+                identity_kwargs["identity"]["class_name"] = str(display_name)
+        return identity_kwargs
+
     async def ainvoke(
         self, inputs: InputType, model_id: str, session_id: str, **kwargs
     ) -> LanguageModelOutput:
@@ -354,7 +486,11 @@ class ModelWrapper:
         messages, tools = self._convert_input_to_model_format(inputs)
         agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
-            model_id=model_id, session=agent_session
+            model_id=model_id,
+            session=agent_session,
+            **await self._trace_identity_kwargs_resolved(
+                kwargs, model_id, session_id=session_id, message_count=len(messages)
+            ),
         )
         if model is None:
             raise ModelError(
@@ -423,7 +559,11 @@ class ModelWrapper:
         tc_id = ""
         agent_session = create_agent_session_with_trace(session_id=session_id)
         model = await Runner.resource_mgr.get_model(
-            model_id=model_id, session=agent_session
+            model_id=model_id,
+            session=agent_session,
+            **await self._trace_identity_kwargs_resolved(
+                kwargs, model_id, session_id=session_id, message_count=len(messages)
+            ),
         )
         if model is None:
             raise ModelError(

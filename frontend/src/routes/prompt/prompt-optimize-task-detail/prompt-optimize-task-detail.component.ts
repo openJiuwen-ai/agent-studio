@@ -401,6 +401,9 @@ export class PromptOptimizeTaskDetailComponent {
 
     this.originPrompt = task.pt_text;
 
+    // 不去重折叠：后端 save_state 已按 filled_prompt+success_rate 精确去重（issue#1585 修复），
+    // 前端无 filled_prompt 字段，任何基于 optimized_prompt/success_rate 的折叠都可能误删
+    // 「指令与评分相同但示例（filled_prompt）不同」的合法版本，故原样展示全部迭代结果
     const iterationInfoList = task.iteration_results.iteration_info_list.slice(1);
     this.originAcc = task.iteration_results?.iteration_info_list[0]?.success_rate;
 

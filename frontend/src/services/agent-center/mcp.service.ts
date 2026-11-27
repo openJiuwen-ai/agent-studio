@@ -131,10 +131,78 @@ export class MCPService {
     });
   }
 
+  /**
+   * 将已部署的 MCP 服务实例上架到资产广场（FRS-091）
+   */
+  public publishServer(serviceId: string, category?: string, readme?: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/server/on-shelf`,
+      params: {
+        service_id: serviceId,
+        ...(category ? { category } : {}),
+        ...(readme ? { readme } : {}),
+      },
+    });
+  }
+
+  /**
+   * 将 MCP 服务目录条目从资产广场下架（支持传目录条目标识或上架来源实例ID）
+   */
+  public unpublishServer(serverId: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/server/off-shelf/${serverId}`,
+    });
+  }
+
   public getReferenceList(serverId: string, query: any): Promise<IMappings> {
     return this.http.getAsync({
       url: `${this.ctxServ.baseUrl}/agent-manager/relation/resources/${serverId}`,
       query,
+    });
+  }
+
+  // ==================== FEAT-134: MCP 服务导入导出与重载 ====================
+
+  /**
+   * 导出 MCP 服务为迁移文件（不含鉴权凭据）。
+   * selection: "IDS"（service_ids 必填 1~100）或 "ALL"（当前空间全部）。
+   */
+  public exportMcpServices(params: { selection: string; service_ids?: string[] }): Promise<Blob> {
+    return this.http.postBlob({
+      url: `${this.prefix}/service/export`,
+      params,
+    }).toPromise();
+  }
+
+  /**
+   * 导入 MCP 服务（上传迁移文件 → 新建实例 + 异步刷新工具）。
+   * 返回操作受理结果（operation_id + items）。
+   */
+  public importMcpServices(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.postAsync({
+      url: `${this.prefix}/service/import`,
+      body: formData,
+    });
+  }
+
+  /**
+   * 重载 MCP 服务工具快照（原地刷新，不动挂载引用）。
+   * 返回操作受理结果（operation_id）。
+   */
+  public reloadMcpService(serviceId: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/service/reload/${serviceId}`,
+    });
+  }
+
+  /**
+   * 查询导入/重载操作结果（同空间用户）。
+   */
+  public getMcpOperation(operationId: string): Promise<any> {
+    return this.http.getAsync({
+      url: `${this.prefix}/service/operations/${operationId}`,
     });
   }
 

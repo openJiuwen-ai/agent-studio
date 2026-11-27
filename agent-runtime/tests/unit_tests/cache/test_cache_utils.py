@@ -6,6 +6,13 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from redis_spi.types import Duration
+
+
+def _set_ttl_seconds(call_args):
+    """SPI set 的 TTL 提取：duration 值对象 → 秒（无 TTL 为 None）。"""
+    duration = call_args[1].get("duration") if call_args[1] else None
+    return duration.total_seconds if duration is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -16,17 +23,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _patch_redis_modules():
-    """Patch the Redis client factory at the open_utils import site so that
-    importing open_utils (and any lazy ``get_redis_client()`` call) does not
-    attempt a real Redis connection.
+    """Patch the Redis client accessor so that importing open_utils (and any
+    lazy ``accessor.get_redis()`` call) does not attempt a real Redis connection.
 
-    The vendored ``open_utils`` now obtains both sync and async Redis clients
-    through the single ``get_redis_client`` helper (imported from
-    ``common_utils.redis_manager``); the old separate
-    ``get_redis_instance`` / ``get_async_redis_instance`` symbols no longer
-    exist. Individual tests still override ``CacheUtils._redis_cache`` /
-    ``_async_redis_cache`` directly via the ``cache_utils`` fixture, so the
-    return value here only needs to be a benign mock.
+    The vendored ``open_utils`` obtains both sync and async Redis clients via
+    the redis_spi accessor (Phase 4 迁移). Individual tests still override
+    ``CacheUtils._redis_cache`` / ``_async_redis_cache`` directly via the
+    ``cache_utils`` fixture, so the return value here only needs to be a
+    benign mock.
     """
     mock_redis = MagicMock()
     mock_redis.get.return_value = None
@@ -39,7 +43,7 @@ def _patch_redis_modules():
     mock_async_redis.delete.return_value = 1
 
     with patch(
-        "jiuwen.serve.controllers.execution.open_utils.get_redis_client",
+        "redis_spi.accessor.get_redis",
         return_value=mock_async_redis,
     ):
         yield mock_redis, mock_async_redis
@@ -210,55 +214,34 @@ class TestCacheUtilsTTLOverride:
 
     @pytest.mark.asyncio
     async def test_aput_ttl_override(self, cache_utils, mock_async_redis):
-        """aput(ttl=600) passes ex=600 to Redis instead of default redis_ttl."""
+        """aput(ttl=600) passes duration=600s to Redis instead of default redis_ttl."""
         await cache_utils.aput("key1", {"data": "v1"}, ttl=600)
-        call_args = mock_async_redis.set.call_args
-        # The key arg: check that ex kwarg or 3rd positional arg is 600
-        ex_val = call_args[1].get("ex") if call_args[1] else None
-        if ex_val is None and len(call_args[0]) > 2:
-            ex_val = call_args[0][2]
-        assert ex_val == 600
+        assert _set_ttl_seconds(mock_async_redis.set.call_args) == 600
 
     @pytest.mark.asyncio
     async def test_aput_ttl_minus_one_no_expiry(self, cache_utils, mock_async_redis):
-        """aput(ttl=-1) means no expiry: Redis SET is called with ex=None."""
+        """aput(ttl=-1) means no expiry: Redis SET is called with duration=None."""
         await cache_utils.aput("key1", {"data": "v1"}, ttl=-1)
-        call_args = mock_async_redis.set.call_args
-        ex_val = call_args[1].get("ex") if call_args[1] else "NOT_FOUND"
-        if ex_val == "NOT_FOUND" and len(call_args[0]) > 2:
-            ex_val = call_args[0][2]
-        assert ex_val is None
+        assert _set_ttl_seconds(mock_async_redis.set.call_args) is None
 
     @pytest.mark.asyncio
     async def test_aput_ttl_none_uses_default(self, cache_utils, mock_async_redis):
-        """aput(ttl=None) or aput() uses self.redis_ttl as ex."""
+        """aput(ttl=None) or aput() uses self.redis_ttl as duration."""
         await cache_utils.aput("key1", {"data": "v1"})
-        call_args = mock_async_redis.set.call_args
-        ex_val = call_args[1].get("ex") if call_args[1] else None
-        if ex_val is None and len(call_args[0]) > 2:
-            ex_val = call_args[0][2]
         # redis_ttl=60 for this fixture (see cache_utils fixture: memory_ttl=2, redis_ttl=60)
-        assert ex_val == 60
+        assert _set_ttl_seconds(mock_async_redis.set.call_args) == 60
 
     @staticmethod
     def test_put_ttl_override(mock_redis, cache_utils):
-        """put(ttl=600) passes ex=600 to Redis."""
+        """put(ttl=600) passes duration=600s to Redis."""
         cache_utils.put("key1", {"data": "v1"}, ttl=600)
-        call_args = mock_redis.set.call_args
-        ex_val = call_args[1].get("ex") if call_args[1] else None
-        if ex_val is None and len(call_args[0]) > 2:
-            ex_val = call_args[0][2]
-        assert ex_val == 600
+        assert _set_ttl_seconds(mock_redis.set.call_args) == 600
 
     @staticmethod
     def test_put_ttl_minus_one_no_expiry(mock_redis, cache_utils):
-        """put(ttl=-1) means no expiry: Redis SET is called with ex=None."""
+        """put(ttl=-1) means no expiry: Redis SET is called with duration=None."""
         cache_utils.put("key1", {"data": "v1"}, ttl=-1)
-        call_args = mock_redis.set.call_args
-        ex_val = call_args[1].get("ex") if call_args[1] else "NOT_FOUND"
-        if ex_val == "NOT_FOUND" and len(call_args[0]) > 2:
-            ex_val = call_args[0][2]
-        assert ex_val is None
+        assert _set_ttl_seconds(mock_redis.set.call_args) is None
 
 
 class TestCacheUtilsTTLRefresh:
@@ -273,7 +256,7 @@ class TestCacheUtilsTTLRefresh:
         result = await cache_utils.aget("key1", should_refresh_ttl=True)
         assert result == {"data": "v1"}
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:test:key1", 60
+            "agent_runtime:test:key1", Duration.seconds(60)
         )
         # 续期成功后内存条目必须记录刷新时刻（否则节流失效、多发 EXPIRE）
         assert (
@@ -332,7 +315,7 @@ class TestCacheUtilsTTLRefresh:
         # 取到的是 Redis 里的 v2，证明内存已过期并从 Redis 回填
         assert result == {"data": "v2"}
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:test:key1", 60
+            "agent_runtime:test:key1", Duration.seconds(60)
         )
         # 回填后再次读取应命中内存，不再碰 Redis
         mock_async_redis.get.reset_mock()
@@ -358,7 +341,7 @@ class TestAgetWithSourceTTLRefresh:
         assert value == {"data": "v1"}
         assert source == "redis"
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:test:key1", 60
+            "agent_runtime:test:key1", Duration.seconds(60)
         )
 
     @pytest.mark.asyncio
@@ -477,7 +460,7 @@ class TestBackgroundTTLRefresh:
         assert result == {"data": "v1"}
         await asyncio.sleep(0.05)  # 给后台任务执行机会
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:test:key1", 60
+            "agent_runtime:test:key1", Duration.seconds(60)
         )
 
     @pytest.mark.asyncio
@@ -510,7 +493,7 @@ class TestBackgroundTTLRefresh:
         assert source == "memory"
         await asyncio.sleep(0.05)
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:test:key1", 60
+            "agent_runtime:test:key1", Duration.seconds(60)
         )
 
     @pytest.mark.asyncio
@@ -578,7 +561,7 @@ class TestBackgroundTTLRefresh:
         mock_async_redis.expire.reset_mock()
         await cu.aget("key1", should_refresh_ttl=True)
         await asyncio.sleep(0.05)
-        mock_async_redis.expire.assert_called_once_with(key, 60)
+        mock_async_redis.expire.assert_called_once_with(key, Duration.seconds(60))
 
         # 距上次刷新 20s < 30 → 节流不触发
         cu.memory_cache[key]["last_refresh"] = time.time() - 20
@@ -819,12 +802,16 @@ class TestDirectExpireReturnValue:
         )
         result = cache_utils.get("key1", should_refresh_ttl=True)
         assert result == {"data": "v1"}
-        mock_redis.expire.assert_called_once_with("agent_runtime:test:key1", 60)
+        mock_redis.expire.assert_called_once_with(
+            "agent_runtime:test:key1", Duration.seconds(60)
+        )
         # expire 抛异常：换新 key 走 Redis 路径，值已读到不得误返回 None
         mock_redis.expire.side_effect = Exception("redis expire failed")
         result = cache_utils.get("key2", should_refresh_ttl=True)
         assert result == {"data": "v1"}
-        mock_redis.expire.assert_called_with("agent_runtime:test:key2", 60)
+        mock_redis.expire.assert_called_with(
+            "agent_runtime:test:key2", Duration.seconds(60)
+        )
         # 损坏数据：删 key 且返回 None（与 aget/aget_with_source 自愈一致）
         mock_redis.get.return_value = b"corrupted-pickle"
         mock_redis.delete.reset_mock()
@@ -856,7 +843,9 @@ class TestDirectExpireReturnValue:
         # 第1轮: k1 Redis 命中 → EXPIRE 一次并记录节流
         v = await cu.aget("k1", should_refresh_ttl=True)
         assert v == {"data": "v1"}
-        mock_async_redis.expire.assert_called_once_with("agent_runtime:t_l1:k1", 86400)
+        mock_async_redis.expire.assert_called_once_with(
+            "agent_runtime:t_l1:k1", Duration.seconds(86400)
+        )
         # k2 访问将 k1 从容量1的 L1 中淘汰
         await cu.aget("k2", should_refresh_ttl=True)
         # 第2轮: k1 被淘汰后再次 Redis 命中 → 节流窗口内不再发 EXPIRE
@@ -904,7 +893,7 @@ class TestSyncBuildWorkflowDrainsBackgroundTasks:
         assert result == "BUILT"
         # drain 生效：后台任务在临时循环上执行完毕（修复前任务悬挂、expire 不被调用）
         mock_async_redis.expire.assert_called_once_with(
-            "agent_runtime:t_sync:k", 60
+            "agent_runtime:t_sync:k", Duration.seconds(60)
         )
 
     @staticmethod
@@ -948,5 +937,5 @@ class TestSyncBuildWorkflowDrainsBackgroundTasks:
         t.join(timeout=10)
         assert result["value"] == {"v": 1}
         assert result["drained"] is True
-        mock_async_redis.expire.assert_called_once_with(key, 60)
+        mock_async_redis.expire.assert_called_once_with(key, Duration.seconds(60))
 

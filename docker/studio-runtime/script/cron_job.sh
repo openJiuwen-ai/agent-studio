@@ -99,7 +99,8 @@ function backup_server_log() {
 
         if [ -n "$oldest_file" ]; then
             echo "Removing oldest file: $oldest_file"
-            rm -f "$oldest_file"
+            oldest_file_to_delete="${oldest_file}_to_delete"
+            mv "$oldest_file" "$oldest_file_to_delete" && rm -f "$oldest_file_to_delete"
         fi
     fi
 

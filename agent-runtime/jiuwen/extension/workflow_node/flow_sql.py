@@ -42,6 +42,9 @@ class FlowSqlStatusCode(Enum):
     SQL_EXECUTE_ERROR = (101751, "Sql component execute error")
     DATASOURCE_NOT_FOUND = (101753, "Datasource not found: {datasourceId}")
     SQL_INJECTION_BLOCKED = (101754, "Inline variable '{key}' contains unsafe content: {detail}")
+    # 101754 已被 upstream 的 SQL_INJECTION_BLOCKED 占用，本地 MANAGER_NOT_DEPLOYED 改用 101755。
+    MANAGER_NOT_DEPLOYED = (101755, "Sql component cannot execute: manager not deployed in runtime"
+                                      " (AGENT_MANAGER_ENDPOINT is empty)")
 
 
 class FlowSql(WorkflowComponent):
@@ -242,6 +245,13 @@ class FlowSql(WorkflowComponent):
 
     async def _call_execute_api(self, user_fields: dict) -> dict:
         """调用 Java manager 的 SQL 执行 API"""
+        # 前置检查：运行态未部署 manager（AGENT_MANAGER_ENDPOINT 为空）时友好提示，避免拼出空 host URL
+        # 导致连接错误（错误码 101755，i18n 由 ErrorContextBuilder 按 code 查 runtime-msg_{lang}.properties 解析）。
+        if not MANAGER_ENDPOINT or not MANAGER_ENDPOINT.strip():
+            raise JiuWenBaseException(
+                error_code=FlowSqlStatusCode.MANAGER_NOT_DEPLOYED.value[0],
+                message=FlowSqlStatusCode.MANAGER_NOT_DEPLOYED.value[1],
+            )
         url = SQL_EXECUTE_URL_TEMPLATE.format(
             MANAGER_ENDPOINT, self._datasource_id
         )

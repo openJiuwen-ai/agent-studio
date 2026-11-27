@@ -15,6 +15,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployResp;
@@ -51,6 +52,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
 import java.util.Map;
 
@@ -59,7 +78,8 @@ import java.util.Map;
 
 /**
  * McpServiceManagerApi interface
- */ public interface McpServiceManagerApi {
+ */
+public interface McpServiceManagerApi {
     @ApiOperation(value = "批量部署MCP服务", nickname = "batchDeployServices", notes = "一次性部署多个MCP服务",
         response = McpServiceBatchDeployResp.class, tags = {"McpServiceManager"})
     @ApiResponses(value = {
@@ -568,5 +588,120 @@ import java.util.Map;
         String workspaceId,
         @NotNull @ApiParam(value = "工具鉴权方式，分为用户级、服务级和IAM方式", required = true) @Valid @RequestBody
         AuthInfo body);
+
+@ApiOperation(value = "将已部署的MCP服务实例上架到资产广场", nickname = "publishServer",
+        notes = "将已部署的MCP服务实例转换为服务目录条目并上架到资产广场（平台精选，跨租户可见）。"
+            + "仅OWNER/ADMIN或平台运营方可操作；实例须处于部署成功状态；鉴权信息不随目录下发；"
+            + "同一实例重复上架返回既有目录条目并刷新快照。", response = String.class,
+        tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "服务目录条目ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/server/on-shelf", produces = {"application/json"},
+        consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<String> publishServer(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId,
+        @NotNull @ApiParam(value = "上架请求参数", required = true) @Valid @RequestBody McpServerShelfReq body);
+
+    @ApiOperation(value = "将MCP服务目录条目从资产广场下架", nickname = "unpublishServer",
+        notes = "将指定的MCP服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。"
+            + "仅OWNER/ADMIN或平台运营方可操作；重复下架幂等返回成功。", response = String.class,
+        tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "服务目录条目ID", response = String.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = ErrorRsp.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/server/off-shelf/{id}", produces = {"application/json"},
+        method = RequestMethod.POST)
+    ResponseEntity<String> unpublishServer(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema()) @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "服务目录条目id", required = true, schema = @Schema())
+        @PathVariable("id") String id);
+
+    @Operation(summary = "export MCP services", description = "FEAT-134：导出 MCP 服务为迁移文件（不含鉴权凭据）。"
+        + " selection=IDS 时 service_ids 必填（1~100 去重）；selection=ALL 表示当前工作空间全部可管理实例。",
+        tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "迁移文件 JSONL 下载（一个服务一行）", response = Resource.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/service/export", produces = {"application/x-ndjson"},
+        consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<Resource> exportMcpServices(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @NotNull @Valid @RequestBody com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body);
+
+    @Operation(summary = "import MCP services", description = "FEAT-134：上传迁移文件导入为新实例（鉴权置空待补配，"
+        + "自动连接目标 server 拉取工具）。全文件校验失败时无实例创建。", tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "操作受理结果", response = Object.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/service/import", produces = {"application/json"},
+        consumes = {"multipart/form-data"}, method = RequestMethod.POST)
+    ResponseEntity<Object> importMcpServices(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @NotNull @Parameter(description = "迁移文件") @RequestPart("file") MultipartFile file);
+
+    @Operation(summary = "reload MCP service tools", description = "FEAT-134：对已安装（含失败态）的 MCP 服务原地"
+        + "刷新工具快照与状态。不修改配置、不卸载、不影响挂载引用；失败保留原状。", tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "操作受理结果", response = Object.class),
+        @ApiResponse(code = 409, message = "已有活动操作", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/service/reload/{id}", produces = {"application/json"},
+        method = RequestMethod.POST)
+    ResponseEntity<Object> reloadMcpService(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "服务id", required = true, schema = @Schema())
+        @PathVariable("id") String id);
+
+    @Operation(summary = "get MCP operation result", description = "FEAT-134：查询导入/重载操作结果"
+        + "（任务仅接受同空间用户查询）。", tags = {"McpServiceManager"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "操作状态与逐项结果", response = Object.class),
+        @ApiResponse(code = 404, message = "操作不存在", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/mcp/service/operations/{operation_id}",
+        produces = {"application/json"}, method = RequestMethod.GET)
+    ResponseEntity<Object> getMcpOperationResult(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.QUERY, description = "项目空间id", required = true, schema = @Schema())
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "操作id", required = true, schema = @Schema())
+        @PathVariable("operation_id") String operationId);
 
 }

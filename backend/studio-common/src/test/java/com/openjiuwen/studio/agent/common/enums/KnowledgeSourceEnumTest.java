@@ -11,7 +11,7 @@ class KnowledgeSourceEnumTest {
 
     @Test
     void testValues() {
-        assertEquals(3, KnowledgeSourceEnum.values().length);
+        assertEquals(4, KnowledgeSourceEnum.values().length);
     }
 
     @Test
@@ -19,6 +19,7 @@ class KnowledgeSourceEnumTest {
         assertEquals(KnowledgeSourceEnum.KOOSEARCH, KnowledgeSourceEnum.valueOf("KOOSEARCH"));
         assertEquals(KnowledgeSourceEnum.LAKESEARCH, KnowledgeSourceEnum.valueOf("LAKESEARCH"));
         assertEquals(KnowledgeSourceEnum.CUSTOM, KnowledgeSourceEnum.valueOf("CUSTOM"));
+        assertEquals(KnowledgeSourceEnum.OPENJIUWEN, KnowledgeSourceEnum.valueOf("OPENJIUWEN"));
     }
 
     @Test
@@ -26,6 +27,7 @@ class KnowledgeSourceEnumTest {
         assertEquals(KnowledgeSourceEnum.KOOSEARCH, KnowledgeSourceEnum.fromValue("KooSearch"));
         assertEquals(KnowledgeSourceEnum.LAKESEARCH, KnowledgeSourceEnum.fromValue("LakeSearch"));
         assertEquals(KnowledgeSourceEnum.CUSTOM, KnowledgeSourceEnum.fromValue("CUSTOM"));
+        assertEquals(KnowledgeSourceEnum.OPENJIUWEN, KnowledgeSourceEnum.fromValue("OpenJiuwen"));
     }
 
     @Test
@@ -44,5 +46,6 @@ class KnowledgeSourceEnumTest {
         assertEquals("KooSearch", KnowledgeSourceEnum.KOOSEARCH.toString());
         assertEquals("LakeSearch", KnowledgeSourceEnum.LAKESEARCH.toString());
         assertEquals("CUSTOM", KnowledgeSourceEnum.CUSTOM.toString());
+        assertEquals("OpenJiuwen", KnowledgeSourceEnum.OPENJIUWEN.toString());
     }
 }

@@ -13,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployResp;
@@ -60,6 +61,16 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     @Override
     public ResponseEntity<String> createServer(String projectId, String workspaceId, McpServerDetailReq body) {
         return ResponseModel.success(mcpServiceManagerService.createServer(projectId, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<String> publishServer(String projectId, String workspaceId, McpServerShelfReq body) {
+        return ResponseModel.success(mcpServiceManagerService.publishServer(projectId, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<String> unpublishServer(String projectId, String workspaceId, String id) {
+        return ResponseModel.success(mcpServiceManagerService.unpublishServer(projectId, workspaceId, id));
     }
 
     @Override
@@ -188,5 +199,48 @@ public class McpServiceManagerApiController implements McpServiceManagerApi {
     @Override
     public ResponseEntity<Boolean> updateMcpAuthInfo(String projectId, String id, String workspaceId, AuthInfo body) {
         return ResponseModel.success(mcpServiceManagerService.updateMcpAuthInfo(projectId, id, workspaceId, body));
+    }
+
+    @Override
+    public ResponseEntity<org.springframework.core.io.Resource> exportMcpServices(String projectId,
+        String workspaceId, com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq body) {
+        String jsonl = mcpServiceManagerService.exportMcpServices(projectId, workspaceId, body);
+        byte[] bytes = jsonl.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ResponseModel.TransferResource resource =
+            new ResponseModel.TransferResource(new java.io.ByteArrayInputStream(bytes));
+        resource.setFilename("mcp-services.jsonl");
+        resource.setContentType("application/x-ndjson");
+        resource.setLength((long) bytes.length);
+        return ResponseModel.successDownload(resource);
+    }
+
+    @Override
+    public ResponseEntity<Object> importMcpServices(String projectId, String workspaceId,
+        org.springframework.web.multipart.MultipartFile file) {
+        // 读字节前先查大小：multipart 层上限 128MB（平台共享配置），业务上限 10MiB——
+        // 先 getBytes() 再校验会让单请求瞬时吃数百 MB 内存（并发即 DoS 面）
+        if (file.getSize() > com.openjiuwen.studio.agent.manager.dto.McpTransferLine.MAX_FILE_BYTES) {
+            throw new com.openjiuwen.studio.agent.common.exception.AgentStudioException(
+                com.openjiuwen.studio.agent.common.enums.StudioError.MCP_TRANSFER_FORMAT_INVALID,
+                "file exceeds 10 MiB limit");
+        }
+        try {
+            String content = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return ResponseModel.success(
+                mcpServiceManagerService.importMcpServices(projectId, workspaceId, content));
+        } catch (java.io.IOException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @Override
+    public ResponseEntity<Object> reloadMcpService(String projectId, String workspaceId, String id) {
+        return ResponseModel.success(mcpServiceManagerService.reloadMcpService(projectId, workspaceId, id));
+    }
+
+    @Override
+    public ResponseEntity<Object> getMcpOperationResult(String projectId, String workspaceId, String operationId) {
+        return ResponseModel.success(
+            mcpServiceManagerService.getMcpOperationResult(projectId, workspaceId, operationId));
     }
 }

@@ -23,6 +23,7 @@ import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunRsp;
 import com.openjiuwen.studio.agent.manager.entity.TaskEntity;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
+import com.openjiuwen.studio.agent.manager.observability.AsyncCorrelationIds;
 import com.openjiuwen.studio.agent.manager.observability.ExecutionIdSelector;
 import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
 import com.openjiuwen.studio.agent.manager.observability.MdcScope;
@@ -358,12 +359,19 @@ public class TaskRuntimeService {
         WorkflowRunResult result = null;
         AsyncWorkflowListener listener = null;
         try {
-            // 通过流式通道调用runtime，AsyncWorkflowListener在manager侧保存调试记录并捕获消息内容
-            listener = createAsyncListener(executeParams);
-            result = callWorkflowViaStream(executeParams, listener);
+            // 定时/线程池路径无 CorrelationContextFilter：补齐 request-id/trace_id，
+            // 否则 RUNTIME_EXECUTION 出站抛 missing correlation context。
+            AsyncCorrelationIds.Pair correlation = AsyncCorrelationIds.resolve(executeParams.getHttpHeaders());
+            try (MdcScope correlationScope = MdcScope.open(Map.of(
+                    MdcKeys.REQUEST_ID, correlation.requestId(),
+                    MdcKeys.TRACE_ID, correlation.traceId()))) {
+                // 通过流式通道调用runtime，AsyncWorkflowListener在manager侧保存调试记录并捕获消息内容
+                listener = createAsyncListener(executeParams);
+                result = callWorkflowViaStream(executeParams, listener);
 
-            // 轮询等待工作流执行完成
-            waitForWorkflowCompletion(result, executeParams);
+                // 轮询等待工作流执行完成
+                waitForWorkflowCompletion(result, executeParams);
+            }
 
             // 从流式结果构建WorkflowRunRsp
             WorkflowRunRsp workflowRunRsp = buildWorkflowRunRspFromResult(result, executeParams);
@@ -474,7 +482,7 @@ public class TaskRuntimeService {
      */
     private AsyncWorkflowListener createAsyncListener(ExecuteParams executeParams) {
         WorkflowRunResult result = initWorkflowRunResult(executeParams);
-        // requestId在异步线程中可能为null，WorkflowListener.processStart()会fallback到executionId
+        // executeWorkflow 已用 AsyncCorrelationIds + MdcScope 安装 request-id；此处读取权威值
         String requestId = org.slf4j.MDC.get(MdcKeys.REQUEST_ID);
         return new AsyncWorkflowListener(requestId, executeParams, result, executeParams.getHttpHeaders());
     }

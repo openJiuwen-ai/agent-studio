@@ -208,6 +208,5 @@ class ToolWrapper:
                 f"Only '{ToolType.RESTFUL.value}' is supported."
             )
             return
-            yield
         async for chunk in self._get_wrapper().astream(inputs, **kwargs):
             yield chunk

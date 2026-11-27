@@ -30,6 +30,9 @@ public class CorrelationFilterConfig {
     /** 注册名（显式命名，避免依赖 Filter 类型推断）。 */
     public static final String FILTER_NAME = "correlationContextFilter";
 
+    /** 性能日志 Filter 注册名。 */
+    public static final String PERFORM_FILTER_NAME = "performanceLoggingFilter";
+
     @Bean
     public FilterRegistrationBean<CorrelationContextFilter> correlationContextFilterRegistration() {
         FilterRegistrationBean<CorrelationContextFilter> registration =
@@ -39,6 +42,21 @@ public class CorrelationFilterConfig {
             DispatcherType.ASYNC));
         registration.addUrlPatterns("/*");
         registration.setName(FILTER_NAME);
+        return registration;
+    }
+
+    /**
+     * 性能日志 Filter：order = HIGHEST_PRECEDENCE+1，落在关联 Filter 内侧以继承 MDC。
+     */
+    @Bean
+    public FilterRegistrationBean<PerformanceLoggingFilter> performanceLoggingFilterRegistration() {
+        FilterRegistrationBean<PerformanceLoggingFilter> registration =
+            new FilterRegistrationBean<>(new PerformanceLoggingFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        registration.setDispatcherTypes(EnumSet.of(DispatcherType.REQUEST, DispatcherType.ERROR,
+            DispatcherType.ASYNC));
+        registration.addUrlPatterns("/*");
+        registration.setName(PERFORM_FILTER_NAME);
         return registration;
     }
 }

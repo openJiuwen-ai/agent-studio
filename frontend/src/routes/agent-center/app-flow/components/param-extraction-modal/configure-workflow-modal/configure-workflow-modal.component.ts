@@ -144,7 +144,6 @@ export class ConfigureWorkflowModalComponent
     if (this.flow?.entry_condition) {
       this.entry_condition = this.flow.entry_condition;
     }
-    console.log(this.flow)
   }
 
   ngOnChanges(changes: SimpleChanges) {

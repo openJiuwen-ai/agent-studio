@@ -8,10 +8,11 @@ FlowCode - 代码节点组件（基于 LocalCodeRunner，subprocess 执行）
 from __future__ import annotations
 
 import json
-import os
+import threading
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Optional, Union
 
+from agent_runtime.extension.workflow_node.code_blacklist import load_code_blacklist
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
@@ -23,6 +24,9 @@ from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.workflow.components.component import WorkflowComponent
+
+# 兼容既有单测 / 调用方：from ...flow_code import _load_code_blacklist
+_load_code_blacklist = load_code_blacklist
 
 JIUWEN_CODE_TYPE = "jiuwen.code"
 
@@ -230,7 +234,7 @@ class FlowCodeConfig:
 
     code: str = ""
     user_fields: dict = field(default_factory=dict)
-    exec_env: str = "local"
+    exec_env: str = "sandbox"
 
 
 class FlowCode(WorkflowComponent):
@@ -244,10 +248,15 @@ class FlowCode(WorkflowComponent):
         super().__init__()
         self._conf: Optional[FlowCodeConfig] = None
         self._code_runner: Optional[CodeRunner] = None
+        # 懒初始化互斥：同步实现单事件循环内原子，但组件可能经线程池调用，
+        # check-then-act 无锁会重复创建 CodeRunner（与其余组件加锁口径一致）。
+        self._code_runner_lock = threading.Lock()
         if conf is not None:
             self._init_conf(conf)
 
     # ==================== 配置初始化 ====================
+
+    _VALID_EXEC_ENVS = ("local", "sandbox", "")
 
     def _init_conf(self, conf: Union[FlowCodeConfig, dict]):
         """初始化配置并校验
@@ -263,7 +272,7 @@ class FlowCode(WorkflowComponent):
                 self._conf = FlowCodeConfig(
                     code=conf.get("code", ""),
                     user_fields=conf.get("userFields", {}),
-                    exec_env=conf.get("exec_env", "local"),
+                    exec_env=conf.get("exec_env", "sandbox"),
                 )
             else:
                 self._conf = conf
@@ -283,6 +292,20 @@ class FlowCode(WorkflowComponent):
                 reason="code must be a non-empty string",
                 workflow="n/a",
             )
+
+        raw_exec_env = (self._conf.exec_env or "").strip().lower()
+        if raw_exec_env not in self._VALID_EXEC_ENVS:
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_SCHEMA_INVALID,
+                comp_id="flow_code",
+                reason=(
+                    f"Invalid exec_env '{self._conf.exec_env}'. "
+                    f"Must be one of: local, sandbox. "
+                    f"Unknown values are rejected to prevent bypassing security controls."
+                ),
+                workflow="n/a",
+            )
+        self._conf.exec_env = raw_exec_env
 
     def init(self, conf=None, **kwargs):
         """兼容遗留工作流引擎的两阶段初始化"""
@@ -316,7 +339,7 @@ class FlowCode(WorkflowComponent):
             BuildError: 发现黑名单关键字时抛出异常
         """
         clean_code = " ".join(code.split())
-        black_list = json.loads(os.environ.get("CODE_BLACK_LIST", "[]"))
+        black_list = load_code_blacklist()
         if black_list:
             black_keyword = next((kw for kw in black_list if kw in clean_code), None)
             if black_keyword:
@@ -328,6 +351,38 @@ class FlowCode(WorkflowComponent):
                     workflow="n/a",
                 )
 
+    def _get_exception_timeout(self, session: Session) -> Optional[float]:
+        """从 session 的节点配置中读取异常处理超时（exceptionProcess.timeout）。
+
+        Returns:
+            超时秒数；未配置异常处理时返回 None。
+        """
+        try:
+            node_config = session.get_node_config()
+        except Exception as e:
+            workflow_logger.warning(f"Failed to get node config for exception timeout: {e}")
+            return None
+        if node_config is None:
+            return None
+        # 兼容 NodeSpec 对象和 dict 两种形态
+        ep = getattr(node_config, "exception_config", None)
+        if ep is None and isinstance(node_config, dict):
+            ep = (node_config.get("configs") or {}).get("exceptionProcess")
+        if ep is None:
+            return None
+        # NodeSpec.exception_config 可能是 ExceptionConfig 对象（extra 字段）或 dict
+        timeout = getattr(ep, "timeout", None)
+        if timeout is None and isinstance(ep, dict):
+            timeout = ep.get("timeout")
+        if timeout is None:
+            # ExceptionConfig 的 extra 字段可能用 timeout 或 exceptionProcess 嵌套
+            timeout = getattr(ep, "exceptionProcess", None)
+            if isinstance(timeout, dict):
+                timeout = timeout.get("timeout")
+        if isinstance(timeout, (int, float)) and timeout > 0:
+            return float(timeout)
+        return None
+
     def _get_local_runner(self) -> "CodeRunner":
         """Helper to create a local runner. Used by fallback logic.
 
@@ -335,19 +390,29 @@ class FlowCode(WorkflowComponent):
             A new InprocessCodeRunner 或 LocalCodeRunner instance.
 
         Raises:
-            BuildError: If SysOperation not found (subprocess 模式).
+            BuildError: If ALLOW_LOCAL_CODE_EXEC is false or SysOperation not found.
         """
         from agent_runtime.common.config import settings
         from agent_runtime.extension.workflow_node.code_runner.runner import (
             CodeRunnerFactory,
         )
 
-        # inprocess 模式不需要 sys_operation
+        if not settings.code_execution.allow_local_exec:
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp_id="flow_code",
+                reason=(
+                    "Local code execution is disabled (ALLOW_LOCAL_CODE_EXEC=false). "
+                    "Configure SECURITY_SANDBOX_SERVER to use sandbox mode, "
+                    "or set ALLOW_LOCAL_CODE_EXEC=true for trusted internal networks only."
+                ),
+                workflow="n/a",
+            )
+
         if settings.code_execution.local_exec_mode == "inprocess":
             from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
             return InprocessCodeRunner()
 
-        # subprocess 模式需要 sys_operation
         from openjiuwen.core.runner import Runner
 
         sys_op_id = "flow_code_sys_op"
@@ -365,28 +430,45 @@ class FlowCode(WorkflowComponent):
         return local_runner.create(code_op)
 
     def _ensure_code_runner(self):
-        """Lazy-load CodeRunner instance using Runner pattern.
-
-        Selects the appropriate CodeRunner based on exec_env configuration and LOCAL_CODE_EXEC_MODE:
-        - 'local' + inprocess: InprocessCodeRunner（进程内 exec，不依赖 sys_operation）
-        - 'local' + subprocess: LocalCodeRunner（子进程执行，依赖 sys_operation）
-        - 'sandbox': SandboxCodeRunner (with fallback to local if not configured)
-
-        Raises:
-            BuildError: SysOperation not found or critical failure.
-        """
+        """懒初始化 CodeRunner：双检加锁，并发（含跨线程）只创建一次。"""
         if self._code_runner is not None:
             return
+        with self._code_runner_lock:
+            if self._code_runner is not None:
+                return
+            self._create_code_runner()
 
+    def _create_code_runner(self):
+        """Lazy-load CodeRunner instance using Runner pattern.
+
+        Selects the appropriate CodeRunner based on exec_env configuration:
+        - 'sandbox'（默认）: SandboxCodeRunner，需配置 SECURITY_SANDBOX_SERVER
+        - 'local' + inprocess: InprocessCodeRunner（需 ALLOW_LOCAL_CODE_EXEC=true）
+        - 'local' + subprocess: LocalCodeRunner（需 ALLOW_LOCAL_CODE_EXEC=true）
+
+        Raises:
+            BuildError: SysOperation not found, sandbox not configured, or local exec disabled.
+        """
         from agent_runtime.common.config import settings
 
-        exec_env = self._conf.exec_env or "local"
+        exec_env = self._conf.exec_env or "sandbox"
 
-        # inprocess 模式直接创建，不依赖 sys_operation
-        if exec_env == "local" and settings.code_execution.local_exec_mode == "inprocess":
-            from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
-            self._code_runner = InprocessCodeRunner()
-            return
+        if exec_env == "local":
+            if not settings.code_execution.allow_local_exec:
+                raise build_error(
+                    StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                    comp_id="flow_code",
+                    reason=(
+                        "Local code execution is disabled (ALLOW_LOCAL_CODE_EXEC=false). "
+                        "Configure SECURITY_SANDBOX_SERVER to use sandbox mode, "
+                        "or set ALLOW_LOCAL_CODE_EXEC=true for trusted internal networks only."
+                    ),
+                    workflow="n/a",
+                )
+            if settings.code_execution.local_exec_mode == "inprocess":
+                from agent_runtime.extension.workflow_node.code_runner.inprocess_code_runner import InprocessCodeRunner
+                self._code_runner = InprocessCodeRunner()
+                return
 
         # 原有逻辑：subprocess/sandbox 需要依赖 sys_operation
         from openjiuwen.core.runner import Runner
@@ -410,10 +492,17 @@ class FlowCode(WorkflowComponent):
             runner_strategy = CodeRunnerFactory.get_runner(exec_env)
             self._code_runner = runner_strategy.create(code_op)
         except Exception as e:
-            workflow_logger.debug(
-                f"Failed to create runner for '{exec_env}': {e}, fallback to local"
-            )
-            self._code_runner = self._get_local_runner()
+            raise build_error(
+                StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                comp_id="flow_code",
+                reason=(
+                    f"Failed to create runner for '{exec_env}': {e}. "
+                    "Fallback to local is disabled for security. "
+                    "Check SECURITY_SANDBOX_SERVER configuration or "
+                    "set ALLOW_LOCAL_CODE_EXEC=true for trusted networks."
+                ),
+                workflow="n/a",
+            ) from e
 
     async def invoke(
         self, inputs: Input, session: Session, context: ModelContext
@@ -454,45 +543,65 @@ class FlowCode(WorkflowComponent):
             if inputs_schema:
                 user_fields = _coerce_inputs(user_fields, inputs_schema)
 
-            # 4. 执行代码（带 sandbox 失败 fallback 到 local）
+            # 4. 执行代码（沙箱失败时拒绝执行，不自动回退到本地）
             from agent_runtime.common.config import settings
 
-            exec_timeout = settings.security_sandbox.timeout_seconds
+            exec_env = self._conf.exec_env or "sandbox"
+            # 内层超时优先取异常处理配置的 exceptionProcess.timeout（与外层 asyncio.wait_for 同值），
+            # 与沙箱超时（SECURITY_SANDBOX_TIMEOUT）/本地兜底超时取小生效：
+            # - 两层取小，先到者触发，异常汇入 _do_invoke_with_exception_handle 按 handleType 兜底。
+            # - local 路径下内层负责中断 exec 线程并释放锁，避免重试死锁。
+            # 读不到 exceptionProcess.timeout 时按执行环境回退：
+            #   sandbox 用 SECURITY_SANDBOX_TIMEOUT，local 用 LOCAL_CODE_EXEC_TIMEOUT。
+            exec_timeout = self._get_exception_timeout(session)
+            timeout_source = "exceptionProcess.timeout"
+            if exec_timeout is None:
+                if exec_env == "sandbox":
+                    exec_timeout = settings.security_sandbox.timeout_seconds
+                    timeout_source = "SECURITY_SANDBOX_TIMEOUT"
+                else:
+                    exec_timeout = settings.code_execution.local_exec_timeout
+                    timeout_source = "LOCAL_CODE_EXEC_TIMEOUT"
             workflow_logger.info(
-                "[FlowCode] exec_timeout=%s (from SECURITY_SANDBOX_TIMEOUT)",
+                "[FlowCode] exec_env=%s, exec_timeout=%s",
+                exec_env,
                 exec_timeout,
             )
-            active_runner = self._code_runner
+            run_function_log = ""
             try:
-                result_dict = await self._code_runner.run(
+                run_ret = await self._code_runner.run(
                     user_code=self._conf.code,
                     inputs=user_fields,
                     timeout=exec_timeout,
                 )
             except Exception as e:
-                # Sandbox execution failed, fallback to local
-                exec_env = self._conf.exec_env or "local"
                 if exec_env == "sandbox":
                     if "timeout" in str(e).lower():
-                        # 超时不应 fallback 到本地，否则同样的代码会再次超时
                         raise RuntimeError(
-                            f"代码执行超时（已超过 {exec_timeout} 秒限制），"
-                            f"请优化代码或调整 SECURITY_SANDBOX_TIMEOUT 配置"
+                            f"代码执行超时（已超过 {exec_timeout} 秒限制，来源 {timeout_source}），"
+                            f"请优化代码或调整超时配置"
                         ) from e
-                    workflow_logger.warning(
-                        f"Sandbox execution failed: {e}, fallback to local"
-                    )
-                    active_runner = self._get_local_runner()
-                    result_dict = await active_runner.run(
-                        user_code=self._conf.code,
-                        inputs=user_fields,
-                        timeout=exec_timeout,
-                    )
+                    raise build_error(
+                        StatusCode.WORKFLOW_COMPONENT_EXECUTION_ERROR,
+                        comp_id="flow_code",
+                        reason=(
+                            f"Sandbox execution failed: {e}. "
+                            "Local fallback is disabled for security. "
+                            "Check SECURITY_SANDBOX_SERVER configuration or "
+                            "set ALLOW_LOCAL_CODE_EXEC=true for trusted networks."
+                        ),
+                        workflow="n/a",
+                    ) from e
                 else:
-                    raise  # Re-raise for non-sandbox environments
+                    raise
+
+            # 所有 runner 的 run() 统一返回 CodeRunResult（含 result + function_log），
+            # 从返回值获取 function_log，避免并发调用下实例属性被覆盖。
+            result_dict = run_ret.result
+            run_function_log = run_ret.function_log
 
             # 4.5 将 function_log（用户 print 输出）通过 tracer 发送到 onInvokeData
-            function_log = getattr(active_runner, "function_log", "")
+            function_log = run_function_log
             if function_log:
                 try:
                     await session.trace(data={"function_log": function_log})

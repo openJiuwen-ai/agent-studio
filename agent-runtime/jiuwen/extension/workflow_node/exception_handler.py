@@ -12,6 +12,7 @@ from jiuwen.orchestration.flow.constant import (
     EXCEPTION_OUTPUT_RESULT,
     EXCEPTION_OUTPUT_RESULT_FAILED,
 )
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.runner.callback import AsyncCallbackFramework
 
@@ -111,10 +112,21 @@ def register_error_recovery_handler():
 
         ht = (exception_config.handle_type or "").lower()
         if ht == EXCEPTION_HANDLE_DEFAULT_OUTPUTS.lower():
+            # 真实错误已发生只是被降级接管：先标红（error 事实进 trace），
+            # 再交付默认输出，流程不受影响、错误不因降级丢失。
+            try:
+                await session.trace_error(error)
+            except Exception as trace_exc:
+                # 观测失败不得反噬异常恢复流程
+                workflow_logger.debug("handle_error_recovery trace_error failed: %s", trace_exc)
             return _handle_default_outputs(error, exception_config, session)
         if ht == EXCEPTION_HANDLE_ERROR_BRANCH.lower():
             if node_type in _NO_ERROR_BRANCH_TYPES:
                 return None
+            try:
+                await session.trace_error(error)
+            except Exception as trace_exc:
+                workflow_logger.debug("handle_error_recovery trace_error failed: %s", trace_exc)
             return _handle_error_branch(error)
         return None
 

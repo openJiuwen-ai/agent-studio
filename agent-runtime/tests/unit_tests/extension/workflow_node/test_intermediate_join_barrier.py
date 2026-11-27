@@ -488,3 +488,41 @@ def test_legacy_branch_same_join_no_premature_trigger():
         "selector cannot be filtered; adding J to waits would let B2's "
         "TriggerMessage bypass the barrier"
     )
+
+
+def test_loop_back_edge_to_branch_head_not_filtered():
+    """环回边拓扑：环首节点 J 既有环入口 CB 的普通边，又有环尾分支 B 的
+    条件回边（B-default->J），且 J 可达 B（构成环）。
+
+    安全检查会认为"CB 是常驻前驱、必然先触发 → 回边冗余"（_pred_covers
+    对无归属前驱直接返回 True），但该论证只在第一圈成立：循环再次进入 J
+    只能靠这条条件边，过滤后第二圈起迭代失效。对应 dryrun 转账工作流
+    "转账主控_意图识别"复合循环（环尾分支 -default-> 环首分支，环首另有
+    cycle_begin 常驻入边），表现为恢复轮工作流提前结束/下一轮重启。
+    """
+    g = PregelGraph()
+    for nid in ["CB", "J", "X", "B"]:
+        g.add_node(nid, _FakeExec())
+
+    g.add_edge("CB", "J")
+    g.add_edge("J", "X")
+    g.add_edge("X", "B")
+
+    r = BranchRouter()
+    r.add_branch("True", ["J"], branch_id="B-default")
+    g.add_conditional_edges("B", r)
+    g.register_branch_targets("B", {"J"})
+
+    g._compile()
+    assert "J" not in g.waits, (
+        "J 是环首：环回边是循环再次进入的唯一触发路径，不应提升为 barrier"
+    )
+    compiled = g._compile()
+    node = compiled.nodes.get("B")
+    assert node is not None
+    for router in node.routers:
+        sel = getattr(router, "selector", None)
+        sel_name = getattr(sel, "__name__", str(sel))
+        assert "_filtered" not in sel_name, (
+            f"B selector 不应被过滤（环回边被误判为冗余）: {sel_name}"
+        )

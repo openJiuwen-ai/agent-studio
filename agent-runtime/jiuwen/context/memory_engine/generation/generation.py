@@ -296,11 +296,12 @@ class Generator:
         add_memories = []
         for mem_dict in user_memory:
             if (
-                mem_dict.get("mem_type", "") == "user_profile"
-                and "mem_instruct" not in mem_dict
+                (
+                    mem_dict.get("mem_type", "") == "user_profile"
+                    and "mem_instruct" not in mem_dict
+                )
+                or mem_dict.get("mem_instruct", "") == "ADD"
             ):
-                add_memories.append(mem_dict)
-            elif mem_dict.get("mem_instruct", "") == "ADD":
                 add_memories.append(mem_dict)
         ret_memories = await self._resolve_conflict(
             add_memories, user_id, scope_id, base_chat_model, message_mem_id

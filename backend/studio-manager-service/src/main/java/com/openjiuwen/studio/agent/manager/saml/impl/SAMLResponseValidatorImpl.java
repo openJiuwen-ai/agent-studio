@@ -12,6 +12,8 @@ import com.openjiuwen.studio.agent.manager.saml.ServiceProvider;
 import com.openjiuwen.studio.agent.manager.saml.UserInfoBean;
 
 import org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
 
 import java.security.PublicKey;
@@ -29,6 +31,8 @@ import javax.xml.crypto.dsig.dom.DOMValidateContext;
 
 public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
 
+    private static final Logger logger = LoggerFactory.getLogger(SAMLResponseValidatorImpl.class.getName());
+
     private final SAMLResponse response;
 
     private final ServiceProvider provider;
@@ -36,6 +40,12 @@ public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
     public SAMLResponseValidatorImpl(String response) throws SAMLException {
         this.response = new SAMLResponseImpl(response);
         this.provider = ServiceProviderImpl.getInstance();
+    }
+
+    // 包内可见构造器：供单元测试注入 response/provider，不触达全局配置单例
+    SAMLResponseValidatorImpl(SAMLResponse response, ServiceProvider provider) {
+        this.response = response;
+        this.provider = provider;
     }
 
     // 静态代码检查G.OTH.01：实现接口方法应加@Override注解，确保编译期校验方法签名一致性
@@ -62,8 +72,25 @@ public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
         return response.getNameId();
     }
 
+    // 包内可见：供单元测试直接验证 Issuer 校验逻辑
+    boolean isValidServiceProviderForTest() {
+        return validServiceProvider();
+    }
+
     private boolean validServiceProvider() {
-        return response.getIssuer().equalsIgnoreCase("www.demo.com");
+        // SAML Response 的 Issuer 是 IdP entityID，应与 idpIssuer 配置比较；
+        // issuer 配置是 SP entityID，仅用于 AuthnRequest 标识自身
+        // （SAMLRequestImpl），两者语义不同不可互相替代
+        String expectedIdpIssuer = provider.getIdpIssuer();
+        if (expectedIdpIssuer == null || expectedIdpIssuer.trim().isEmpty()) {
+            // fail-closed：未配置 idpIssuer 时不做放宽校验，拒绝该响应并提示
+            // 补充配置（保留与原硬编码校验一致的 fail-closed 安全语义）
+            logger.warn(
+                "saml.idpIssuer is not configured; Response Issuer validation fails. "
+                    + "Configure idpIssuer with the IdP entityID to enable SSO.");
+            return false;
+        }
+        return response.getIssuer().equalsIgnoreCase(expectedIdpIssuer.trim());
     }
 
     private boolean timeNoReache() {

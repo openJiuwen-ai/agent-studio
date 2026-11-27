@@ -40,7 +40,7 @@ import com.openjiuwen.studio.prompt.engineering.mapper.PeTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelI18nHandler;
 
 import com.alibaba.excel.EasyExcel;
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 import jakarta.servlet.http.HttpServletResponse;
 
 import org.junit.jupiter.api.BeforeEach;

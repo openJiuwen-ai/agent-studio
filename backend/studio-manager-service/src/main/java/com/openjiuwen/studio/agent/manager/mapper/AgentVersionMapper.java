@@ -57,5 +57,5 @@ public interface AgentVersionMapper {
      */
     int deleteByAgentId(@Param("agentId") String agentId);
 
-    void updateProjectIdByVersionIds(String opSvcProjectId, List<String> versionIds);
+    void updateProjectIdByVersionIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("versionIds") List<String> versionIds);
 }

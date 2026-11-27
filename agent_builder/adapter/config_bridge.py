@@ -156,7 +156,7 @@ class SecuritySandboxSettings(BaseSettings):
         default=600, validation_alias="SECURITY_SANDBOX_IDLE_TTL"
     )
     timeout_seconds: int = Field(
-        default=300, validation_alias="SECURITY_SANDBOX_TIMEOUT"
+        default=900, validation_alias="SECURITY_SANDBOX_TIMEOUT"
     )
     sandbox_type: str = Field(
         default="aio", validation_alias="SECURITY_SANDBOX_TYPE"
@@ -330,6 +330,10 @@ class CodeExecutionSettings(BaseSettings):
     local_exec_mode: Literal["inprocess", "subprocess"] = Field(
         default="inprocess",
         validation_alias="LOCAL_CODE_EXEC_MODE",
+    )
+    allow_local_exec: bool = Field(
+        default=False,
+        validation_alias="ALLOW_LOCAL_CODE_EXEC",
     )
 
     model_config = SettingsConfigDict(

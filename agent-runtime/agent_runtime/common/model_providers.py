@@ -155,9 +155,8 @@ class Nl2ModelConfigProvider:
         x_auth_token = headers.get("x_auth_token", "")
 
         ctx = _request_ctx.get()
-        if ctx and ctx.headers:
-            if not x_auth_token:
-                x_auth_token = ctx.headers.get("x-auth-token", "") or ctx.headers.get("X-Auth-Token", "")
+        if ctx and ctx.headers and not x_auth_token:
+            x_auth_token = ctx.headers.get("x-auth-token", "") or ctx.headers.get("X-Auth-Token", "")
 
         custom_headers = {}
         if auth_id:
@@ -369,6 +368,7 @@ class OBSModelConfigProvider(ModelConfigProvider):
             model_service_id=model_service_id,   # extra 字段，供 StudioModelClient 解析
             auth_id=auth_id,
             refresh=refresh,
+            model_display_name=await self._resolve_display_name(model_service_id),
         )
 
         # 4. 请求级超参数；真实 model_name 由 resolver 解析后在 _invoke_one_model 覆盖。
@@ -401,6 +401,21 @@ class OBSModelConfigProvider(ModelConfigProvider):
             model_config=model_request_config,
             cache_stream=True,
         )
+
+    @staticmethod
+    async def _resolve_display_name(model_service_id: str) -> str:
+        """模型显示名（元数据 model_name，走既有缓存）；缺失返回空串。
+
+        仅作遥测展示（llm span 的 gen_ai.request.model 用真名），不影响
+        路由——路由身份仍是 modelServiceId，真实 model_name 由 resolver
+        在 invoke 时解析覆盖。查询失败静默降级为空串（不覆盖探针结果）。
+        """
+        try:
+            from model_service import query_model_display_name
+
+            return await query_model_display_name(model_service_id)
+        except Exception:  # noqa: BLE001 - 显示名缺失不影响模型构建
+            return ""
 
 
 
@@ -447,9 +462,11 @@ class IRModelConfigProvider(ModelConfigProvider):
         frequency_penalty = hyper_params.get("frequency_penalty", None)
 
         # Build auth headers
-        ctx = _request_ctx.get()
-        auth_token = ctx.headers.get("X-Auth-Token", "") if ctx else ""
-        custom_headers = {"X-Auth-Id": auth_id, "X-Auth-Token": auth_token}
+        # 请求级凭证（X-Auth-Token）不在此烘焙：组件实例与 Model 跨执行复用，
+        # 建模期取首个请求的 token 会串用（多用户越权/计费错乱，轮换后 401
+        # 不愈）。只放静态头，token 由 request_scoped_model 代理在每次调用时
+        # 从请求上下文注入。
+        custom_headers = {"X-Auth-Id": auth_id}
         # D-02/B07（SYNC-01 P3.4）：最终边界剥离关联 Header（含伪造值，大小写不敏感）
         strip_correlation_headers(custom_headers)
 
@@ -461,6 +478,7 @@ class IRModelConfigProvider(ModelConfigProvider):
             timeout=base.timeout,
             verify_ssl=base.ssl_verify,
             custom_headers=custom_headers,
+            request_scoped_auth=True,
         )
 
         extra_body = None

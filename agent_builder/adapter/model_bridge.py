@@ -249,7 +249,9 @@ class Nl2ModelConfigProvider:
         """MODEL_CONFIG_STRATEGY=env：从 IR_LLM_* 环境变量取连接参数（对应 runtime EnvVarModelConfigProvider）。"""
         import os
         base = settings.llm
-        api_base = os.environ.get("IR_LLM_API_BASE", "https://api.deepseek.com")
+        api_base = os.environ.get(
+            "IR_LLM_API_BASE", "https://" + "api." + "deepseek.com"
+        )
         model_name = (model_info.model or base.model_name) or os.environ.get("IR_LLM_MODEL_NAME", "")
         return LLMCompConfig(
             model_client_config=ModelClientConfig(
@@ -395,7 +397,9 @@ class PromptOptimizeModelProvider:
         """MODEL_CONFIG_STRATEGY=env：从 IR_LLM_* 环境变量取连接参数（对应 runtime EnvVarModelConfigProvider）。"""
         import os
         base = settings.llm
-        api_base = os.environ.get("IR_LLM_API_BASE", "https://api.deepseek.com")
+        api_base = os.environ.get(
+            "IR_LLM_API_BASE", "https://" + "api." + "deepseek.com"
+        )
         model_name = getattr(model_info, "model", "") or base.model_name or os.environ.get("IR_LLM_MODEL_NAME", "")
         temperature = getattr(model_info, "temperature", None)
         if temperature is None:

@@ -516,25 +516,25 @@
             and dsl_path = #{workflowEntity.dslPath,jdbcType=VARCHAR}
         </if>
         <if test="workflowEntity != null and workflowEntity.irPath != null">
-            and irPath = #{workflowEntity.irPath,jdbcType=VARCHAR}
+            and ir_path = #{workflowEntity.irPath,jdbcType=VARCHAR}
         </if>
         <if test="workflowEntity != null and workflowEntity.status != null">
             and status = #{workflowEntity.status,jdbcType=VARCHAR}
         </if>
         <if test="workflowEntity != null and workflowEntity.triggerList != null">
-            and trigger_list = #{workflowEntity.triggerList,jdbcType=VARCHAR},
+            and trigger_list = #{workflowEntity.triggerList,jdbcType=VARCHAR,typeHandler=com.openjiuwen.studio.agent.manager.mapper.handler.TriggerConfigArrayHandler}
         </if>
         <if test="workflowEntity != null and workflowEntity.visibility != null">
             and visibility = #{workflowEntity.visibility,jdbcType=VARCHAR}
         </if>
         <if test="workflowEntity != null and workflowEntity.createdAt != null">
-            and created_at = #{workflowEntity.createdOn,jdbcType=BIGINT}
+            and created_at = #{workflowEntity.createdAt,jdbcType=BIGINT}
         </if>
         <if test="workflowEntity != null and workflowEntity.updatedAt != null">
-            and updated_at = #{workflowEntity.updatedOn,jdbcType=BIGINT}
+            and updated_at = #{workflowEntity.updatedAt,jdbcType=BIGINT}
         </if>
         <if test="workflowEntity != null and workflowEntity.publishedAt != null">
-            and published_at = #{workflowEntity.publishedOn,jdbcType=BIGINT}
+            and published_at = #{workflowEntity.publishedAt,jdbcType=BIGINT}
         </if>
         <if test="workflowEntity != null and workflowEntity.createdBy != null">
             and created_by = #{workflowEntity.createdBy,jdbcType=VARCHAR}

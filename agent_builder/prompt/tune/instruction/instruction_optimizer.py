@@ -107,6 +107,8 @@ class GreedyOptimizer(BasicOptimizer):
             prompt, bad_cases, self._params.external_knowledge
         )
 
+        prompt_update = None
+        placeholder_update = None
         for _ in range(5):
             if not self._params.placeholder:
                 prompt_update = self._process_without_placeholder(
@@ -117,8 +119,24 @@ class GreedyOptimizer(BasicOptimizer):
                 prompt_update, placeholder_update = self._process_with_placeholder(
                     prompt, error_example_string, textual_gradient, self._tools
                 )
-            if prompt_update:
+            # 仅接受非空（strip 后非空白）的候选；空白内容视为提取失败，
+            # 继续重试而非提前跳出
+            if prompt_update and prompt_update.strip():
                 break
+            prompt_update = None
+            placeholder_update = None
+        if not prompt_update or not prompt_update.strip():
+            # 重试耗尽仍无有效候选：明确失败并说明精炼问题，而非把 None /
+            # 无效内容传入组合与评估链路
+            raise JiuWenBaseException(
+                StatusCode.PROMPT_OPTIMIZE_REFINE_INSTRUCTION_ERROR.code,
+                StatusCode.PROMPT_OPTIMIZE_REFINE_INSTRUCTION_ERROR.errmsg.format(
+                    error_msg=(
+                        "Failed to extract a valid refined prompt candidate "
+                        "after 5 attempts (missing/empty <PROMPT_OPTIMIZED> tags)"
+                    )
+                ),
+            )
         optimized_full_prompt = self._get_full_prompt(prompt_update, placeholder_update)
         acc, sampled_incorrect_data, evaluations = self._evaluator.evaluate(
             optimized_full_prompt, dataset, self._stop_event
@@ -151,7 +169,7 @@ class GreedyOptimizer(BasicOptimizer):
             error_example_string,
             textual_gradient,
         )
-        opt_prompt_meta.replace(
+        opt_prompt_meta = opt_prompt_meta.replace(
             "{{API_TOOLS_DESCRIPTION}}", str(tools) if tools else "None"
         )
         refined_meta = self._chat_completion(opt_prompt_meta)
@@ -183,7 +201,7 @@ class GreedyOptimizer(BasicOptimizer):
                 error_example_string,
                 textual_gradient,
             )
-            opt_prompt_schema.replace(
+            opt_prompt_schema = opt_prompt_schema.replace(
                 "{{API_TOOLS_DESCRIPTION}}", str(tools) if tools else "None"
             )
             opt_prompt_schema = opt_prompt_schema.replace(

@@ -241,9 +241,9 @@ class IntentionDetectModule:
         if (
             hasattr(result.llm_message, "usage_metadata")
             and result.llm_message.usage_metadata
+            and hasattr(result.llm_message.usage_metadata, "latency")
         ):
-            if hasattr(result.llm_message.usage_metadata, "latency"):
-                llm_output["latency"] = result.llm_message.usage_metadata.latency
+            llm_output["latency"] = result.llm_message.usage_metadata.latency
 
         output_on_insights = copy.deepcopy(llm_output)
         output_on_insights.update(

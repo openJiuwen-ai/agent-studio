@@ -71,7 +71,7 @@ class ManagerListenerConcurrencyTest {
     }
 
     private I18nResolver validResolver() {
-        return (key, loc) -> "msg:" + key;
+        return (key, args, loc) -> "msg:" + key;
     }
 
     // === P0(复审7 §3): HTTP_FAILED 后 onOpen 不得提前释放 latch ===
@@ -86,7 +86,7 @@ class ManagerListenerConcurrencyTest {
         CountDownLatch enteredResolver = new CountDownLatch(1);
         // 屏障 2: 主线程放行 resolver（errorRsp 构建完成后释放 latch）
         CountDownLatch releaseResolver = new CountDownLatch(1);
-        I18nResolver blockingResolver = (key, loc) -> {
+        I18nResolver blockingResolver = (key, args, loc) -> {
             enteredResolver.countDown();
             try {
                 releaseResolver.await();

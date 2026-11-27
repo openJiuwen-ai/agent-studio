@@ -39,6 +39,9 @@ from jiuwen.controller.task_planner.planning_modules.plan_tracker import (
 from jiuwen.controller.utils.utils import MessageConverter, ToolFormatter
 from jiuwen.orchestration.flow.stream.base import StreamData, StreamCode
 
+# step 级总轮数硬上限：step_iteration 会被工具切换/死循环检测合法重置，
+# 单调递增的 total_rounds 不受影响，兜底"计数器被反复清零"形态的 step 死循环
+_MAX_STEP_TOTAL_ROUNDS = 100
 
 
 class PlanExecuteMode(BaseMode):
@@ -119,6 +122,10 @@ class PlanExecuteMode(BaseMode):
             # 保存当前请求上下文，便于工具执行时使用
             self._current_query = request.query
             self._runtime_context = request.runtime_context
+            # OTel：保留 trace_handlers 引用——规划模式插件任务供给经
+            # getattr(self, "_trace_handlers", None) 消费此属性（StepExecute
+            # 载荷消费已随 !2524 回退移除，本行是仅存的赋值点）
+            self._trace_handlers = request.trace_handlers
             self._workflow_req_params = {}
             self._conversation_id = None
             if request.runtime_context and hasattr(
@@ -315,10 +322,29 @@ class PlanExecuteMode(BaseMode):
         max_same_error_retries = 3
         # 工具切换时重置迭代计数器
         last_tool_name = None
-        
+        # 单调总轮数：不受任何重置影响，超限即强制结束本 step
+        total_rounds = 0
+
         while not step_done:
             step_iteration += 1
+            total_rounds += 1
             if self.terminate:
+                break
+            if total_rounds > _MAX_STEP_TOTAL_ROUNDS:
+                logger.warning(
+                    f"task_id: {self.task_id}| Step {step.step_idx} total rounds "
+                    f"{total_rounds} reached hard limit, forcing step end"
+                )
+                # 写入context让模型知道步骤被强制终止的原因
+                self.context_manager.add_function_message(
+                    name=last_tool_name or "unknown",
+                    intent=last_tool_name or "unknown",
+                    content=(
+                        f"当前步骤总轮数已达上限（{_MAX_STEP_TOTAL_ROUNDS}），"
+                        "强制结束本步骤。"
+                    ),
+                    tool_call_id="step_total_rounds_limit",
+                )
                 break
 
             if step.interrupted_workflow_name and step_iteration == 1:
@@ -330,12 +356,18 @@ class PlanExecuteMode(BaseMode):
                     hint_message, ctx["filtered_tools"]
                 )
 
+            # 工具未找到标记：_execute_tool_call 未命中插件/工作流时 yield
+            # msg="tool_not_found" 事件（全文件唯一站点），此处截获——未解析
+            # 成功的调用不算有效工具交接，不得触发下方切换重置
+            round_had_unresolved_tool = False
             async for item in self._process_llm_result(
                 llm_result, step, step_iteration, ctx["plan"]
             ):
                 if isinstance(item, tuple) and len(item) == 2:
                     step_done, result_content = item
                 else:
+                    if getattr(item, "msg", "") == "tool_not_found":
+                        round_had_unresolved_tool = True
                     yield item
 
             if step_done:
@@ -345,14 +377,18 @@ class PlanExecuteMode(BaseMode):
             if not step_done and llm_result.get("has_tool_calls"):
                 current_tool_names = [tc.get("name", "") for tc in llm_result.get("tool_calls", [])]
                 current_tool_name = current_tool_names[0] if current_tool_names else None
-                if current_tool_name and current_tool_name != last_tool_name:
+                if (
+                    current_tool_name
+                    and current_tool_name != last_tool_name
+                    and not round_had_unresolved_tool
+                ):
                     logger.info(
                         f"task_id: {self.task_id}| Step {step.step_idx} tool switched from "
                         f"'{last_tool_name}' to '{current_tool_name}', resetting iteration counter"
                     )
                     step_iteration = 0
                     last_tool_name = current_tool_name
-                elif current_tool_name:
+                elif current_tool_name and not round_had_unresolved_tool:
                     last_tool_name = current_tool_name
                 
                 # 如果切换到的工具之前已经连续失败3次，给出警告
@@ -383,16 +419,17 @@ class PlanExecuteMode(BaseMode):
                             content=error_notice,
                             tool_call_id="dead_loop_detection",
                         )
-                        # 重置计数器，让模型有机会尝试其他工具
+                        # 重置计数器，让模型有机会尝试其他工具。
+                        # 不清 last_tool_name：清空后下一轮同名调用会被上方
+                        # 切换检测误判为新工具再次重置，双重清零打穿迭代上限
                         consecutive_same_error_count = 0
                         last_error_content = None
                         step_iteration = 0
-                        last_tool_name = None
                 else:
                     last_error_content = error_key
                     consecutive_same_error_count = 1
             
-            if step_iteration == max_iterations:
+            if step_iteration >= max_iterations:
                 last_iteration_had_tool_call = llm_result.get("has_tool_calls", False)
                 if last_iteration_had_tool_call:
                     logger.info(
@@ -416,6 +453,16 @@ class PlanExecuteMode(BaseMode):
                     
                     if step_done:
                         break
+                # 触顶终局：无工具调用（如空响应被跳过）或追加轮仍未完成时，
+                # 强制结束本 step。原等值判断在追加轮后 step_iteration 变为
+                # 6、7、8…永不再命中，step 循环无界
+                self.context_manager.add_function_message(
+                    name=last_tool_name or "unknown",
+                    intent=last_tool_name or "unknown",
+                    content=f"当前步骤已达最大迭代次数（{max_iterations}），强制结束本步骤。",
+                    tool_call_id="step_max_iterations",
+                )
+                break
 
     def _extract_error_signature(self, content: str) -> str:
         """提取错误信息的特征签名，用于判断是否为重复出现的相同错误"""
@@ -569,7 +616,9 @@ class PlanExecuteMode(BaseMode):
                     data = execute_result.data or {}
                     answer = data.get("answer", {})
                     if isinstance(answer, dict):
-                        error_code = answer.get("error_code")
+                        # 缺省按无错处理：键缺失/显式 null 时 None != 0 会把
+                        # 业务成功的工具误判为失败，跨 step 累计直至被熔断拉黑
+                        error_code = answer.get("error_code") or 0
                         result_data = answer.get("result", {})
                         if isinstance(result_data, dict):
                             stderr = result_data.get("stderr", "")
@@ -1169,16 +1218,7 @@ class PlanExecuteMode(BaseMode):
                 execution_id=self.task_id,
             )
 
-        elif event_type == "api_exec_data":
-            yield StreamData(
-                code=StreamCode.PE_API_EXEC_DATA.value,
-                msg="api_exec_data",
-                data={"answer": normalized_data},
-                execution_id=self.task_id,
-            )
-
-        elif event_type == "error":
-            # 插件执行错误
+        elif event_type in ("api_exec_data", "error"):
             yield StreamData(
                 code=StreamCode.PE_API_EXEC_DATA.value,
                 msg="api_exec_data",
@@ -1501,7 +1541,14 @@ class PlanExecuteMode(BaseMode):
             "arguments": arguments_str,
             "plugin": plugin,
             "tool_call_id": tool_call_id,
-            "runtime_data": {"plugins": [plugin]},
+            # OTel：透传 trace_handlers（StreamRequest 已保存），PluginHandler
+            # 经 **runtime_data 传入 plugin.ainvoke，各工具包装器内部
+            # TraceManager 据此发射 on_plugin_start/end——规划模式工具调用
+            # 此前缺 execute_tool span 的根因即此键缺失
+            "runtime_data": {
+                "plugins": [plugin],
+                "trace_handlers": getattr(self, "_trace_handlers", None),
+            },
             "time_dict": {},
         }
 

@@ -241,7 +241,7 @@ public interface WorkflowMapper {
     void updateWorkflowEntityByTraceId(@Param("projectId") String projectId, @Param("traceId") String traceId,
         @Param("workspaceId") String workspaceId, @Param("workflowEntity") WorkflowEntity workflowEntity);
 
-    void updateProjectIdByIds(String opSvcProjectId, List<String> workflowIds);
+    void updateProjectIdByIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("workflowIds") List<String> workflowIds);
 
     void updateWorkflowShareStatus(@Param("workflowId") String workflowId, @Param("status") int status);
 

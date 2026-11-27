@@ -57,7 +57,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         cls._initialized = True
 
     @classmethod
-    def process_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_event(cls, full_data: Dict[str, Any], trace: Trace, *, collect_node_messages: bool = True) -> Any:
         cls._ensure_initialized()
         event_type = full_data.get("event")
         if event_type in _WORKFLOW_BLOCKED_EVENTS:
@@ -69,8 +69,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
                     f"unknown jiuwen workflow event, use event through method, event type is {event_type}"
                 )
                 handler_method = cls._handler_methods.get(EVENT_THROUGH)
-            result = handler_method(full_data, trace)
-            return result
+            if event_type == ConversationEvent.MESSAGE_END.value:
+                return handler_method(full_data, trace, collect_node_messages=collect_node_messages)
+            return handler_method(full_data, trace)
         except Exception as e:
             workflow_logger.error(f"workflow event process failed, event type is {event_type}")
             workflow_logger.error("".join(traceback.format_exception(e)))
@@ -86,9 +87,44 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             )
         return full_data
 
+    @staticmethod
+    def _resolve_workflow_id(data: Dict[str, Any], trace: Trace) -> str:
+        """解析 workflow_id：data 优先，回退 trace.workflow_id，再回退 trace.instance_id。
+
+        trace.instance_id 在工作流入口由 app_run.py 从路径 workflow_id 赋值，
+        即使 workflow_start 帧丢失也能稳定兜底。
+        """
+        return (
+            data.get("workflow_id")
+            or (trace.workflow_id if trace else None)
+            or (trace.instance_id if trace else None)
+        )
+
+    @staticmethod
+    def _resolve_workflow_name(data: Dict[str, Any], trace: Trace) -> str:
+        """解析 workflow_name：data 优先，回退 trace.workflow_name。"""
+        return data.get("workflow_name") or (trace.workflow_name if trace else None)
+
     @classmethod
     def process_workflow_start(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+        # WorkflowRunner.run_streaming 的 workflow_start 帧 data 携带
+        # workflow_id/workflow_name；写入 trace 供后续 message/end/error 帧复用。
+        # trace.instance_id（= 路径 workflow_id）兜底，确保 resume 等无 start 帧场景也能返回。
+        src_data = full_data.get("data", {}) or {}
+        workflow_id = cls._resolve_workflow_id(src_data, trace)
+        workflow_name = cls._resolve_workflow_name(src_data, trace)
+        if trace is not None:
+            if workflow_id:
+                trace.workflow_id = workflow_id
+            if workflow_name:
+                trace.workflow_name = workflow_name
+        # 按条件构造，避免 wire 上出现 workflow_name: null
+        # （EventField.data 是普通 dict，model_dump(exclude_none=True) 不会剔除 dict 内部 None）
         data = {"start_time": full_data.get("createdTime")}
+        if workflow_id:
+            data["workflow_id"] = workflow_id
+        if workflow_name:
+            data["workflow_name"] = workflow_name
         return EventField(
             event=EventMapping.WORKFLOW_START.value,
             data=data,
@@ -107,8 +143,8 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             node_id=data.get("node_id"),
             node_type=node_type,
             node_name=data.get("node_name"),
-            workflow_id=data.get("workflow_id"),
-            workflow_name=data.get("workflow_name"),
+            workflow_id=cls._resolve_workflow_id(data, trace),
+            workflow_name=cls._resolve_workflow_name(data, trace),
             enable_history=data.get("enable_history"),
             createdTime=full_data.get("createdTime"),
         )
@@ -119,7 +155,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def process_message_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_message_end(
+        cls, full_data: Dict[str, Any], trace: Trace, *, collect_node_messages: bool = True
+    ) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -130,8 +168,8 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             node_type=node_type,
             node_name=data.get("node_name"),
             is_finished=True,
-            workflow_id=data.get("workflow_id"),
-            workflow_name=data.get("workflow_name"),
+            workflow_id=cls._resolve_workflow_id(data, trace),
+            workflow_name=cls._resolve_workflow_name(data, trace),
             enable_history=data.get("enable_history"),
             createdTime=full_data.get("createdTime"),
         )
@@ -144,7 +182,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             if trace.outputs is None:
                 trace.outputs = {}
             trace.outputs[RESPONSE_CONTENT] = final_msg
-        else:
+        elif collect_node_messages:
             FieldDataProcessor.process_node_message(node_type=node_type, full_data=full_data, trace=trace)
         FieldDataProcessor.process_history_message(node_type=node_type, full_data=full_data, trace=trace)
         # Interaction node: set waiting status
@@ -179,8 +217,8 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             node_type=node_type,
             code=code,
             message=safe_message,
-            workflow_id=data.get("workflow_id"),
-            workflow_name=data.get("workflow_name"),
+            workflow_id=cls._resolve_workflow_id(data, trace),
+            workflow_name=cls._resolve_workflow_name(data, trace),
             error_msg=error_msg,
             error_reason=error_reason,
             error_suggestion=error_suggestion,

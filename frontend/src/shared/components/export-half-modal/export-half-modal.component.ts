@@ -4,9 +4,11 @@ import { I18nNamespace } from '@i18n';
 import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
 import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service';
 import { AppPluginRepoService } from '@services/agent-center/app-plugin-repo.service';
+import { MCPService } from '@services/agent-center/mcp.service';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { from, map } from 'rxjs';
 import { PromptService } from '@services/prompt.service';
+import { CommonUtils } from 'src/utils/common.util';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -55,7 +57,8 @@ import { NzDrawerRef, NZ_DRAWER_DATA } from 'ng-zorro-antd/drawer';
 })
 export class ExportHalfModalComponent implements OnInit {
   readonly modalRef = inject(NzDrawerRef);
-  @Input() exportType = ApplicationType.SINGLE_AGENT;
+  // FEAT-134: drawer 场景可传入 'MCP'（非 ApplicationType 枚举值），类型放宽为 string
+  @Input() exportType: string = ApplicationType.SINGLE_AGENT;
   @Input() exportTypeOptions = [
     {
       id: ApplicationType.SINGLE_AGENT,
@@ -92,6 +95,7 @@ export class ExportHalfModalComponent implements OnInit {
     [ApplicationType.PLUGIN]: this.getPluginList,
     [ApplicationType.MULTI_AGENT]: this.getAgentList,
     [ApplicationType.PROMPT]: this.getPromptList,
+    'MCP': this.getMcpList,
   };
 
   public listOfColumns: any[] = [];
@@ -113,9 +117,19 @@ export class ExportHalfModalComponent implements OnInit {
     private appflowRepoServe: AppFlowRepoService,
     private appPluginRepoServe: AppPluginRepoService,
     private promptService: PromptService,
+    private mcpService: MCPService,
     private cdr: ChangeDetectorRef,
     @Inject(NZ_DRAWER_DATA) public nzData: any
-  ) {}
+  ) {
+    // drawer 场景下 @Input 不会被绑定（ComponentPortal 不设 inputs），
+    // 调用方统一通过 nzData 传 exportType/exportTypeOptions，这里补上同步
+    if (this.nzData?.exportType) {
+      this.exportType = this.nzData.exportType;
+    }
+    if (this.nzData?.exportTypeOptions?.length) {
+      this.exportTypeOptions = this.nzData.exportTypeOptions;
+    }
+  }
 
   ngOnInit(): void {
     this.initColumns();
@@ -144,6 +158,19 @@ export class ExportHalfModalComponent implements OnInit {
         {
           title: this.i18n.transform('prompt'),
           dataIndex: 'template_name',
+          width: 200,
+        },
+        {
+          title: this.i18n.transform('description'),
+          dataIndex: 'description',
+        },
+      ];
+    } else if (this.exportType === 'MCP') {
+      // FEAT-134：与插件/提示词导出同构，仅名称+描述（MCP 行无 status 字段）
+      return [
+        {
+          title: this.i18n.transform('mcp'),
+          dataIndex: 'name',
           width: 200,
         },
         {
@@ -225,6 +252,30 @@ export class ExportHalfModalComponent implements OnInit {
           data: plugin_list || [],
           total: count || 0,
         };
+      })
+    );
+  }
+
+  /** FEAT-134: MCP 服务导出列表（加载当前空间可管理实例） */
+  private getMcpList(queryParams, offset, limit) {
+    // 与组件库 MCP 页签同参：query 带 type/entry_point，分页在 body（第二参数）
+    const query: { [key: string]: string } = {
+      ...queryParams,
+      type: 'custom',
+      entry_point: 'partial',
+    };
+    if (query.name) {
+      query.language = CommonUtils.getLanguage() === 'zh-cn' ? 'ZH' : 'EN';
+    }
+    return from(
+      this.mcpService.getServiceList(query, {
+        offset,
+        limit,
+      })
+    ).pipe(
+      map((res: any) => {
+        const { mcps, total } = res || {};
+        return { data: mcps || [], total: total || 0 };
       })
     );
   }
@@ -356,17 +407,31 @@ export class ExportHalfModalComponent implements OnInit {
     this.modalRef.close();
   }
 
+  public submitting = false;
+
   public handleExport() {
-    if (this.nzData.confirm && typeof this.nzData.confirm === 'function') {
-      this.nzData.confirm({
+    // 防止连点导致 confirm/emit 重复触发
+    if (this.submitting) {
+      return;
+    }
+    this.submitting = true;
+    try {
+      if (this.nzData.confirm && typeof this.nzData.confirm === 'function') {
+        this.nzData.confirm({
+          type: this.exportType,
+          rows: this.selectedRows,
+        });
+      }
+      this.confirm.emit({
         type: this.exportType,
         rows: this.selectedRows,
       });
+    } catch (e) {
+      // 回调异常时复位 submitting，避免按钮被永久禁用，用户可在抽屉内重试
+      this.submitting = false;
+      console.error('[ExportHalfModal] handleExport failed:', e);
+      return;
     }
-    this.confirm.emit({
-      type: this.exportType,
-      rows: this.selectedRows,
-    });
     this.modalRef.close();
   }
   public close() {

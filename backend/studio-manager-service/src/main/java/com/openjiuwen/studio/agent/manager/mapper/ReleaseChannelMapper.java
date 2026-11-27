@@ -151,5 +151,5 @@ public interface ReleaseChannelMapper {
      */
     int deleteByAppIdAndVersionId(@Param("appId") String appId, @Param("versionId") String versionId);
 
-    void updateProjectIdByIds(String opSvcProjectId, List<String> releaseChannelIds);
+    void updateProjectIdByIds(@Param("opSvcProjectId") String opSvcProjectId, @Param("releaseChannelIds") List<String> releaseChannelIds);
 }

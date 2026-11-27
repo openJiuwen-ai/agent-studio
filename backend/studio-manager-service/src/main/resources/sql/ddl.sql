@@ -2013,6 +2013,54 @@ CREATE TABLE ws_mcp_service_def
     is_share                  TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已共享（0=否，1=是)'
 );
 
+-- FEAT-134 新列走 ALTER（CREATE TABLE 不内联，与 ddl.sql:1002/1231 同款既有模式）。
+-- MySQL 无 ADD COLUMN IF NOT EXISTS；重复执行时 Duplicate column 由
+-- application-manager.yml 的 spring.sql.init.continue-on-error: true 容忍（同文件
+-- 预存在的 4 处裸 ALTER 同理）。首次执行（新库或存量库）列被加上。
+ALTER TABLE ws_mcp_service_def ADD COLUMN snapshot_revision BIGINT NOT NULL DEFAULT 0 COMMENT 'FEAT-134快照修订号';
+ALTER TABLE ws_mcp_service_def ADD COLUMN active_mcp_operation_id VARCHAR(64) NULL COMMENT 'FEAT-134活动操作声明';
+ALTER TABLE ws_mcp_service_def ADD COLUMN import_config_pending TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'FEAT-134导入待补配标记';
+ALTER TABLE ws_mcp_service_def ADD COLUMN import_config_paths TEXT NULL COMMENT 'FEAT-134待补配路径';
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation
+(
+    id              VARCHAR(64) NOT NULL COMMENT '操作ID（UUID）',
+    operation_type  VARCHAR(16) NOT NULL COMMENT 'IMPORT / RELOAD',
+    tenant_id       VARCHAR(64) NOT NULL,
+    project_id      VARCHAR(64) NOT NULL,
+    workspace_id    VARCHAR(64) NOT NULL,
+    creator_id      VARCHAR(64) NOT NULL,
+    status          VARCHAR(32) NOT NULL COMMENT 'RUNNING / SUCCESS / PARTIAL_SUCCESS / FAILED / INTERRUPTED',
+    total           INT NOT NULL DEFAULT 0,
+    created_count   INT NOT NULL DEFAULT 0,
+    success_count   INT NOT NULL DEFAULT 0,
+    failed_count    INT NOT NULL DEFAULT 0,
+    created_date    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    deadline_date   TIMESTAMP NOT NULL COMMENT '受理时固定的执行期限',
+    PRIMARY KEY (id),
+    KEY idx_ws_mcp_operation_ws (tenant_id, project_id, workspace_id, created_date),
+    KEY idx_ws_mcp_operation_deadline (status, deadline_date)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = 'MCP导入/重载操作主表';
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation_item
+(
+    operation_id    VARCHAR(64) NOT NULL,
+    item_index      INT NOT NULL,
+    service_id      VARCHAR(64) NULL COMMENT '新建/目标服务ID',
+    original_name   VARCHAR(64) NULL,
+    actual_name     VARCHAR(64) NULL,
+    status          VARCHAR(32) NOT NULL COMMENT 'PENDING / SUCCESS / FAILED',
+    refresh_status  VARCHAR(32) NULL COMMENT '导入项工具刷新结果',
+    source_snapshot LONGTEXT NULL COMMENT '清理后的源工具声明（只读参考）',
+    result_json     TEXT NULL COMMENT '工具计数、增删名称及提示',
+    error_code      VARCHAR(64) NULL,
+    safe_reason     VARCHAR(512) NULL COMMENT '脱敏后的失败原因',
+    started_date    TIMESTAMP NULL DEFAULT NULL,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (operation_id, item_index)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = 'MCP导入/重载操作逐项表';
+
 CREATE TABLE ws_mcp_server_rating
 (
     rating_id    int unsigned auto_increment primary key,
@@ -2185,4 +2233,18 @@ CREATE TABLE IF NOT EXISTS `t_polling_trigger_state` (
     `updated_at`         TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`trigger_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Polling触发器运行状态表';
+
+-- ===================== FRS-091 资产广场上架开放接口 =====================
+-- t_skill: 上架来源标记（PRESET=官方预置 / USER=用户上架）；published_asset 仍为上架标记
+ALTER TABLE `t_skill` ADD COLUMN `plaza_source` VARCHAR(32) NULL DEFAULT NULL COMMENT '资产广场上架来源（PRESET=官方预置，USER=用户上架）' AFTER `published_asset`;
+UPDATE `t_skill` SET `plaza_source` = 'PRESET' WHERE `published_asset` = '1' AND `plaza_source` IS NULL;
+
+-- ws_mcp_server_def: 用户上架标记 + 源实例关联（供同一实例重复上架去重）
+ALTER TABLE ws_mcp_server_def ADD COLUMN platform_published TINYINT NOT NULL DEFAULT 0 COMMENT '用户上架到资产广场（1=是，0=否）；官方预置 type=inner 不受此列影响';
+ALTER TABLE ws_mcp_server_def ADD COLUMN source_instance_id VARCHAR(64) NULL COMMENT '上架来源的MCP服务实例ID（ws_mcp_service_def.id），用于同一实例重复上架去重';
+CREATE UNIQUE INDEX uk_ws_mcp_server_source_instance ON ws_mcp_server_def (source_instance_id);
+
+-- t_tool: 用户插件上架标记 + 锚定发布版本（t_release_version.version_id）
+ALTER TABLE `t_tool` ADD COLUMN `platform_published` TINYINT NOT NULL DEFAULT 0 COMMENT '用户插件上架到资产广场（1=是，0=否）';
+ALTER TABLE `t_tool` ADD COLUMN `plaza_version_id` VARCHAR(64) NULL COMMENT '上架锚定的发布版本ID（t_release_version.version_id）';
 

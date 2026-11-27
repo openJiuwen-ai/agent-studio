@@ -38,4 +38,13 @@ public class ModelServiceCheckReq {
 
     @NotNull
     private String interfaceProtocol;
+
+    /**
+     * 重写 setter 对 apiUrl 做 trim，避免复制粘贴引入的前后空白导致下游 httpx 判为缺协议。
+     * Lombok {@code @Setter} 检测到手动 setter 后不再为该字段生成 setter。
+     */
+    public ModelServiceCheckReq setApiUrl(String apiUrl) {
+        this.apiUrl = apiUrl == null ? null : apiUrl.trim();
+        return this;
+    }
 }

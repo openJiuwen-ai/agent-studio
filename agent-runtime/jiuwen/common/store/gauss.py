@@ -36,7 +36,6 @@ class DBUtil:
 
         """
         cls.db_config = cls.db_config or GaussDBConfig()
-        cls.ctx_pool = cls.ctx_pool
 
     @classmethod
     @contextmanager

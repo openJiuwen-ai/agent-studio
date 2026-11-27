@@ -131,7 +131,7 @@ public class ResourceServiceTest extends BaseTest {
         String projectId = "test_resource_project_id";
         String workspaceId = "test_workspace_id1";
 
-        Mockito.when(skillMapper.searchBySkillIds(anyList()))
+        Mockito.when(skillMapper.searchBySkillIds(anyList(), ArgumentMatchers.any()))
             .thenReturn(Collections.singletonList(new SkillDetails()));
 
         Assertions.assertThrows(AgentStudioException.class, () -> {
@@ -153,7 +153,7 @@ public class ResourceServiceTest extends BaseTest {
             mockDetail.setSkillId(skillId);
             mockDetail.setName("Test Skill");
 
-            Mockito.when(skillMapper.searchBySkillIds(ArgumentMatchers.anyList()))
+            Mockito.when(skillMapper.searchBySkillIds(ArgumentMatchers.anyList(), ArgumentMatchers.any()))
                 .thenReturn(Collections.singletonList(mockDetail));
 
             Assertions.assertDoesNotThrow(() -> {

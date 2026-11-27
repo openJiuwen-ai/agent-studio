@@ -6,7 +6,10 @@ from abc import ABC
 from typing import List, Callable
 
 from jiuwen.insight.manager import TraceManager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.utils import (
+    extract_tool_trace_info,
+    get_instance_info,
+)
 from jiuwen.orchestration import Invokable
 from jiuwen.orchestration.utils import Input, Output
 from jiuwen.plugin.models.param import Param
@@ -46,8 +49,11 @@ class Function(Invokable, ABC):
                 )
             )
         inputs = self._format_input_with_default_when_required(inputs)
+        instance_info = get_instance_info(self)
+        # planner tool_call 标识入扁平键（core handler 盖 gen_ai.tool.*）
+        instance_info.update(extract_tool_trace_info(kwargs))
         trace_manager = TraceManager.generate_manager(
-            kwargs.pop("trace_handlers", None), get_instance_info(self)
+            kwargs.pop("trace_handlers", None), instance_info
         )
         await trace_manager.on_plugin_start(inputs)
         try:

@@ -39,11 +39,23 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "LoopSetVariable": "jiuwen.setVariable",
     "Aggregate": "jiuwen.aggregation",
     "FlowCode": "Code",
+    "FlowTemplateTransform": "TemplateTransform",
+    "jiuwen.templateTransform": "TemplateTransform",
     "ComplexIntentDetection": "EI.ComplexIntentDetection",
+    "jiuwen.plugin": "Api",
     "FlowStreamTransform": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
     "FlowSql": "jiuwen.sql",
 }
+
+
+def _normalize_component_display_type(raw_type: str) -> str:
+    """自定义插件组件类型（custom.*/FlowCustomApi）与 IR 插件类型统一归一为 manager 可识别的 Api。"""
+    if raw_type and raw_type.startswith("custom."):
+        return "Api"
+    if raw_type == "FlowCustomApi":
+        return "Api"
+    return _DEBUG_EVENT_RETURN_TO_SERVICE.get(raw_type, raw_type)
 
 _SKIP_COMPONENT_KEY: list[str] = [
     "_break_branch_",
@@ -61,6 +73,30 @@ END_COMPONENT_TYPES = {END_NODE_TYPE, "End"}
 SUB_WORKFLOW_COMPONENT_TYPES = {"jiuwen.workflowComposite", "jiuwen.subWorkflow", "SubWorkflow"}
 END_OUTPUT_PREFIX = "#end_"
 _SPECIAL_REF_ROOTS = {"global", "_env", "_request", "query", "sys"}
+
+
+def resolve_memory_variable_refs(schema, inputs, session_state) -> None:
+    """将 input_schema 中的 ``${MEMORY_VARIABLE.xxx}`` 解析进 inputs。
+
+    只写 inputs，绝不 ``update_global({path: None})``：session ``update_dict``
+    把 None 当删除；``a[0].b`` 穿越空数组 ``a=[]`` 时 ``root_to_path`` 返回
+    (None, None)，随后 ``delete_by_key`` 抛
+    ``TypeError: argument of type 'NoneType' is not iterable``。
+    """
+    # 延迟导入：openjiuwen session utils 在模块加载早期可能尚未就绪
+    from openjiuwen.core.session.utils import extract_origin_key, is_ref_path
+
+    if not isinstance(schema, dict) or not isinstance(inputs, dict):
+        return
+    for key, schema_value in schema.items():
+        if isinstance(schema_value, str) and is_ref_path(schema_value):
+            origin_key = extract_origin_key(schema_value)
+            if origin_key.startswith(GLOBAL_REF_PREFIX):
+                inputs[key] = session_state.get_global(origin_key)
+        elif isinstance(schema_value, dict):
+            if key not in inputs or not isinstance(inputs[key], dict):
+                inputs[key] = {}
+            resolve_memory_variable_refs(schema_value, inputs[key], session_state)
 
 
 def _extract_ref_source_id(value: Any) -> str | None:
@@ -937,9 +973,7 @@ class WorkflowStreamDataWrapper:
         loop_index = (raw_loop_index + 1) if raw_loop_index is not None else None
         invoke_id = payload.get("invokeId", "")
         component_type_raw = payload.get("componentType", "")
-        component_type_mapped = _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-            component_type_raw, component_type_raw
-        )
+        component_type_mapped = _normalize_component_display_type(component_type_raw)
         component_id = payload.get("componentId", "")
 
         parent_invoke_id = payload.get("parentInvokeId", "")
@@ -1013,8 +1047,7 @@ class WorkflowStreamDataWrapper:
             "agentId": payload.get("workflowId", ""),
             "componentId": payload.get("componentId", ""),
             "componentName": name,
-            "componentType": _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-                payload.get("componentType", "unknown"),
+            "componentType": _normalize_component_display_type(
                 payload.get("componentType", ""),
             ),
             "agentParentInvokeId": "",
@@ -1116,41 +1149,21 @@ def _register_jiuwen_callbacks() -> None:
     3. notify_start_trace_resolved (regular)
        — 通过 CustomSchema 通知 WorkflowWrapper 发送缓存的 start trace
     4. node_perf_start / node_perf_end (transform+regular)
-       — 记录节点执行耗时，输出 _execute_invokable<node=type_name>|{ms} 性能日志
+       — 记录节点执行耗时，输出 _execute_invokable<node=type_name>|node_id={node_id}|{ms} 性能日志
        — 在节点开始/结束打印 common 日志
     """
     try:
         from openjiuwen.core.runner.callback.events import WorkflowEvents
         from openjiuwen.core.runner.callback.utils import get_callback_framework
-        from openjiuwen.core.session.utils import is_ref_path, extract_origin_key
         from openjiuwen.core.session.internal.workflow import NodeSession
 
         _fw = get_callback_framework()
         if _fw is None:
             return
 
-
-        def _resolve_global_refs(schema, inputs, session_state, global_updates):
-            """Recursively resolve ${global.xxx} references in nested input_schema."""
-            if not isinstance(schema, dict) or not isinstance(inputs, dict):
-                return
-            for key, schema_value in schema.items():
-                if isinstance(schema_value, str) and is_ref_path(schema_value):
-                    origin_key = extract_origin_key(schema_value)
-                    if origin_key.startswith(GLOBAL_REF_PREFIX):
-                        var_name = origin_key[len(GLOBAL_REF_PREFIX):]
-                        var_value = session_state.get_global(origin_key)
-                        if var_value is None:
-                            global_updates[var_name] = None
-                        inputs[key] = var_value
-                elif isinstance(schema_value, dict):
-                    if key not in inputs or not isinstance(inputs[key], dict):
-                        inputs[key] = {}
-                    _resolve_global_refs(schema_value, inputs[key], session_state, global_updates)
-
         @_fw.on(WorkflowEvents.COMPONENT_BATCH_INPUT, callback_type="transform", priority=10)
         async def resolve_global_vars_transform(*args, **kwargs):
-            """Transform-type callback: resolve ${global.xxx} references in inputs.
+            """Transform-type callback: resolve ${MEMORY_VARIABLE.xxx} references in inputs.
 
             Runs with priority=10 so it executes before type_convert_inputs (priority=0)
             within trigger_transform. Returns (new_args, new_kwargs) format as required
@@ -1174,11 +1187,7 @@ def _register_jiuwen_callbacks() -> None:
             if not isinstance(input_schema, dict):
                 return (args, kwargs)
 
-            global_updates = {}
-            _resolve_global_refs(input_schema, inputs, session.state(), global_updates)
-
-            if global_updates:
-                session.state().update_global(global_updates)
+            resolve_memory_variable_refs(input_schema, inputs, session.state())
 
             return (args, kwargs)
 
@@ -1392,8 +1401,8 @@ def _register_jiuwen_callbacks() -> None:
         async def node_perf_end(node_id, ability, graph_id, inputs, outputs):
             """Emit per-node execution timing.
 
-            Format: _execute_invokable<node=type_name>|{ms}
-            e.g. _execute_invokable<node=jiuwen.code_代码>|12
+            Format: _execute_invokable<node=type_name>|node_id={node_id}|{ms}
+            e.g. _execute_invokable<node=jiuwen.code_代码>|node_id=node_123|12
             """
             ctx = _node_start_time_ctx.get()
             if ctx is None:
@@ -1419,7 +1428,11 @@ def _register_jiuwen_callbacks() -> None:
                 label = node_name
             else:
                 label = node_id
-            performance_logger.info(f"_execute_invokable<node={label}>|{duration_ms}")
+            # 追加稳定关联键 node_id（与通用日志的 node_id 对齐），耗时仍保持为末段
+            node_id_part = f"|node_id={node_id}" if node_id else ""
+            performance_logger.info(
+                f"_execute_invokable<node={label}>{node_id_part}|{duration_ms}"
+            )
             _node_start_time_ctx.set(None)
     except Exception as e:
         _logger.warning(

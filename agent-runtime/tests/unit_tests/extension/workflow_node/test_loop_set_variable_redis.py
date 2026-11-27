@@ -340,7 +340,7 @@ async def test_save_to_redis_writes_correct_key_and_data():
     redis_client_mock.get.return_value = None
 
     with patch(
-        "jiuwen.extension.workflow_node.loop_set_variable.get_redis_client",
+        "redis_spi.accessor.get_redis",
         return_value=redis_client_mock,
     ):
         await _call_save_to_redis(
@@ -376,7 +376,7 @@ async def test_save_to_redis_merges_with_existing():
     redis_client_mock.get.return_value = existing_data.encode("utf-8")
 
     with patch(
-        "jiuwen.extension.workflow_node.loop_set_variable.get_redis_client",
+        "redis_spi.accessor.get_redis",
         return_value=redis_client_mock,
     ):
         await _call_save_to_redis(
@@ -399,7 +399,7 @@ async def test_save_to_redis_skips_when_no_ids():
     context_mock = MagicMock()
 
     with patch(
-        "jiuwen.extension.workflow_node.loop_set_variable.get_redis_client",
+        "redis_spi.accessor.get_redis",
     ) as mock_get_redis:
         await _call_save_to_redis(
             set_var,
@@ -412,7 +412,7 @@ async def test_save_to_redis_skips_when_no_ids():
     # conversation_id 为空
     session_mock2, _ = _make_session_mock(workflow_id="wf-1", conversation_id="")
     with patch(
-        "jiuwen.extension.workflow_node.loop_set_variable.get_redis_client",
+        "redis_spi.accessor.get_redis",
     ) as mock_get_redis2:
         await _call_save_to_redis(
             set_var,
