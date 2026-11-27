@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.agentbase.config;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.Set;
 
+@Slf4j
 @Component
 public class SSRFStaticConfig {
 
@@ -30,6 +32,11 @@ public class SSRFStaticConfig {
     @Value("${knowledge.ssrf.validation.enabled}")
     public void setSsrfValidationEnabled(boolean value) {
         ssrfValidationEnabled = value;
+        if (!value) {
+            log.warn("knowledge.ssrf.validation.enabled=false: internal-address check for knowledge base "
+                + "connections is disabled. The allowed-protocols whitelist still applies. "
+                + "Set SSRF_VALIDATION_ENABLED=true to enable it.");
+        }
     }
 
     @Value("${knowledge.ssrf.blocked-domains}")

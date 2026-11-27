@@ -78,6 +78,11 @@ public class UrlCheckUtils {
                 : Arrays.asList(toolUrlBlackListStr.split(","));
         toolUrlWhiteList = StringUtils.isBlank(toolUrlWhiteListStr) ? new ArrayList<>()
                 : Arrays.asList(toolUrlWhiteListStr.split(","));
+        if (!enableUrlCheck) {
+            log.warn("tool.url.enable-check=false: SSRF check is disabled for tool/MCP/model/plugin URLs, "
+                + "only the URL syntax check applies. Set enable_tool_url_check=true to enable it, "
+                + "and use tool_url_white_list for endpoints that are expected to resolve to internal addresses.");
+        }
     }
 
     /**
