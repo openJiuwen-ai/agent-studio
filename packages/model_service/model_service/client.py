@@ -422,7 +422,7 @@ class StudioModelClient(OpenAIModelClient):
         from model_service import ports as _ports
         captured = _ports.get_request_customer_headers()
         projected = resolve(captured)
-        if projected:
+        if projected and not conn.custom_headers:
             params["extra_headers"] = projected
         elif conn.custom_headers:
             # 无 rename 投影时用模型配置静态值；仅画布 debug 用登录
@@ -445,6 +445,7 @@ class StudioModelClient(OpenAIModelClient):
                     extra.update(renamed)
                 else:
                     extra.update(to_rename)
+            extra.update(projected)
             if extra:
                 params["extra_headers"] = extra
         # X-Request-Id / traceparent: propagate from request context to model API call
