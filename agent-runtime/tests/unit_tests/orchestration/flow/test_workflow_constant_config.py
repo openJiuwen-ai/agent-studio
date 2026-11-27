@@ -63,7 +63,7 @@ class TestResolveConfigFilename:
     def test_unsafe_filename_falls_back(bad_value):
         # 非法文件名直接被解析函数拒绝并回落默认文件名（不触发文件读取）
         import jiuwen.orchestration.flow.constant as constant_module
-        resolved = constant_module._resolve_config_filename(bad_value)
+        resolved = constant_module.resolve_config_filename(bad_value)
         assert resolved == "workflow_constant.yaml"
 
 

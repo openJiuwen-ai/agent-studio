@@ -11,7 +11,7 @@ import yaml
 from jiuwen.common.log.base import logger
 
 
-def _resolve_config_filename(raw: str) -> str:
+def resolve_config_filename(raw: str) -> str:
     """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
     含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
     if _is_unsafe_filename(raw):
@@ -21,12 +21,19 @@ def _resolve_config_filename(raw: str) -> str:
 
 
 def _is_unsafe_filename(name: str) -> bool:
-    # basename 一致 = 纯文件名（无分隔符/无盘符相对形态）；. 与 .. 同样拒绝
-    return not name or Path(name).name != name or name in {".", ".."}
+    # basename 一致 = 纯文件名；同时拒绝两种分隔符（Windows 反斜杠在 POSIX
+    # 下不是分隔符，Path.name 不会截断，需显式检查）；. 与 .. 同样拒绝
+    return (
+        not name
+        or "/" in name
+        or "\\" in name
+        or Path(name).name != name
+        or name in {".", ".."}
+    )
 
 
 # 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）
-_FILENAME = _resolve_config_filename(os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml"))
+_FILENAME = resolve_config_filename(os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml"))
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resource', _FILENAME)
 
 
