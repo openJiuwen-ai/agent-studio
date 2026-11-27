@@ -988,7 +988,6 @@ async def test_call_done_internal_error_is_swallowed_with_warning():
     assert exporter.get_finished_spans() == ()
 
 
-
 # --- FlowApi / FlowMcp → execute_tool --------------------------------------
 
 
