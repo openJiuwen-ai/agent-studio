@@ -12,8 +12,11 @@ from jiuwen.common.log.base import logger
 
 
 def resolve_config_filename(raw: str) -> str:
-    """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
-    含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
+    """解析环境变量指定的配置文件名。
+
+    只允许 resource 目录内的纯文件名，含路径分隔符/绝对路径/空值时回落
+    默认文件，防目录外读取。
+    """
     if _is_unsafe_filename(raw):
         logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {raw!r}, fallback to default")
         return "workflow_constant.yaml"
@@ -56,7 +59,10 @@ def _load_workflow_constant():
 
 
 def _load_positive_int(key: str, default: int) -> int:
-    """读取正整数配置：容忍字符串数值，非法/非正数回落默认值并告警。"""
+    """读取正整数配置。
+
+    容忍字符串数值，非法/非正数回落默认值并告警。
+    """
     raw = workflow_constant.get(key, default)
     try:
         value = int(raw)
