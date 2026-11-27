@@ -98,23 +98,3 @@ class TestWorkflowRunnerInstanceCache:
 
         # build 只发生一次（第二次缓存命中，复用同一 LazyWorkflow）
         assert len(sentinel_workflows) == 1
-
-
-@pytest.mark.asyncio
-async def test_run_blocking_forwards_execution_id(monkeypatch):
-    """非流式须把 API 层 execution_id 透传给 run_streaming，避免回退 session_id 共享 scope。"""
-    runner = WorkflowRunner(MagicMock())
-    seen = {}
-
-    async def fake_stream_gen(req, execution_id=None, env_scope=None):
-        seen["execution_id"] = execution_id
-        seen["env_scope"] = env_scope
-        yield {"event": "done", "data": {"answer": "ok"}}
-
-    monkeypatch.setattr(runner, "run_streaming", fake_stream_gen)
-    text = await runner.run_blocking(
-        MagicMock(), execution_id="exec-unique", env_scope={"k": 1}
-    )
-    assert text == "ok"
-    assert seen["execution_id"] == "exec-unique"
-    assert seen["env_scope"] == {"k": 1}

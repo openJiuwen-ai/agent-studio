@@ -326,12 +326,10 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
         )
     else:
         _blocking_scope = _env_scope_of(request)
-        _blocking_kwargs: dict = {}
-        if _supports_kwarg(runner.run_blocking, "execution_id"):
-            _blocking_kwargs["execution_id"] = execution_id
         if _supports_kwarg(runner.run_blocking, "env_scope"):
-            _blocking_kwargs["env_scope"] = _blocking_scope
-        full_text = await runner.run_blocking(req, **_blocking_kwargs)
+            full_text = await runner.run_blocking(req, env_scope=_blocking_scope)
+        else:
+            full_text = await runner.run_blocking(req)
         now_ms = int(time.time() * 1000)
         conv_id = req.conversation_id
         otel_trace = get_session_trace(conv_id, execution_id)

@@ -21,12 +21,9 @@ def setup_otel_tracer() -> Optional[Any]:
     Reads configuration from ``settings.otel``.  When ``OTEL_ENABLED`` is
     ``True`` and the ``openjiuwen[tracer-otel]`` extension is installed,
     creates an OTel TracerProvider + exporter and registers
-    ``OtelAgentHandler`` / workflow handler into ``TracerHandlerRegistry``
-    so that all subsequent ``Tracer`` instances automatically emit OTel spans.
-
-    Workflow 侧注册 ``ExecutionScopedWorkflowHandler``：按 runner 写入的
-    execution scope 分发到独立 ``StudioOtelWorkflowHandler``，避免同工作流
-    并发共享 span 状态（不 monkeypatch ``Tracer.init``）。
+    ``OtelAgentHandler`` / ``OtelWorkflowHandler`` into
+    ``TracerHandlerRegistry`` so that all subsequent ``Tracer`` instances
+    automatically emit OTel spans.
 
     This function is idempotent and thread-safe; repeated calls return the
     tracer created by the first successful call.  Returns ``None`` when OTel
@@ -65,14 +62,14 @@ def _create_otel_tracer() -> Optional[Any]:
     try:
         # 本仓子类依赖上游扩展的私有符号（升级可能缺失/改名），与上游导入隔离，
         # 失败时回退官方 handler，避免 OTel 整体静默停用并被误报为"未安装扩展"
-        from agent_runtime.observability.otel_handler_scope import (
-            ExecutionScopedWorkflowHandler,
+        from agent_runtime.observability.tracer_otel_studio import (
+            StudioOtelWorkflowHandler,
         )
 
-        _workflow_handler_cls = ExecutionScopedWorkflowHandler
+        _workflow_handler_cls = StudioOtelWorkflowHandler
     except ImportError as import_exc:
         logger.warning(
-            "ExecutionScopedWorkflowHandler unavailable (%s), "
+            "StudioOtelWorkflowHandler unavailable (%s), "
             "fallback to official OtelWorkflowHandler",
             import_exc,
         )
@@ -120,8 +117,7 @@ def _create_otel_tracer() -> Optional[Any]:
         f"endpoint={config.exporter_endpoint or 'N/A'}, "
         f"protocol={config.protocol}, "
         f"service_name={config.service_name}, "
-        f"sample_rate={config.sample_rate}, "
-        f"workflow_handler={_workflow_handler_cls.__name__}"
+        f"sample_rate={config.sample_rate}"
     )
     return _otel_tracer
 
