@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """workflow_constant 配置加载逻辑单元测试。
 
