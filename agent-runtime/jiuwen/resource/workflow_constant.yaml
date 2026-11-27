@@ -3,15 +3,15 @@ wait_for_user_input_timeout: 300
 # 子Workflow
 wait_panel_workflow_timeout: 30000
 # 单次任务执行最长时间
-task_execute_timeout: 900
+task_execute_timeout: 300
 # 节点超时时间设置（秒）
 default_execution_node_timeout: 7200
 # 节点默认值配置
 type_default_value_dict:
   string: ""
-  integer: 0
-  number: 0.0
-  boolean: false
+  integer: null
+  number: null
+  boolean: null
   array: null
   object: null
   error: null
