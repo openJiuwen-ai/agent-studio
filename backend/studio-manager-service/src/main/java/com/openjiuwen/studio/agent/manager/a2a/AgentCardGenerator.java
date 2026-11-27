@@ -53,7 +53,7 @@ public class AgentCardGenerator {
             .protocolBinding("JSONRPC")
             .url(endpointUrl)
             .transportType(null)
-            .protocolVersion("CURRENT_PROTOCOL_VERSION")
+            .protocolVersion("1.0.0")
             .build();
 
         return AgentCardDto.builder()

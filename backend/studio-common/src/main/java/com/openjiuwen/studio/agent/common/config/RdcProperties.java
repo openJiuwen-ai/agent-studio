@@ -66,6 +66,8 @@ public class RdcProperties {
     public boolean isConfigured() {
         return enabled && baseUrl != null && !baseUrl.isBlank()
             && tenantId != null && !tenantId.isBlank()
+            && token != null && !token.isBlank()
+            && runtimePort > 0
             && runtimeBaseUrl != null && !runtimeBaseUrl.isBlank();
     }
 }

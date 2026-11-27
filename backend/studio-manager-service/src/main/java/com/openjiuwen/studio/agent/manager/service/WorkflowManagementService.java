@@ -1227,16 +1227,16 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
 
-        // FEAT-131: 删除前触发 A3 注销（失败不阻断删除，标记可重试）
+        // 权限校验（必须在 A3 注销之前，避免无权限用户触发注销）
+        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "DELETE");
+        shareResourceManagerService.checkResourceSharedOrNot(projectId, workflowId);
+
+        // FEAT-131: 权限校验通过后触发 A3 注销（失败不阻断删除，标记可重试）
         try {
             a2aRegistrationService.deregisterOnOffline(workflowId);
         } catch (Exception e) {
             log.warn("A2A deregistration hook error (non-blocking), workflowId={}", workflowId, e);
         }
-
-        // 权限校验
-        workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "DELETE");
-        shareResourceManagerService.checkResourceSharedOrNot(projectId, workflowId);
         workflowEntity.setUpdatedAt(System.currentTimeMillis());
 
         // 调用九问接口删除记忆变量
@@ -1700,7 +1700,13 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             .appType(workflowEntity.getWorkflowType())
             .build(), Constants.LATEST_PUBLISH_VERSION, obsService);
 
-        // FEAT-131: 发布后自动产卡 + A1 注册到 RDC（失败不阻断发布）
+        // 4.更新工作流发布状态
+        workflowEntity.setStatus(CommonConstant.WORKFLOW_PUBLISHED);
+        workflowEntity.setPublishedAt(System.currentTimeMillis());
+        workflowEntity.setLastVersionId(releaseVersionIds);
+        workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
+
+        // FEAT-131: 发布状态落库后自动产卡 + A1 注册到 RDC（失败不阻断发布）
         try {
             a2aRegistrationService.registerOnPublish(workflowId, workflowEntity.getDescription(),
                 releaseVersionIds, workflowEntity.getWorkflowType());
@@ -1708,11 +1714,6 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             log.warn("A2A registration hook error (non-blocking), workflowId={}", workflowId, e);
         }
 
-        // 4.更新工作流发布状态
-        workflowEntity.setStatus(CommonConstant.WORKFLOW_PUBLISHED);
-        workflowEntity.setPublishedAt(System.currentTimeMillis());
-        workflowEntity.setLastVersionId(releaseVersionIds);
-        workflowMapper.updateWorkflowEntity(projectId, workflowId, workflowEntity);
         return releaseVersionIds;
     }
 

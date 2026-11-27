@@ -70,6 +70,11 @@ async def handle_a2a(
             make_rpc_error(A2aErrorCode.INVALID_PARAMS, "Invalid JSON body", None)
         )
 
+    if not isinstance(body, dict):
+        return JSONResponse(
+            make_rpc_error(A2aErrorCode.INVALID_PARAMS, "Request body must be a JSON object", None)
+        )
+
     request_id = body.get("id")
     method = body.get("method", "")
 
@@ -85,8 +90,10 @@ async def handle_a2a(
 
     # 3. Extract params and message
     params = body.get("params", {})
+    if not isinstance(params, dict):
+        params = {}
     message = params.get("message", {})
-    if not message:
+    if not isinstance(message, dict) or not message:
         return JSONResponse(
             make_rpc_error(
                 A2aErrorCode.INVALID_PARAMS,
@@ -96,7 +103,9 @@ async def handle_a2a(
         )
 
     # 4. Resolve agent_id (query param → params.agentId → params.metadata.agentId → error)
-    metadata = params.get("metadata", {}) or {}
+    metadata = params.get("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
     resolved_agent_id = agent_id or params.get("agentId") or metadata.get("agentId") or ""
     if not resolved_agent_id:
         return JSONResponse(
@@ -309,9 +318,14 @@ async def _handle_sync_response(
             make_rpc_error(A2aErrorCode.INTERNAL_ERROR, f"Event consumption failed: {e}", request_id)
         )
 
-    # If no terminal frame was produced, synthesize a COMPLETED frame
+    # If no terminal frame was produced, synthesize one
     if final_frame is None:
-        final_frame = mapper.make_completed_frame(last_artifact_text, request_id)
+        if last_artifact_text:
+            final_frame = mapper.make_completed_frame(last_artifact_text, request_id)
+        else:
+            final_frame = mapper.make_failed_frame(
+                "No valid response from workflow execution", request_id
+            )
     elif "method" in final_frame:
         # Last frame was an intermediate notification — upgrade to completed
         final_frame = mapper.make_completed_frame(last_artifact_text, request_id)
@@ -364,12 +378,14 @@ async def _handle_streaming_response(
                         pass
 
         # If no terminal frame was produced, synthesize one
-        if mapper._status not in ("COMPLETED", "FAILED"):
-            frame = mapper.make_completed_frame("", request_id)
+        if not mapper.is_terminal():
+            frame = mapper.make_failed_frame(
+                "No valid response from workflow execution", request_id
+            )
             yield f"event:jsonrpc\ndata:{json.dumps(frame, ensure_ascii=False)}\n\n"
     except Exception as e:
         workflow_logger.error(f"A2A streaming error: {e}", exc_info=True)
-        if mapper._status not in ("COMPLETED", "FAILED"):
+        if not mapper.is_terminal():
             frame = mapper.make_failed_frame(str(e), request_id)
             yield f"event:jsonrpc\ndata:{json.dumps(frame, ensure_ascii=False)}\n\n"
 

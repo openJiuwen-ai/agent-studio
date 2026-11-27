@@ -83,23 +83,49 @@ def _strip_h2c_headers(data: bytes) -> bytes:
 
 
 async def _pipe_with_strip(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-    """从 gateway 读取数据，剥离 h2c headers 后转发到 uvicorn。"""
+    """从 gateway 读取数据，剥离 h2c headers 后转发到 uvicorn。
+
+    缓冲数据直到完整的 HTTP header 区块（\\r\\n\\r\\n）出现后再剥离，
+    避免 TCP 分片导致 Upgrade 头跨块时被原样转发。
+    """
+    buffer = b""
+    headers_done = False
     try:
         while True:
             data = await reader.read(65536)
             if not data:
+                # 刷出残留 buffer（不完整的 header 区块，原样转发）
+                if buffer:
+                    writer.write(buffer)
+                    await writer.drain()
                 break
-            cleaned = _strip_h2c_headers(data)
+
+            if headers_done:
+                # header 区块已处理完，后续数据（body）原样转发
+                writer.write(data)
+                await writer.drain()
+                continue
+
+            buffer += data
+            header_end = buffer.find(b"\r\n\r\n")
+            if header_end == -1:
+                # header 还没读完，继续缓冲
+                continue
+
+            # header 完整了，剥离 h2c 头后转发整块
+            cleaned = _strip_h2c_headers(buffer)
             writer.write(cleaned)
             await writer.drain()
+            buffer = b""
+            headers_done = True
     except (ConnectionResetError, BrokenPipeError):
-        pass
+        _logger.debug("Connection closed during pipe_with_strip")
     finally:
         try:
             writer.close()
             await writer.wait_closed()
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("Error closing writer in pipe_with_strip: %s", e)
 
 
 async def _pipe_raw(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -112,13 +138,13 @@ async def _pipe_raw(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             writer.write(data)
             await writer.drain()
     except (ConnectionResetError, BrokenPipeError):
-        pass
+        _logger.debug("Connection closed during pipe_raw")
     finally:
         try:
             writer.close()
             await writer.wait_closed()
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.debug("Error closing writer in pipe_raw: %s", e)
 
 
 async def _handle_connection(

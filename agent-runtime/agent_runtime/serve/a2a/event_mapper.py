@@ -10,6 +10,10 @@ class A2aEventMapper:
         self.task_id = task_id
         self._status = "SUBMITTED"
 
+    def is_terminal(self) -> bool:
+        """Whether the task has reached a terminal state (COMPLETED or FAILED)."""
+        return self._status in ("COMPLETED", "FAILED")
+
     def make_task_submitted_frame(self, request_id) -> dict:
         """First frame: task accepted."""
         self._status = "WORKING"
@@ -100,7 +104,10 @@ class A2aEventMapper:
         elif event_type in ("ERROR", "EXCEPTION", "error", "plan_error", "exception"):
             text = data.get("text", data.get("message", "Internal error"))
             return self.make_failed_frame(str(text), request_id)
-        elif event_type in ("WAITING_USER_INPUT", "AGENT_INTERRUPTED", "interrupt", "waiting_user_input", "agent_interrupted"):
+        elif event_type in (
+            "WAITING_USER_INPUT", "AGENT_INTERRUPTED",
+            "interrupt", "waiting_user_input", "agent_interrupted",
+        ):
             text = data.get("text") or data.get("answer") or data.get("message") or ""
             return self.make_input_required_degraded_frame(str(text) if text else "", request_id)
         return None
