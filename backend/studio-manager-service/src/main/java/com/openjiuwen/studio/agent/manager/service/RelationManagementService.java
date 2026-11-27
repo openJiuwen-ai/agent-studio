@@ -234,7 +234,7 @@ public class RelationManagementService implements IRelationManagementService {
 
     /**
      * 解析资源的真实属主空间。mapping 落库时 resource_workspace_id 记的是保存方空间，
-     * 跨空间判定必须回资源表查询。目前仅 tool（插件）类型需要该口径（资产广场下架前统计），
+     * 跨空间判定必须回资源表查询。目前 tool（插件）与 skill 类型需要该口径（资产广场下架前统计），
      * 其余类型返回 null，调用方回退到 mapping 行内字段比较。
      *
      * @param resourceId   资源 id（插件场景可能带 #toolId 后缀）
@@ -243,18 +243,56 @@ public class RelationManagementService implements IRelationManagementService {
      * @return 资源真实属主空间 id，无法解析时返回 null
      */
     private String resolveRealResourceWorkspaceId(String resourceId, String resourceType, String projectId) {
-        if (!ResourceTypeEnum.TOOL.name().equalsIgnoreCase(resourceType)) {
-            return null;
-        }
         try {
-            String pluginId = StringUtils.substringBefore(resourceId, "#");
-            PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, projectId);
-            return pluginEntity == null ? null : pluginEntity.getWorkspaceId();
+            if (ResourceTypeEnum.TOOL.name().equalsIgnoreCase(resourceType)) {
+                String pluginId = StringUtils.substringBefore(resourceId, "#");
+                PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, projectId);
+                return pluginEntity == null ? null : pluginEntity.getWorkspaceId();
+            }
+            if (ResourceTypeEnum.SKILL.name().equalsIgnoreCase(resourceType)) {
+                SkillDetails skillDetails = skillMapper.searchBySkillId(resourceId);
+                return skillDetails == null ? null : skillDetails.getWorkspaceId();
+            }
+            return null;
         } catch (Exception e) {
             log.warn("Failed to resolve real resource workspace. resourceId={}, resourceType={}", resourceId,
                     resourceType, e);
             return null;
         }
+    }
+
+    /**
+     * 解析资源当前的共享范围（t_share_scope），返回被共享到的空间 id 集合，
+     * 包含 'all' 时表示全员共享。资源 id 可能带 #toolId 后缀，共享范围按资源主 id 查询。
+     * 查询失败时返回空集合（等价于无共享），不阻断统计主流程。
+     *
+     * @param resourceId 资源 id
+     * @return 共享范围覆盖的空间 id 集合
+     */
+    private Set<String> resolveShareScopeWorkspaces(String resourceId) {
+        try {
+            String scopeResourceId = StringUtils.substringBefore(resourceId, "#");
+            List<ShareScopeEntity> shareScopes = shareScopeMapper.selectShareScopesByResourceId(scopeResourceId);
+            if (shareScopes == null) {
+                return Collections.emptySet();
+            }
+            return shareScopes.stream()
+                    .map(ShareScopeEntity::getWorkspaceId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            log.warn("Failed to resolve share scope workspaces. resourceId={}", resourceId, e);
+            return Collections.emptySet();
+        }
+    }
+
+    /**
+     * 判断消费方空间是否被资源共享范围覆盖（含 'all' 全员共享）。
+     */
+    private boolean isCoveredByShareScope(Set<String> shareScopeWorkspaces, String appWorkspaceId) {
+        return appWorkspaceId != null
+                && (shareScopeWorkspaces.contains(CommonConstant.ALL)
+                        || shareScopeWorkspaces.contains(appWorkspaceId));
     }
 
     private @NotNull List<Relation> buildRelationsFromMapping(List<MappingEntity> mappingEntities,
@@ -504,6 +542,9 @@ public class RelationManagementService implements IRelationManagementService {
                         agentTools.setAppVersion(versionId);
                         agentTools.setResourceId(resourceId);
                         agentTools.setAppWorkspaceId(workspaceId);
+                        // 记录资源真实属主空间：共享统计 SQL 按 resource_workspace_id=属主空间 过滤，
+                        // Agent→插件引用历史上不写该列（恒 NULL）导致共享统计漏算 Agent 侧引用（#1733 测试反馈）
+                        agentTools.setResourceWorkspaceId(pluginEntity.getWorkspaceId());
                         // 获取插件版本号
                         for (MappingEntity toolReference : toolReferences) {
                             if (toolReference.getResourceId().equals(resourceId)) {
@@ -550,6 +591,8 @@ public class RelationManagementService implements IRelationManagementService {
                         .map(MappingEntity::getReferenceType)
                         .orElse(ReferenceTypeEnum.DIRECT.getValue()));
                     agentTools.setAppWorkspaceId(workspaceId);
+                    // 同上：记录资源真实属主空间，避免共享统计漏算 Agent 侧引用（#1733 测试反馈）
+                    agentTools.setResourceWorkspaceId(pluginEntity.getWorkspaceId());
                     String resourceVersion = agentTools.getResourceVersion();
                     agentTools.setExtendInfo(
                         parseToolInput2ResourceParameter(pluginEntity.getPluginId(), resourceVersion, null,
@@ -2331,23 +2374,44 @@ public class RelationManagementService implements IRelationManagementService {
 
             log.info("Selected {} mapping entities from database.", mappingEntities.size());
 
-            // 下架平台精选资产前的受影响引用口径（#1733 评审反馈）：仅保留跨空间直接引用——
-            // 同空间组件库直引下架后仍可按 workspace 解析、团队共享引用走 share 快照链路，均不受下架影响。
+            // 下架平台精选资产前的受影响引用口径（#1733 测试反馈）：统计"下架后会失去访问途径"的
+            // 跨空间引用——消费方空间既非资源属主空间、也不在当前共享范围（t_share_scope）内的引用。
+            // 不能用 reference_type 区分广场/共享引用：共享与上架并存时，消费方无论从广场还是共享入口
+            // 添加，落库均为 'share'（t_mapping 无广场渠道字段），按共享范围判定才是准确口径；
+            // 共享范围内的引用下架后仍可经共享链路解析，不受下架影响，不计入。
             // 注意：mapping 落库时 resource_workspace_id 记的是保存方空间而非资源真实属主空间，
             // 因此跨空间判定必须以资源表中的真实 workspace 为准，不能用 mapping 行内的 resource_workspace_id。
             // 属主空间无法解析时（资源已删除/查询异常）不过滤，宁可多报不可漏报。
             if (Boolean.TRUE.equals(listResourceRelationsQo.getCrossSpaceOnly())) {
                 String realResourceWorkspaceId = resolveRealResourceWorkspaceId(resourceId,
                         listResourceRelationsQo.getResourceType(), projectId);
+                Set<String> shareScopeWorkspaces = resolveShareScopeWorkspaces(resourceId);
                 mappingEntities = mappingEntities.stream()
-                        .filter(entity -> entity.getReferenceType() == null
-                                || "direct".equals(entity.getReferenceType()))
-                        .filter(entity -> realResourceWorkspaceId == null
-                                || entity.getAppWorkspaceId() == null
-                                || !entity.getAppWorkspaceId().equals(realResourceWorkspaceId))
+                        .filter(entity -> entity.getAppWorkspaceId() == null
+                                || realResourceWorkspaceId == null
+                                || (!entity.getAppWorkspaceId().equals(realResourceWorkspaceId)
+                                        && !isCoveredByShareScope(shareScopeWorkspaces, entity.getAppWorkspaceId())))
                         .collect(Collectors.toList());
-                log.info("Filtered to {} cross-space direct references (cross_space_only=true, realResourceWorkspaceId={}).",
-                        mappingEntities.size(), realResourceWorkspaceId);
+                log.info("Filtered to {} plaza-dependent cross-space references (cross_space_only=true, "
+                                + "realResourceWorkspaceId={}, shareScope={}).",
+                        mappingEntities.size(), realResourceWorkspaceId, shareScopeWorkspaces);
+            }
+
+            // 团队共享"被引用"统计口径（#1733 测试反馈）：仅保留当前共享范围覆盖的跨空间消费方引用。
+            // 广场消费方不在共享范围内，其引用（共享+上架并存时落库同样为 'share'）不计入共享统计；
+            // 属主空间自身引用与共享无关，不计入。
+            if ("share".equals(listResourceRelationsQo.getReferenceType())) {
+                String realResourceWorkspaceId = resolveRealResourceWorkspaceId(resourceId,
+                        listResourceRelationsQo.getResourceType(), projectId);
+                Set<String> shareScopeWorkspaces = resolveShareScopeWorkspaces(resourceId);
+                mappingEntities = mappingEntities.stream()
+                        .filter(entity -> entity.getAppWorkspaceId() != null
+                                && !entity.getAppWorkspaceId().equals(realResourceWorkspaceId)
+                                && isCoveredByShareScope(shareScopeWorkspaces, entity.getAppWorkspaceId()))
+                        .collect(Collectors.toList());
+                log.info("Filtered to {} in-share-scope references (reference_type=share, "
+                                + "realResourceWorkspaceId={}, shareScope={}).",
+                        mappingEntities.size(), realResourceWorkspaceId, shareScopeWorkspaces);
             }
 
             // 根据 app_id、app_version、resource_id、resource_version 进行去重

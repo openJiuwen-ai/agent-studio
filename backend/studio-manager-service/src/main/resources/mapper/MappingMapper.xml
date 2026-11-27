@@ -259,7 +259,9 @@
             and a.workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="referenceType == 'share'">
-            and m.resource_workspace_id = #{workspaceId,jdbcType=VARCHAR}
+            <!-- Agent→插件引用历史上不写 resource_workspace_id（恒 NULL），共享统计不能漏掉这部分；
+                 NULL 行放行后由 Java 侧按共享范围（t_share_scope）精确过滤（#1733 测试反馈） -->
+            and (m.resource_workspace_id = #{workspaceId,jdbcType=VARCHAR} or m.resource_workspace_id is null)
         </if>
         <if test="resourceVersion != null and resourceVersion != 'latest'">
             and m.resource_version = #{resourceVersion,jdbcType=VARCHAR}

@@ -121,7 +121,7 @@ export class SkillApi extends JiuwenBaseApi {
     } as any);
   }
 
-  queryReference(skillId: string, offset = 0, limit = 100, messageConfig?: MessageConfig) {
+  queryReference(skillId: string, offset = 0, limit = 100, messageConfig?: MessageConfig, crossSpaceOnly = false) {
     return this.request
       .get({
         url: this.isHc() ? `/v1/studio/resources/${skillId}/referenced-by` : `/v1/{projectId}/agent-manager/relation/resources/${skillId}`,
@@ -129,6 +129,8 @@ export class SkillApi extends JiuwenBaseApi {
           offset,
           limit,
           resource_type: 'skill',
+          // 下架前统计仅看跨空间且未被共享覆盖的引用（#1733 测试反馈）；删除前统计仍用全量口径
+          ...(crossSpaceOnly && { cross_space_only: true }),
         },
       } as any, messageConfig)
       .pipe(catchError(() => of({ relations: [] })));

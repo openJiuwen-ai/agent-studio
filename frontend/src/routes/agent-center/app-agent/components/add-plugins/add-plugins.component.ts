@@ -604,7 +604,9 @@ export class AddPluginsComponent {
       if (isShare) {
         data.workspace_id = plugin.workspace_id;
         data.workspace_name = plugin.workspace_name;
-        data.last_version_id = plugin.version_info_list?.[0]?.version_id;
+        // 共享+上架并存时优先锚定广场版本（运行时对广场插件强制按 plaza_version_id 解析，#1735），
+        // 非广场插件保持取共享版本
+        data.last_version_id = (plugin as any).plaza_version_id || plugin.version_info_list?.[0]?.version_id;
         data.version_info_list = plugin.version_info_list;
       }
       return data;

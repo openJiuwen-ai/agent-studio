@@ -6,12 +6,16 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.ShareScopeEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
+import com.openjiuwen.studio.agent.manager.bo.SkillDetails;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.HistoryWorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -65,6 +69,7 @@ class RelationManagementServiceTest {
     private SkillMapper skillMapper;
     private KnowledgeBaseServiceImpl knowledgeBaseService;
     private McpServiceDao serviceDao;
+    private ShareScopeMapper shareScopeMapper;
 
     private RelationManagementService relationManagementService;
 
@@ -90,6 +95,7 @@ class RelationManagementServiceTest {
         skillMapper = mock(SkillMapper.class);
         knowledgeBaseService = mock(KnowledgeBaseServiceImpl.class);
         serviceDao = mock(McpServiceDao.class);
+        shareScopeMapper = mock(ShareScopeMapper.class);
 
         MockitoAnnotations.openMocks(this);
         relationManagementService = new RelationManagementService();
@@ -113,6 +119,7 @@ class RelationManagementServiceTest {
         ReflectionTestUtils.setField(relationManagementService, "skillMapper", skillMapper);
         ReflectionTestUtils.setField(relationManagementService, "knowledgeBaseService", knowledgeBaseService);
         ReflectionTestUtils.setField(relationManagementService, "serviceDao", serviceDao);
+        ReflectionTestUtils.setField(relationManagementService, "shareScopeMapper", shareScopeMapper);
         ReflectionTestUtils.setField(relationManagementService, "toolBoundLimit", 20);
         ReflectionTestUtils.setField(relationManagementService, "knowledgeRepoBoundLimit", 3);
         ReflectionTestUtils.setField(relationManagementService, "workflowBoundLimit", 5);
@@ -358,5 +365,139 @@ class RelationManagementServiceTest {
         // 版本存在时不执行任何回退
         verify(mappingMapper, never()).updateResourceVersionIfMatch(anyString(), anyString(), any());
         verify(mappingMapper).updateResourceParameterByAppIDAndResourceId(any(MappingEntity.class));
+    }
+
+    private MappingEntity buildToolMapping(String appId, String appWorkspaceId, String referenceType) {
+        MappingEntity entity = new MappingEntity();
+        entity.setMappingId("m-" + appId);
+        entity.setAppId(appId);
+        entity.setAppType("agent");
+        entity.setAppWorkspaceId(appWorkspaceId);
+        entity.setResourceId("plugin-1#tool-1");
+        entity.setResourceVersion("v1");
+        entity.setReferenceType(referenceType);
+        entity.setValid(true);
+        return entity;
+    }
+
+    @Test
+    void testListResourceRelations_CrossSpaceOnly_PlazaRefsNotCoveredByShareCounted() {
+        // #1733 测试反馈：插件共享+上架并存时，广场引用落库同为 'share'，
+        // 下架统计不能再按 reference_type 排除 share，而应按共享范围判定。
+        // 属主 W1，共享给 W3；W2 从广场引用。下架统计应只保留 W2 的引用：
+        // W3 在共享范围内下架后仍可经共享解析，W1 为属主同空间引用。
+        String ownerWs = "w1-owner";
+        String inScopeWs = "w3-shared";
+        String plazaWs = "w2-plaza";
+        ListResourceRelationsQo qo = new ListResourceRelationsQo();
+        qo.setResourceType("tool");
+        qo.setWorkspaceId(ownerWs);
+        qo.setCrossSpaceOnly(true);
+
+        PluginEntity plugin = new PluginEntity();
+        plugin.setWorkspaceId(ownerWs);
+        when(pluginMapper.selectByPrimaryKey("plugin-1", "p1")).thenReturn(plugin);
+
+        ShareScopeEntity scope = new ShareScopeEntity();
+        scope.setWorkspaceId(inScopeWs);
+        when(shareScopeMapper.selectShareScopesByResourceId("plugin-1")).thenReturn(List.of(scope));
+
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("plugin-1"), any(), any(), any(), any()))
+            .thenReturn(List.of(
+                buildToolMapping("app-owner", ownerWs, "direct"),
+                buildToolMapping("app-shared", inScopeWs, "share"),
+                buildToolMapping("app-plaza", plazaWs, "share")));
+
+        var result = relationManagementService.listResourceRelations("p1", "plugin-1", qo);
+
+        assertEquals(1, result.getCount());
+        assertEquals(1, result.getRelations().size());
+        assertEquals("app-plaza", result.getRelations().get(0).getAppId());
+    }
+
+    @Test
+    void testListResourceRelations_ShareQuery_OnlyInScopeConsumersCounted() {
+        // #1733 测试反馈：共享"被引用"统计只保留共享范围覆盖的跨空间消费方引用；
+        // 广场消费方（W2，不在共享范围）与属主自身引用均不计入。
+        String ownerWs = "w1-owner";
+        String inScopeWs = "w3-shared";
+        String plazaWs = "w2-plaza";
+        ListResourceRelationsQo qo = new ListResourceRelationsQo();
+        qo.setResourceType("tool");
+        qo.setWorkspaceId(ownerWs);
+        qo.setReferenceType("share");
+
+        PluginEntity plugin = new PluginEntity();
+        plugin.setWorkspaceId(ownerWs);
+        when(pluginMapper.selectByPrimaryKey("plugin-1", "p1")).thenReturn(plugin);
+
+        ShareScopeEntity scope = new ShareScopeEntity();
+        scope.setWorkspaceId(inScopeWs);
+        when(shareScopeMapper.selectShareScopesByResourceId("plugin-1")).thenReturn(List.of(scope));
+
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("plugin-1"), any(), any(), any(), any()))
+            .thenReturn(List.of(
+                buildToolMapping("app-owner", ownerWs, "direct"),
+                buildToolMapping("app-shared", inScopeWs, "share"),
+                buildToolMapping("app-plaza", plazaWs, "share")));
+
+        var result = relationManagementService.listResourceRelations("p1", "plugin-1", qo);
+
+        assertEquals(1, result.getCount());
+        assertEquals("app-shared", result.getRelations().get(0).getAppId());
+    }
+
+    @Test
+    void testListResourceRelations_CrossSpaceOnly_ShareToAll_NoPlazaDependentRefs() {
+        // 全员共享（scope='all'）时所有跨空间引用都被共享覆盖，下架不影响任何引用。
+        String ownerWs = "w1-owner";
+        ListResourceRelationsQo qo = new ListResourceRelationsQo();
+        qo.setResourceType("tool");
+        qo.setWorkspaceId(ownerWs);
+        qo.setCrossSpaceOnly(true);
+
+        PluginEntity plugin = new PluginEntity();
+        plugin.setWorkspaceId(ownerWs);
+        when(pluginMapper.selectByPrimaryKey("plugin-1", "p1")).thenReturn(plugin);
+
+        ShareScopeEntity scopeAll = new ShareScopeEntity();
+        scopeAll.setWorkspaceId("all");
+        when(shareScopeMapper.selectShareScopesByResourceId("plugin-1")).thenReturn(List.of(scopeAll));
+
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("plugin-1"), any(), any(), any(), any()))
+            .thenReturn(List.of(
+                buildToolMapping("app-owner", ownerWs, "direct"),
+                buildToolMapping("app-plaza", "w2-plaza", "share")));
+
+        var result = relationManagementService.listResourceRelations("p1", "plugin-1", qo);
+
+        assertEquals(0, result.getCount());
+    }
+
+    @Test
+    void testListResourceRelations_CrossSpaceOnly_SkillOwnerResolvedFromSkillTable() {
+        // #1733 测试反馈：Skill 下架统计同样按跨空间口径，属主空间从 t_skill 解析。
+        String ownerWs = "w1-owner";
+        ListResourceRelationsQo qo = new ListResourceRelationsQo();
+        qo.setResourceType("skill");
+        qo.setWorkspaceId(ownerWs);
+        qo.setCrossSpaceOnly(true);
+
+        SkillDetails skill = new SkillDetails();
+        skill.setWorkspaceId(ownerWs);
+        when(skillMapper.searchBySkillId("skill-1")).thenReturn(skill);
+        when(shareScopeMapper.selectShareScopesByResourceId("skill-1")).thenReturn(Collections.emptyList());
+
+        MappingEntity ownerRef = buildToolMapping("app-owner", ownerWs, "direct");
+        ownerRef.setResourceId("skill-1");
+        MappingEntity crossRef = buildToolMapping("app-cross", "w2-cross", "direct");
+        crossRef.setResourceId("skill-1");
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("skill-1"), any(), any(), any(), any()))
+            .thenReturn(List.of(ownerRef, crossRef));
+
+        var result = relationManagementService.listResourceRelations("p1", "skill-1", qo);
+
+        assertEquals(1, result.getCount());
+        assertEquals("app-cross", result.getRelations().get(0).getAppId());
     }
 }
