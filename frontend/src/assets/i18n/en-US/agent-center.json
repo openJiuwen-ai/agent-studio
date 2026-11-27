@@ -3150,5 +3150,6 @@
   "skill_delete_input_incomplete": "Please type \"DELETE\" completely",
   "skill_delete_will_delete": "The following Skill will be deleted",
   "skill_reference_undeployed": "Not deployed",
-  "plaza_offshelf_referenced_alert": "This asset is referenced by the following applications across workspaces. Existing references may fail after off-shelf, and this action cannot be undone."
+  "plaza_offshelf_referenced_alert": "This asset is referenced by the following applications across workspaces. Existing references may fail after off-shelf, and this action cannot be undone.",
+  "plaza_offshelf_references_query_failed": "Failed to load references, please try again later"
 }

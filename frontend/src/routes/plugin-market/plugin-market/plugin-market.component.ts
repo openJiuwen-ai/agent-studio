@@ -594,7 +594,8 @@ export class PluginMarketComponent implements OnInit {
       instance.totalNumber = count;
       instance.secondConfirmConfig = { supportQuickInput: true, label: this.i18n.transform('plaza_offshelf') };
       instance.confirm.subscribe(() => {
-        this.doUnpublishPlugin(plugin);
+        // 与无引用分支一致兜底：弹窗已先关闭，下架失败不能形成未处理的 rejection
+        this.doUnpublishPlugin(plugin).catch(() => null);
       });
       instance.pageInfo.subscribe((info: IPage) => {
         this.cardService
@@ -614,6 +615,9 @@ export class PluginMarketComponent implements OnInit {
               state: { searched: false, sorted: false, paginated: true },
             };
             instance.totalNumber = (res1 && res1.count) || 0;
+          })
+          .catch(() => {
+            MessageComponent.showError(this.i18n.transform('plaza_offshelf_references_query_failed'));
           });
       });
       return;

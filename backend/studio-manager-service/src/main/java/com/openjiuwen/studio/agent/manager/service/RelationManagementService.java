@@ -248,7 +248,7 @@ public class RelationManagementService implements IRelationManagementService {
         }
         try {
             String pluginId = StringUtils.substringBefore(resourceId, "#");
-            PluginEntity pluginEntity = pluginMapper.selectInfo(pluginId);
+            PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, projectId);
             return pluginEntity == null ? null : pluginEntity.getWorkspaceId();
         } catch (Exception e) {
             log.warn("Failed to resolve real resource workspace. resourceId={}, resourceType={}", resourceId,
@@ -2335,17 +2335,16 @@ public class RelationManagementService implements IRelationManagementService {
             // 同空间组件库直引下架后仍可按 workspace 解析、团队共享引用走 share 快照链路，均不受下架影响。
             // 注意：mapping 落库时 resource_workspace_id 记的是保存方空间而非资源真实属主空间，
             // 因此跨空间判定必须以资源表中的真实 workspace 为准，不能用 mapping 行内的 resource_workspace_id。
+            // 属主空间无法解析时（资源已删除/查询异常）不过滤，宁可多报不可漏报。
             if (Boolean.TRUE.equals(listResourceRelationsQo.getCrossSpaceOnly())) {
                 String realResourceWorkspaceId = resolveRealResourceWorkspaceId(resourceId,
                         listResourceRelationsQo.getResourceType(), projectId);
                 mappingEntities = mappingEntities.stream()
                         .filter(entity -> entity.getReferenceType() == null
                                 || "direct".equals(entity.getReferenceType()))
-                        .filter(entity -> entity.getAppWorkspaceId() != null
-                                && (realResourceWorkspaceId != null
-                                        ? !entity.getAppWorkspaceId().equals(realResourceWorkspaceId)
-                                        : entity.getResourceWorkspaceId() != null
-                                                && !entity.getAppWorkspaceId().equals(entity.getResourceWorkspaceId())))
+                        .filter(entity -> realResourceWorkspaceId == null
+                                || entity.getAppWorkspaceId() == null
+                                || !entity.getAppWorkspaceId().equals(realResourceWorkspaceId))
                         .collect(Collectors.toList());
                 log.info("Filtered to {} cross-space direct references (cross_space_only=true, realResourceWorkspaceId={}).",
                         mappingEntities.size(), realResourceWorkspaceId);
