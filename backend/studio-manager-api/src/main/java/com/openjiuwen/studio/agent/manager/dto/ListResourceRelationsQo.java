@@ -66,6 +66,11 @@ public class ListResourceRelationsQo implements Serializable {
     @Schema(description = "引用类型", example = "all")
     private String referenceType = "all";
 
+    @JsonProperty("cross_space_only")
+    @Schema(description = "仅统计跨空间直接引用（下架平台精选资产前的受影响引用口径：排除同空间组件库直引与团队共享引用）",
+        example = "true")
+    private Boolean crossSpaceOnly = false;
+
     public String getResourceType() {
         return resourceType;
     }
@@ -122,6 +127,15 @@ public class ListResourceRelationsQo implements Serializable {
 
     public String getReferenceType() {
         return referenceType;
+    }
+
+    public Boolean getCrossSpaceOnly() {
+        return Boolean.TRUE.equals(crossSpaceOnly);
+    }
+
+    public ListResourceRelationsQo setCrossSpaceOnly(Boolean crossSpaceOnly) {
+        this.crossSpaceOnly = crossSpaceOnly;
+        return this;
     }
 
     public ListResourceRelationsQo setReferenceType(String referenceType) {

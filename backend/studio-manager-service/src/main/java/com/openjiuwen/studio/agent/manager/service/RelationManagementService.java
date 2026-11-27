@@ -232,6 +232,31 @@ public class RelationManagementService implements IRelationManagementService {
                 + (entity.getResourceVersion() == null ? "" : entity.getResourceVersion());
     }
 
+    /**
+     * 解析资源的真实属主空间。mapping 落库时 resource_workspace_id 记的是保存方空间，
+     * 跨空间判定必须回资源表查询。目前仅 tool（插件）类型需要该口径（资产广场下架前统计），
+     * 其余类型返回 null，调用方回退到 mapping 行内字段比较。
+     *
+     * @param resourceId   资源 id（插件场景可能带 #toolId 后缀）
+     * @param resourceType 资源类型
+     * @param projectId    项目 id
+     * @return 资源真实属主空间 id，无法解析时返回 null
+     */
+    private String resolveRealResourceWorkspaceId(String resourceId, String resourceType, String projectId) {
+        if (!ResourceTypeEnum.TOOL.name().equalsIgnoreCase(resourceType)) {
+            return null;
+        }
+        try {
+            String pluginId = StringUtils.substringBefore(resourceId, "#");
+            PluginEntity pluginEntity = pluginMapper.selectInfo(pluginId);
+            return pluginEntity == null ? null : pluginEntity.getWorkspaceId();
+        } catch (Exception e) {
+            log.warn("Failed to resolve real resource workspace. resourceId={}, resourceType={}", resourceId,
+                    resourceType, e);
+            return null;
+        }
+    }
+
     private @NotNull List<Relation> buildRelationsFromMapping(List<MappingEntity> mappingEntities,
         Map<String, String> workspaceInfoMap) {
         return mappingEntities.stream().map(entity -> {
@@ -2305,6 +2330,26 @@ public class RelationManagementService implements IRelationManagementService {
                     listResourceRelationsQo.getAppType(), listResourceRelationsQo.getReferenceType());
 
             log.info("Selected {} mapping entities from database.", mappingEntities.size());
+
+            // 下架平台精选资产前的受影响引用口径（#1733 评审反馈）：仅保留跨空间直接引用——
+            // 同空间组件库直引下架后仍可按 workspace 解析、团队共享引用走 share 快照链路，均不受下架影响。
+            // 注意：mapping 落库时 resource_workspace_id 记的是保存方空间而非资源真实属主空间，
+            // 因此跨空间判定必须以资源表中的真实 workspace 为准，不能用 mapping 行内的 resource_workspace_id。
+            if (Boolean.TRUE.equals(listResourceRelationsQo.getCrossSpaceOnly())) {
+                String realResourceWorkspaceId = resolveRealResourceWorkspaceId(resourceId,
+                        listResourceRelationsQo.getResourceType(), projectId);
+                mappingEntities = mappingEntities.stream()
+                        .filter(entity -> entity.getReferenceType() == null
+                                || "direct".equals(entity.getReferenceType()))
+                        .filter(entity -> entity.getAppWorkspaceId() != null
+                                && (realResourceWorkspaceId != null
+                                        ? !entity.getAppWorkspaceId().equals(realResourceWorkspaceId)
+                                        : entity.getResourceWorkspaceId() != null
+                                                && !entity.getAppWorkspaceId().equals(entity.getResourceWorkspaceId())))
+                        .collect(Collectors.toList());
+                log.info("Filtered to {} cross-space direct references (cross_space_only=true, realResourceWorkspaceId={}).",
+                        mappingEntities.size(), realResourceWorkspaceId);
+            }
 
             // 根据 app_id、app_version、resource_id、resource_version 进行去重
             // app_version 和 resource_version 可能为空，需要使用空字符串处理

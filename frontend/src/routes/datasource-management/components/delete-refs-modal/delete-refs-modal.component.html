@@ -50,7 +50,7 @@
 
         <div style="gap: 8px; display: flex; flex-direction: column">
           <div>
-            <span>如您确定要删除，请输入<b style="margin: 0px 6px">DELETE</b></span>
+            <span>如您确定要{{ secondConfirmConfig?.label || '删除' }}，请输入<b style="margin: 0px 6px">DELETE</b></span>
             <a (click)="deleteVal = 'DELETE'">一键输入</a>
           </div>
           <div>

@@ -389,7 +389,10 @@
         <if test="workspaceId != null and workspaceId != ''">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
-        ) or project_id = #{opProjectId,jdbcType=VARCHAR})
+        ) or project_id = #{opProjectId,jdbcType=VARCHAR}
+        -- 资产广场已上架插件跨空间可检索（FRS-091），工作流 Agent 节点存在性校验依赖 type=all 本查询，
+        -- 缺本分支会导致跨空间引用广场插件被误判 deleted（红色失效图标）
+        or (platform_published = 1 and published = 1))
 
         <if test="userId != null">
             and (visibility != 'user' or (visibility = 'user' and creator_id = #{userId,jdbcType=VARCHAR}))

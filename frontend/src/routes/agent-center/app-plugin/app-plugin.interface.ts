@@ -202,6 +202,8 @@ export interface IPlugin extends IPluginBase {
   type?: 'custom' | 'inner';
   test_status?: 'SUCCESS' | 'FAILED' | 'UNKNOWN';
   last_version_id?: string;
+  /** 资产广场上架锚定版本（FRS-091）：消费广场插件时必须锚定该版本而非 last_version_id */
+  plaza_version_id?: string;
   customize_node?: boolean;
   auth_required?: boolean;
   metadata?: string;

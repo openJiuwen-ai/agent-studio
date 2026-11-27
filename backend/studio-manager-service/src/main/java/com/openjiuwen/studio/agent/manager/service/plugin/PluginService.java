@@ -1110,8 +1110,10 @@ public class PluginService implements IPluginService {
                 throw new AgentStudioException(StudioError.TOOL_NOT_EXIST, "can not find any plugins");
             }
             PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntity);
+            // 资产广场已上架插件（platform_published=1）跨空间可见，不走 user 可见性剔除（FRS-091）
             if (CommonConstant.USER.equals(pluginDTO.getVisibility()) && !pluginDTO.getCreatorId()
-                .equals(RequestContextUtils.getRequestUserId())) {
+                .equals(RequestContextUtils.getRequestUserId())
+                && !Integer.valueOf(1).equals(pluginDTO.getPlatformPublished())) {
                 return;
             }
             // 内置免费额度插件

@@ -3149,5 +3149,6 @@
   "skill_delete_input_oneClick": "Type it for me",
   "skill_delete_input_incomplete": "Please type \"DELETE\" completely",
   "skill_delete_will_delete": "The following Skill will be deleted",
-  "skill_reference_undeployed": "Not deployed"
+  "skill_reference_undeployed": "Not deployed",
+  "plaza_offshelf_referenced_alert": "This asset is referenced by the following applications across workspaces. Existing references may fail after off-shelf, and this action cannot be undone."
 }

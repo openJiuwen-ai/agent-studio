@@ -589,7 +589,8 @@ export class AddPluginsComponent {
         name: this.getPluginName(plugin),
         icon: plugin.icon || WORKFLOW_SVGS.Plugin,
         description: plugin.plugin_desc,
-        last_version_id: plugin.last_version_id,
+        // 广场已上架插件锚定 plaza_version_id（FRS-091/#1735），否则用最新发布版本
+        last_version_id: (plugin as any).plaza_version_id || plugin.last_version_id,
         tag: this.getTags(type, plugin, false),
         tools: toolInfo.map(item => ({
           id: item.tool_id,
