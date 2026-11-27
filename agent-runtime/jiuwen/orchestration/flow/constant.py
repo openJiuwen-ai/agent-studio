@@ -21,11 +21,8 @@ def _resolve_config_filename(raw: str) -> str:
 
 
 def _is_unsafe_filename(name: str) -> bool:
-    if not name:
-        return True
-    if "/" in name or "\\" in name:
-        return True
-    return Path(name).is_absolute()
+    # basename 一致 = 纯文件名（无分隔符/无盘符相对形态）；. 与 .. 同样拒绝
+    return not name or Path(name).name != name or name in {".", ".."}
 
 
 # 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）
@@ -36,10 +33,19 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resource', _F
 def _load_workflow_constant():
     try:
         with open(CONFIG_PATH, encoding="utf-8") as config_file:
-            return yaml.safe_load(config_file) or {}
-    except Exception as e:
+            data = yaml.safe_load(config_file)
+    except (OSError, yaml.YAMLError) as e:
         logger.error(f"load workflow constant config failed: {CONFIG_PATH}, error: {e}")
         return {}
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(
+            f"workflow constant config {CONFIG_PATH} top-level is {type(data).__name__}, "
+            "expected mapping, fallback to defaults"
+        )
+        return {}
+    return data
 
 
 def _load_positive_int(key: str, default: int) -> int:
@@ -578,6 +584,15 @@ ERROR = "error"
 SIMPLE_TYPE_DICT = {STRING: str, INTEGER: int, NUMBER: float, BOOLEAN: bool}
 
 # 节点类型默认值：YAML 逐键覆盖，未声明的键保留内置默认，部分配置不会丢失其余默认值
+_TYPE_DEFAULT_VALUE_TYPES = {
+    STRING: str,
+    INTEGER: int,
+    NUMBER: float,
+    BOOLEAN: bool,
+    ARRAY: type(None),
+    OBJECT: type(None),
+    ERROR: type(None),
+}
 TYPE_DEFAULT_VALUE_DICT = {
     STRING: "",
     INTEGER: None,
@@ -590,10 +605,22 @@ TYPE_DEFAULT_VALUE_DICT = {
 _type_overrides = workflow_constant.get("type_default_value_dict")
 if isinstance(_type_overrides, dict):
     for _key, _value in _type_overrides.items():
-        if _key in TYPE_DEFAULT_VALUE_DICT:
-            TYPE_DEFAULT_VALUE_DICT[_key] = _value
-        else:
+        if _key not in TYPE_DEFAULT_VALUE_DICT:
             logger.warning(f"type_default_value_dict has unknown key: {_key!r}, ignored")
+            continue
+        _expected = _TYPE_DEFAULT_VALUE_TYPES[_key]
+        # int 是 bool 的父类，需先排除 bool 再匹配 int/float，避免 boolean: 1 被放行
+        _type_ok = (
+            isinstance(_value, _expected)
+            and not (_expected in (int, float) and isinstance(_value, bool))
+        )
+        if not _type_ok:
+            logger.warning(
+                f"type_default_value_dict key {_key!r} value {_value!r} has invalid type "
+                f"{type(_value).__name__}, keep builtin default"
+            )
+            continue
+        TYPE_DEFAULT_VALUE_DICT[_key] = _value
 
 # custom component
 BUILT_IN_COMPONENT_PREFIX = "jiuwen."
