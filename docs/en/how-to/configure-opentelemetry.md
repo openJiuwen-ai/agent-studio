@@ -318,12 +318,19 @@ docker compose restart
 
 ### Request correlation IDs and OTel Trace IDs
 
-`X-Request-Id`, the business `TraceID`, and `openjiuwen.trace.id` are correlation
-identifiers; they are not guaranteed to equal the OTel `trace_id`. Without an
-upstream tracing context, the SDK creates a real root span and its Trace ID.
-The middleware does not inject an unexported random parent to force a Trace ID.
-Resolve the actual `trace_id` through correlation attributes before searching
-the tracing backend.
+Without an upstream tracing context, the SDK creates a real root span whose OTel
+`trace_id` is derived from `X-Request-Id`: a 32-character hex value (not all
+zeros) is used as the `trace_id` directly; any other value is mapped to its MD5
+(32 hex characters). Callers can therefore search the tracing backend with
+`X-Request-Id` (or its MD5). When the request carries no `X-Request-Id`, the
+`X-Request-Id` returned in the response is the `trace_id`; the `X-OTel-Trace-Id`
+response header also carries the actual `trace_id`. The middleware never injects
+an unexported parent span to force a Trace ID.
+
+The business `TraceID` / `X-Correlation-Id` is recorded as
+`openjiuwen.correlation.id` for correlation and does not affect the `trace_id`.
+Requests that reuse the same `X-Request-Id` end up in the same trace, so callers
+should send a distinct `X-Request-Id` per request.
 
 The middleware accepts valid W3C `traceparent` / `tracestate` and preserves an
 existing tracing context. Interrupted workflows retain the saved business ID

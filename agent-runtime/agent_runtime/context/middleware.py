@@ -38,6 +38,10 @@ import hashlib
 import json
 import uuid
 
+from agent_runtime.common.otel_request_trace_id import (
+    bind_request_trace_id,
+    reset_request_trace_id,
+)
 from agent_runtime.context.conversation_source import (
     SOURCE_BODY,
     SOURCE_PATH,
@@ -57,7 +61,7 @@ except ImportError:
     # set_session_id 旧版不返回 token → trace_token=None → reset 跳过（middleware 已检查 None）
     def reset_session_id(_token):
         pass
-from opentelemetry import context as otel_context
+from opentelemetry import context as otel_context, trace as otel_trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -230,6 +234,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         # （DEF-03 §3.2：set 与 try 之间零操作——sets 本身即 try 的首段。）
         _jiuwen_ctx_token = None
         _otel_token = None
+        _derived_trace_token = None
         request_token = None
         trace_token = None
         try:
@@ -244,6 +249,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     carrier=request.headers, context=otel_context.get_current()
                 )
             )
+            # No valid upstream parent: the SDK will start a real root span.
+            # Derive that root's trace_id from request_id (X-Request-Id) so callers
+            # can look the trace up by X-Request-Id, without a fabricated parent.
+            if not otel_trace.get_current_span().get_span_context().is_valid:
+                _derived_trace_token = bind_request_trace_id(request_id)
             request_token = _request_ctx.set(ctx)
             trace_token = set_session_id(trace_id)
             # 业务关联 ID（TraceID 头）：供根 Span 写 openjiuwen.correlation.id。
@@ -402,8 +412,11 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                         _request_ctx.reset(request_token)
                 finally:
                     try:
-                        if _otel_token is not None:
-                            otel_context.detach(_otel_token)
+                        reset_request_trace_id(_derived_trace_token)
                     finally:
-                        if _jiuwen_ctx_token is not None:
-                            _jiuwen_request_ctx.reset(_jiuwen_ctx_token)
+                        try:
+                            if _otel_token is not None:
+                                otel_context.detach(_otel_token)
+                        finally:
+                            if _jiuwen_ctx_token is not None:
+                                _jiuwen_request_ctx.reset(_jiuwen_ctx_token)

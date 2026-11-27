@@ -323,10 +323,16 @@ docker compose restart
 
 ### 请求关联 ID 与 OTel Trace ID
 
-`X-Request-Id`、业务 `TraceID` 及 `openjiuwen.trace.id` 用于业务关联，不能假定
-它们与 OTel `trace_id` 相同。没有上游追踪上下文时，SDK 为实际执行的 Span
-创建真实根节点和 Trace ID；入口不会为了指定 Trace ID 而注入未导出的随机父 Span。
-排查时应先通过业务关联属性找到实际 `trace_id`，再到追踪系统查询。
+没有上游追踪上下文时，SDK 为实际执行的 Span 创建真实根节点，根节点的 OTel
+`trace_id` 由 `X-Request-Id` 派生：32 位十六进制（非全 0）直接作为 `trace_id`，
+其他取值使用其 MD5（32 位十六进制）。因此调用方可以直接用 `X-Request-Id`
+（或其 MD5）在追踪系统中检索。未携带 `X-Request-Id` 时，响应头返回的
+`X-Request-Id` 即为 `trace_id`；响应头 `X-OTel-Trace-Id` 也会给出实际 `trace_id`。
+入口不会为了指定 Trace ID 而注入未导出的父 Span。
+
+业务 `TraceID` / `X-Correlation-Id` 写入 `openjiuwen.correlation.id`，用于业务关联，
+不参与 `trace_id` 派生。同一 `X-Request-Id` 被多次请求复用时，这些执行会落在同一条
+Trace 下，调用方应保证每次请求使用不同的 `X-Request-Id`。
 
 入口接收合法的 W3C `traceparent` / `tracestate`，并保留已有的真实追踪上下文。
 中断恢复继续使用保存的业务关联 ID，但不会据此伪造 OTel 父节点。如果上游父 Span

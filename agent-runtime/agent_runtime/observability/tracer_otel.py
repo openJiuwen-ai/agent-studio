@@ -100,6 +100,17 @@ def _create_otel_tracer() -> Optional[Any]:
 
     otel_tracer = init_otel_tracer(config)
 
+    # 根 Span 的 trace_id 按请求派生（X-Request-Id → trace_id，无虚构父节点），
+    # 恢复调用方用 X-Request-Id 直接检索链路的能力；不支持时保持随机 trace_id。
+    from agent_runtime.common.otel_request_trace_id import (
+        install_request_trace_id_generator,
+    )
+
+    if not install_request_trace_id_generator(otel_tracer):
+        logger.warning(
+            "OTel tracer has no id_generator; X-Request-Id derived trace_id disabled"
+        )
+
     TracerHandlerRegistry.register_handler(
         "otel_agent", OtelAgentHandler(otel_tracer, config)
     )
