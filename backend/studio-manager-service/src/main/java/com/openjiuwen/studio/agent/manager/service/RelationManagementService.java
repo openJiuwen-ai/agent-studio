@@ -2252,9 +2252,9 @@ public class RelationManagementService implements IRelationManagementService {
             Map<String, ShareResourceEntity> finalShareResourceMap = shareResourceMap;
             // 校验共享版本清单，过滤掉版本表中已不存在（或已软删）的版本，取真实存在的最大版本
             Map<String, ResourceVersionInfo> validShareLatestMap = buildValidShareLatestVersionMap(shareResources);
-            // 资产广场锚定版本（FRS-091）：跨空间直接引用已上架插件时，升级提示的目标版本
+            // 资产广场锚定版本（FRS-091）：直接引用已上架插件时，升级提示的目标版本
             // 应为广场锚定版本（plaza_version_id），而非插件最新发布版本，
-            // 否则消费方会被引导升级到广场上不可见/未上架的版本，与版本锚定契约冲突。
+            // 否则消费方会被引导升级到广场上不可见/未锚定的版本，与版本锚定契约冲突。
             Map<String, PluginEntity> plazaPluginMap = buildPlazaPluginMap(mappingEntities);
             Map<String, ReleaseVersion> plazaAnchorVersionMap = new HashMap<>();
             plazaPluginMap.values().forEach(plugin -> {
@@ -2308,13 +2308,12 @@ public class RelationManagementService implements IRelationManagementService {
                         relation.setResourceLatestVersionName(shareLatestVersion.getVersionName());
                     }
                 }
-                // 跨空间直接引用（非共享）广场已上架插件：最新版本覆盖为广场锚定版本。
-                // 同空间引用（属主自己）保持最新发布版本，便于属主跟进自迭代。
+                // 直接引用（非共享）广场已上架插件：最新版本覆盖为广场锚定版本。
+                // 锚定版本是消费方在广场上唯一可见可用的版本，属主空间同样按锚定提示，
+                // 避免提示升级到广场上不可见/未锚定的版本。
                 PluginEntity plazaPlugin = plazaPluginMap.get(relation.getResourceId());
                 if (plazaPlugin != null
-                    && !ReferenceTypeEnum.SHARE.getValue().equals(relation.getReferenceType())
-                    && StringUtils.isNotEmpty(relation.getAppWorkspaceId())
-                    && !relation.getAppWorkspaceId().equals(plazaPlugin.getWorkspaceId())) {
+                    && !ReferenceTypeEnum.SHARE.getValue().equals(relation.getReferenceType())) {
                     ReleaseVersion anchorVersion = plazaAnchorVersionMap.get(relation.getResourceId());
                     if (anchorVersion != null) {
                         relation.setResourceLatestVersion(anchorVersion.getVersionId());

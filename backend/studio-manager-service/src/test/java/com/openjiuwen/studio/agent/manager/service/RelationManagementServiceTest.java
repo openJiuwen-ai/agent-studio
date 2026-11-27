@@ -573,8 +573,9 @@ class RelationManagementServiceTest {
     }
 
     @Test
-    void testListAppRelations_PlazaAnchorNotAppliedForSameSpaceRef() {
-        // 同空间引用（属主自己的插件）：升级提示保持最新发布版本，属主可跟进自迭代。
+    void testListAppRelations_PlazaAnchorAppliedForSameSpaceRef() {
+        // 同空间引用（属主自己的插件）同样按锚定版本提示：锚定版本是广场上唯一可见可用的版本，
+        // 属主空间若提示到未锚定的更新发布版，消费方升级后会与广场契约不一致。
         try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
             ctx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1-owner");
             ctx.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
@@ -612,6 +613,11 @@ class RelationManagementServiceTest {
             plazaPlugin.setPlazaVersionId("anchor-id");
             plazaPlugin.setWorkspaceId("w1-owner");
             when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plazaPlugin));
+            ReleaseVersion anchor = new ReleaseVersion();
+            anchor.setAppId("plugin-1");
+            anchor.setVersionId("anchor-id");
+            anchor.setVersionName("v-anchor");
+            when(releaseVersionMapper.selectByAppIdAndVersionId("plugin-1", "anchor-id")).thenReturn(anchor);
 
             when(shareResourceManagerService.queryShareResourceEntityByResourceIdList(anyList()))
                 .thenReturn(Collections.emptyList());
@@ -620,8 +626,8 @@ class RelationManagementServiceTest {
             var result = relationManagementService.listAppRelations("p1", "app-owner", qo);
 
             var relation = result.getRelations().get(0);
-            assertEquals("latest-id", relation.getResourceLatestVersion());
-            assertEquals("v-latest", relation.getResourceLatestVersionName());
+            assertEquals("anchor-id", relation.getResourceLatestVersion());
+            assertEquals("v-anchor", relation.getResourceLatestVersionName());
         }
     }
 }
