@@ -1018,7 +1018,14 @@ class IntentDetection(WorkflowComponent):
 
         if self.intent_config.enable_input:
             user_fields = inputs.get("userFields", {}) if isinstance(inputs, dict) else {}
-            current_inputs.update({INPUT: user_fields.get(INPUT)})
+            # 兼容两种输入结构：IR 直接映射时 input 在顶层（{"input": ...}，对齐旧版
+            # orchestration 组件），部分场景才有 userFields 包装。迁移版误改为仅从
+            # userFields 取，顶层映射时得到 None，PromptAssembler 过滤 None 后用
+            # {{input}} 占位符原样回填 prompt，LLM 收到字面量导致 JSON 解析失败。
+            input_value = user_fields.get(INPUT)
+            if input_value is None and isinstance(inputs, dict):
+                input_value = inputs.get(INPUT)
+            current_inputs.update({INPUT: input_value})
 
         current_inputs["global_intent_map"] = global_intent_map
         return current_inputs

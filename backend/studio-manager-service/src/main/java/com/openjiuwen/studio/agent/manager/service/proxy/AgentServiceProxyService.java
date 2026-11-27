@@ -358,6 +358,8 @@ public class AgentServiceProxyService {
         String conversationId, String nodeId, WorkflowRunReq body, HttpHeaders httpHeaders) {
 
         checkWorkflowPermission(projectId, workspaceId, workflowId);
+        // 单节点试运行同样透传登录用户，保证调模型网关用户维度一致（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         String url = "%s/v1/%s/workflows/%s/conversations/%s/node_execute/%s?workspace_id=%s";
         url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, workflowId, conversationId, nodeId,
             workspaceId);
@@ -1353,6 +1355,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
                 + "?workspace_id=" + forwardWorkspaceId;
@@ -1364,7 +1367,7 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId,
+            return runtimeClient.runWebWorkflow(getToken(), null, shortCode, conversationId, forwardWorkspaceId,
                 environmentId, body, false).getBody();
         }
     }
@@ -1451,6 +1454,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {
@@ -1461,8 +1465,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
-                body).getBody();
+            return runtimeClient.runWebAgent(getToken(), null, shortCode, forwardWorkspaceId, false, environmentId, body)
+                .getBody();
         }
     }
 

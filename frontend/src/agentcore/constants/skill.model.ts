@@ -24,30 +24,24 @@ export enum SkillResourceType {
   CREATE = 'create',
 }
 
-export const SKILL_RESOURCE_TYPE_CONFIG: Record<`${SkillResourceType}`, { i18key: string; id: string }> = {
+export const SKILL_RESOURCE_TYPE_CONFIG: Record<`${SkillResourceType}`, { i18key: string }> = {
   all: {
     i18key: 'skill.resource.tag.all',
-    id: undefined,
   },
   general: {
     i18key: 'skill.resource.tag.general',
-    id: 'dsa79d76-c26a-4dad-92s7-a46dcs2271eb',
   },
   effency: {
     i18key: 'skill.resource.tag.effency',
-    id: 'sda9e07a-9e2t-44cx-85c5-400cews28a6b',
   },
   tool: {
     i18key: 'skill.resource.tag.tool',
-    id: 'b4baa07a-9b86-443e-85c5-4ksc1e2azxcb',
   },
   design: {
     i18key: 'skill.resource.tag.design',
-    id: 'b4bzxsa-9ss6-4wq7e-asc5-400c1e2a8a6b',
   },
   create: {
     i18key: 'skill.resource.tag.create',
-    id: 'b4b9e07a-9b86-447e-85c5-400casdasdd',
   },
 };
 

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import org.springframework.validation.annotation.Validated;
@@ -24,9 +25,12 @@ public class SkillShelfReq implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @JsonProperty("tag_id")
-    @Schema(description = "Skill 分类标签ID（资源分类 config 的 id，用于广场分类展示；缺省沿用 Skill 既有 tag_id）",
+    @Schema(description = "Skill 分类标签ID（关联 t_pe_industry.id 的 UUID，用于广场分类展示；缺省沿用 Skill 既有 tag_id）",
         example = "uuid")
-    @Size(max = 64)
+    @Size(max = 36, message = "tag_id length must not exceed 36")
+    // 空串/纯空白=缺省沿用既有分类（与 Service 层 isBlank 放行口径一致），非空须为合法 UUID
+    @Pattern(regexp = "\\s*|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        message = "tag_id must be a valid UUID")
     private String tagId = null;
 
     public String getTagId() {

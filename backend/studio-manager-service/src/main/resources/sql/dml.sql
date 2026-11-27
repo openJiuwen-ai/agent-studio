@@ -103,6 +103,32 @@ INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_e
 INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-000000000009', '文案创作', '文案创作', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Content Creation', NULL, 'plugin');
 INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020001-0000-4000-8000-00000000000a', '生活服务', '生活服务', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'lifestyle services', NULL, 'plugin');
 
+-- Skill 资产广场分类（#1731：前端不再硬编码，由后端 t_pe_industry library_type='skill' 下发）
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000001', '通用', '通用', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'General', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000002', '效率提升', '效率提升', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Productivity', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000003', '自动化工具', '自动化工具', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Automation Tools', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000004', '设计与可视化', '设计与可视化', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Design & Visualization', NULL, 'skill');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020002-0000-4000-8000-000000000005', '内容创作', '内容创作', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Content Creation', NULL, 'skill');
+
+-- MCP 资产广场分类（#1731 巡检1：补齐 library_type='mcp' 种子，否则 publishServer category 校验恒 400 封死接口）
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020003-0000-4000-8000-000000000001', '通用', '通用', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'General', NULL, 'mcp');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020003-0000-4000-8000-000000000002', '教育', '教育', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Education', NULL, 'mcp');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020003-0000-4000-8000-000000000003', '医疗', '医疗', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Medical', NULL, 'mcp');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020003-0000-4000-8000-000000000004', '政务', '政务', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Government', NULL, 'mcp');
+INSERT INTO t_pe_industry (id, name, description, created_on, updated_on, name_en, workspace_id, library_type) VALUES ('a1020003-0000-4000-8000-000000000005', '制造', '制造', '2026-11-10 10:00:00', '2026-11-10 10:00:00', 'Manufacturing', NULL, 'mcp');
+
+-- #1731 巡检3：存量 t_skill.tag_id 迁移——前端旧硬编码 ID（非合法 UUID）迁移到新 t_pe_industry 合法 UUID，
+-- 否则存量上架 Skill 卡片分类不显示 + onAssetSelect 回填旧值被 @Pattern 拒 400（幂等：旧 ID 已迁移后 WHERE 不匹配，重复执行无副作用）
+UPDATE t_skill SET tag_id = 'a1020002-0000-4000-8000-000000000001' WHERE tag_id = 'dsa79d76-c26a-4dad-92s7-a46dcs2271eb';
+UPDATE t_skill SET tag_id = 'a1020002-0000-4000-8000-000000000002' WHERE tag_id = 'sda9e07a-9e2t-44cx-85c5-400cews28a6b';
+UPDATE t_skill SET tag_id = 'a1020002-0000-4000-8000-000000000003' WHERE tag_id = 'b4baa07a-9b86-443e-85c5-4ksc1e2azxcb';
+UPDATE t_skill SET tag_id = 'a1020002-0000-4000-8000-000000000004' WHERE tag_id = 'b4bzxsa-9ss6-4wq7e-asc5-400c1e2a8a6b';
+UPDATE t_skill SET tag_id = 'a1020002-0000-4000-8000-000000000005' WHERE tag_id = 'b4b9e07a-9b86-447e-85c5-400casdasdd';
+-- #1731 巡检2：兜底清理——历史上经开放接口写入的其它非法/孤立 tag_id（非 5 个硬编码 ID，但不在 t_pe_industry.id 中）
+-- 一并清空 NULL，避免广场卡片分类不显示/筛选与统计缺失的脏数据残留（幂等：已 NULL 或已合法的不受影响）
+UPDATE t_skill SET tag_id = NULL
+WHERE tag_id IS NOT NULL AND tag_id NOT IN (SELECT id FROM t_pe_industry);
+
 -- ========================================
 -- 自定义插件：DrawBox 框选与标注插件
 -- 注意：dml.sql 用于平台默认初始化（安装时执行一次）。

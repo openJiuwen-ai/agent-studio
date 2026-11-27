@@ -76,6 +76,14 @@
   }
 }
 
+.channel-table {
+  .url-text {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 .loading-icon {
   position: absolute;
   width: 100%;

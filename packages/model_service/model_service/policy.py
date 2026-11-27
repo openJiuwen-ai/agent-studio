@@ -60,7 +60,7 @@ def alarm(source: str, resource: str, cause: str, *, severity: str = "WARN") -> 
     """
     _alarm_logger.warning(
         '{"source":"%s","resource":"%s","severity":"%s","cause":"%s","create_time":%d}',
-        source, resource, severity, cause, int(time.time()),
+        source, resource, severity, cause, int(time.time() * 1000),
     )
 
 
