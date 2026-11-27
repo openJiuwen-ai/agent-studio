@@ -187,7 +187,7 @@ export class StartImportJsonModalComponent implements OnInit {
         return {
           type: 'array',
           items: {type: 'string'},
-          default: JSON.stringify(data),
+          ...(this.isImportValue ? { default: JSON.stringify(data) } : {}),
         };
       }
 
