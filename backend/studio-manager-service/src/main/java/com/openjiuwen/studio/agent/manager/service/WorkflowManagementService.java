@@ -122,6 +122,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.rce.client.JiuWenClient;
 import com.openjiuwen.studio.agent.manager.rce.models.knowledge.BoolQueryNode;
+import com.openjiuwen.studio.agent.manager.a2a.A2aRegistrationService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
@@ -529,6 +530,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
     @Autowired
     private AgentMemoryConfigService agentMemoryConfigService;
+
+    @Autowired
+    private A2aRegistrationService a2aRegistrationService;
 
     @Autowired
     private YamlSerializer yamlSerializer;
@@ -1223,6 +1227,13 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }
 
+        // FEAT-131: 删除前触发 A3 注销（失败不阻断删除，标记可重试）
+        try {
+            a2aRegistrationService.deregisterOnOffline(workflowId);
+        } catch (Exception e) {
+            log.warn("A2A deregistration hook error (non-blocking), workflowId={}", workflowId, e);
+        }
+
         // 权限校验
         workflowValidationService.validateModifyPrivilege(workflowEntity, projectId, workspaceId, "DELETE");
         shareResourceManagerService.checkResourceSharedOrNot(projectId, workflowId);
@@ -1523,6 +1534,14 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             .safetyBarrier(isSafetyBarrierEnabled)
             .appType(workflow.getWorkflowType())
             .build(), Constants.TREASURE_PUBLISH_VERSION, obsService);
+
+        // FEAT-131: 发布后自动产卡 + A1 注册到 RDC（失败不阻断发布）
+        try {
+            a2aRegistrationService.registerOnPublish(workflowId, workflow.getDescription(),
+                workflow.getLastVersionId(), workflow.getWorkflowType());
+        } catch (Exception e) {
+            log.warn("A2A registration hook error (non-blocking), workflowId={}", workflowId, e);
+        }
     }
 
     /**
@@ -1680,6 +1699,14 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             .safetyBarrier(isSafetyBarrierEnabled)
             .appType(workflowEntity.getWorkflowType())
             .build(), Constants.LATEST_PUBLISH_VERSION, obsService);
+
+        // FEAT-131: 发布后自动产卡 + A1 注册到 RDC（失败不阻断发布）
+        try {
+            a2aRegistrationService.registerOnPublish(workflowId, workflowEntity.getDescription(),
+                releaseVersionIds, workflowEntity.getWorkflowType());
+        } catch (Exception e) {
+            log.warn("A2A registration hook error (non-blocking), workflowId={}", workflowId, e);
+        }
 
         // 4.更新工作流发布状态
         workflowEntity.setStatus(CommonConstant.WORKFLOW_PUBLISHED);

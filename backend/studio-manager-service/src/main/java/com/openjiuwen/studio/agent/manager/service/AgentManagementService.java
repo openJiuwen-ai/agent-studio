@@ -146,6 +146,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.rce.client.MaasModelClient;
 import com.openjiuwen.studio.agent.manager.rce.service.JiuWenService;
+import com.openjiuwen.studio.agent.manager.a2a.A2aRegistrationService;
 import com.openjiuwen.studio.agent.manager.service.adapter.AgentPluginAdapter;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
@@ -338,6 +339,9 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private AgentSpaceService agentSpaceService;
+
+    @Autowired
+    private A2aRegistrationService a2aRegistrationService;
 
     @Autowired
     private ShareResourceManagerService shareResourceManagerService;
@@ -1062,6 +1066,13 @@ public class AgentManagementService implements IAgentManagementService {
     public CommonDeleteRsp deleteAgent(String projectId, String agentId, String workspaceId) {
         // 校验Agent是否能够删除
         checkAgentShouldBeDeletedOrNot(projectId, workspaceId, agentId);
+
+        // FEAT-131: 删除前触发 A3 注销（失败不阻断删除，标记可重试）
+        try {
+            a2aRegistrationService.deregisterOnOffline(agentId);
+        } catch (Exception e) {
+            log.warn("A2A deregistration hook error (non-blocking), agentId={}", agentId, e);
+        }
 
         // agent-builder空间取消发布
         if (publishAgentBuilderEnable) {
@@ -2554,6 +2565,15 @@ public class AgentManagementService implements IAgentManagementService {
             app.setCreator(CommonConstant.DEFAULT_USERNAME);
         }
         appMapper.insert(app);
+
+        // FEAT-131: 发布后自动产卡 + A1 注册到 RDC（失败不阻断发布）
+        try {
+            a2aRegistrationService.registerOnPublish(agentId, agent.getDescription(),
+                agentVersion.getVersionId(), agent.getType());
+        } catch (Exception e) {
+            log.warn("A2A registration hook error (non-blocking), agentId={}", agentId, e);
+        }
+
         return agent.convertToDto();
     }
 

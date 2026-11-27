@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
+    "hypercorn>=0.17.0",
     "pydantic>=2.4.0",
     "pydantic-settings~=2.14.2",
     # agent-core 官方 0.1.17_hotfix 分支（compile 可重入 + 执行期状态

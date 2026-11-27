@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.AgentRdcRegistrationMapper">
+    <resultMap id="BaseResultMap" type="com.openjiuwen.studio.agent.manager.entity.AgentRdcRegistrationEntity">
+        <id column="id" jdbcType="VARCHAR" property="id"/>
+        <result column="agent_id" jdbcType="VARCHAR" property="agentId"/>
+        <result column="service_id" jdbcType="VARCHAR" property="serviceId"/>
+        <result column="instance_id" jdbcType="VARCHAR" property="instanceId"/>
+        <result column="status" jdbcType="VARCHAR" property="status"
+                typeHandler="org.apache.ibatis.type.EnumTypeHandler"/>
+        <result column="agent_card_json" jdbcType="LONGVARCHAR" property="agentCardJson"/>
+        <result column="registration_mode" jdbcType="VARCHAR" property="registrationMode"/>
+        <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
+        <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
+    </resultMap>
+    <sql id="Base_Column_List">
+        id,
+        agent_id,
+        service_id,
+        instance_id,
+        status,
+        agent_card_json,
+        registration_mode,
+        created_on,
+        updated_on
+    </sql>
+    <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.AgentRdcRegistrationEntity">
+        insert into t_agent_rdc_registration (id, agent_id, service_id, instance_id, status, agent_card_json,
+        registration_mode, created_on, updated_on)
+        values (#{id,jdbcType=VARCHAR}, #{agentId,jdbcType=VARCHAR}, #{serviceId,jdbcType=VARCHAR},
+                #{instanceId,jdbcType=VARCHAR}, #{status,jdbcType=VARCHAR}, #{agentCardJson,jdbcType=LONGVARCHAR},
+                #{registrationMode,jdbcType=VARCHAR}, #{createdOn,jdbcType=TIMESTAMP}, #{updatedOn,jdbcType=TIMESTAMP})
+    </insert>
+    <select id="selectByAgentId" parameterType="map" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_agent_rdc_registration
+        where agent_id = #{agentId,jdbcType=VARCHAR}
+    </select>
+    <select id="selectByStatus" parameterType="map" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_agent_rdc_registration
+        where status = #{status,jdbcType=VARCHAR}
+    </select>
+    <update id="updateStatusByAgentId" parameterType="com.openjiuwen.studio.agent.manager.entity.AgentRdcRegistrationEntity">
+        update t_agent_rdc_registration
+        <set>
+            <if test="serviceId != null">service_id = #{serviceId,jdbcType=VARCHAR},</if>
+            <if test="instanceId != null">instance_id = #{instanceId,jdbcType=VARCHAR},</if>
+            <if test="status != null">status = #{status,jdbcType=VARCHAR},</if>
+            <if test="agentCardJson != null">agent_card_json = #{agentCardJson,jdbcType=LONGVARCHAR},</if>
+            <if test="registrationMode != null">registration_mode = #{registrationMode,jdbcType=VARCHAR},</if>
+            updated_on = #{updatedOn,jdbcType=TIMESTAMP}
+        </set>
+        where agent_id = #{agentId,jdbcType=VARCHAR}
+    </update>
+    <delete id="deleteByAgentId" parameterType="map">
+        delete
+        from t_agent_rdc_registration
+        where agent_id = #{agentId,jdbcType=VARCHAR}
+    </delete>
+</mapper>

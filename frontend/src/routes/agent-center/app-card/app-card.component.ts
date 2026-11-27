@@ -493,6 +493,21 @@ export class AppCardComponent implements OnInit, OnDestroy {
     this.router.navigate(["/home/agent-observatory/agentDeployment"]);
   }
 
+  /** FEAT-131: 重试 A2A 注册 */
+  public retryRegistration(event: Event) {
+    event.stopPropagation();
+    const agentId = this.data.agent_id || this.data.workflow_id || this.data.id;
+    if (!agentId) return;
+    this.service.retryRegistration(agentId).then(() => {
+      this.service.getRegistrationStatus(agentId).then((res: any) => {
+        if (res?.status === 'REGISTERED') {
+          this.data.registration_status = 'REGISTERED';
+          this.cdr.detectChanges();
+        }
+      });
+    });
+  }
+
   public export() {
     const idMap = {
       agent: "agent_id",
