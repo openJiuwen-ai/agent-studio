@@ -457,9 +457,13 @@ class WorkflowRunner:
         t_session = time.perf_counter()
         # Outer try/finally ensures OTel context token is always detached,
         # even if client disconnects at early yield points (start/workflow_start).
-        # execution scope 在 exec_id 定稿后再 attach（见下方 inputs 分支之后）。
         otel_token = None
         try:
+            # Scope SDK context changes to this generator, including early close.
+            # A business trace ID alone is not an OTel parent SpanContext.
+            otel_token = (
+                otel_context.attach(otel_context.get_current()) if _HAS_OTEL else None
+            )
             if is_interrupted:
                 # QA resume: reuse the trace_id from the first execution of this
                 # round so the OTel handler keeps the cached root context.
@@ -520,24 +524,6 @@ class WorkflowRunner:
             performance_logger.info(
                 f"inputs_build|{round((time.perf_counter() - t_inputs_build) * 1000)}"
             )
-
-            # exec_id 已定稿（含 resume 复用）：写入 OTel execution scope，
-            # 使 ExecutionScopedWorkflowHandler 按执行隔离 span 状态。
-            if _HAS_OTEL:
-                from agent_runtime.observability.otel_handler_scope import (
-                    attach_execution_scope,
-                )
-
-                current_trace_id = (
-                    session.get_trace_id()
-                    if hasattr(session, "get_trace_id")
-                    else None
-                )
-                otel_token = attach_execution_scope(
-                    exec_id,
-                    trace_id=current_trace_id or "",
-                    session_id=session_id,
-                )
 
             # 5.1 记忆检索：在工作流执行前检索相关记忆
             if not is_resuming:
@@ -790,35 +776,12 @@ class WorkflowRunner:
         finally:
             # Restore the incoming context, including on generator close.
             if otel_token is not None:
-                try:
-                    otel_context.detach(otel_token)
-                except Exception:  # noqa: BLE001 - core 任务切换时 token 可能跨 context
-                    pass
-            if _HAS_OTEL:
-                try:
-                    from agent_runtime.observability.otel_handler_scope import (
-                        release_execution_scope,
-                    )
+                otel_context.detach(otel_token)
 
-                    release_execution_scope(exec_id)
-                except Exception:  # noqa: BLE001 - 释放失败不阻断主流程
-                    pass
-
-    async def run_blocking(
-        self,
-        req: ExecutionRequest,
-        execution_id: str | None = None,
-        env_scope: dict | None = None,
-    ) -> str:
-        """执行 IR 工作流并返回完整结果。
-
-        ``execution_id`` 须与 API 层请求级 ID 一致并透传给 ``run_streaming``，
-        否则会回退 ``session_id``，同 conversation 并发非流式会共享 OTel scope。
-        """
+    async def run_blocking(self, req: ExecutionRequest, env_scope: dict | None = None) -> str:
+        """执行 IR 工作流并返回完整结果"""
         result_parts = []
-        async for chunk in self.run_streaming(
-            req, execution_id=execution_id, env_scope=env_scope
-        ):
+        async for chunk in self.run_streaming(req, env_scope=env_scope):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
             if event in ("message", "done"):
