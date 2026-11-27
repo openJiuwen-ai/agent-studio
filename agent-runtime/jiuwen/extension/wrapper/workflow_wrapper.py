@@ -52,11 +52,14 @@ _DEBUG_EVENT_RETURN_TO_SERVICE: dict[str, str] = {
     "LoopComponent": "jiuwen.loop",
     "FlowApi": "Api",
     "FlowCustomApi": "Api",
+    "jiuwen.plugin": "Api",
     "FlowInput": "jiuwen.input",
     "ExceptionInfo": "jiuwen.exception",
     "LoopSetVariable": "jiuwen.setVariable",
     "Aggregate": "jiuwen.aggregation",
     "FlowCode": "Code",
+    "FlowTemplateTransform": "TemplateTransform",
+    "jiuwen.templateTransform": "TemplateTransform",
     "EI.ComplexIntentDetection": "EI.ComplexIntentDetection",
     "jiuwen.paramExtraction": "jiuwen.paramExtraction",
     "FlowMcp": "jiuwen.mcp",
@@ -86,6 +89,22 @@ class WorkflowWrapper:
 
     # 内部保留 type，用于 trigger 通知 wrapper start trace 已解析完成
     _START_TRACE_RESOLVED_TYPE = "__start_trace_resolved__"
+
+    @staticmethod
+    def format_stream_exception(exc: BaseException) -> tuple[Any, str]:
+        """将异常转为 StreamData 可用的 (code, message)。
+
+        TypeError 等内建异常没有 .code/.message；直接读属性会掩盖真实根因
+        （如 End 节点 inputs 为 None 时的
+        \"argument of type 'NoneType' is not iterable\"）。
+        """
+        if isinstance(exc, JiuWenBaseException):
+            return exc.error_code, exc.message
+        code = getattr(exc, "code", None)
+        if code is None:
+            code = getattr(exc, "error_code", -1)
+        msg = getattr(exc, "message", None) or str(exc)
+        return code, msg
 
     def __init__(self, node_name_type_map: dict[str, dict] = None):
         self._runtime_context: dict = {}
@@ -402,8 +421,7 @@ class WorkflowWrapper:
             # WorkflowAbortException（异常结束节点）已通过 CustomSchema 发出 exception 事件，
             # 不再重复发送 ERROR StreamData，避免前端弹窗。
             if not isinstance(e, WorkflowAbortException):
-                code = e.code if not isinstance(e, JiuWenBaseException) else e.error_code
-                msg = e.message
+                code, msg = WorkflowWrapper.format_stream_exception(e)
                 yield StreamData(
                     code=StreamCode.ERROR.value,
                     msg=StreamDataMsg.FAIL,
@@ -748,9 +766,10 @@ class WorkflowWrapper:
             "agentId": payload.get("workflowId", ""),
             "componentId": comp_id,
             "componentName": effective_component_name,
+            # 优先用 IR 覆盖后的类型（Trace 对未登记组件可能是空/unknown）
             "componentType": _DEBUG_EVENT_RETURN_TO_SERVICE.get(
-                payload.get("componentType", "unknown"),
-                payload.get("componentType", ""),
+                effective_component_type or payload.get("componentType", "unknown"),
+                effective_component_type or payload.get("componentType", ""),
             ),
             "agentParentInvokeId": "",
             "inputs": payload.get("inputs"),

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -22,19 +23,34 @@ import java.util.stream.Stream;
 public class LocalFileStoreImpl implements FileStore {
 
     private final String basePath;
+    private final Path normalizedBasePath;
     private final String defaultNamespace;
     private final String stagingNamespace;
     private final String serverUrl;
 
     public LocalFileStoreImpl(StorageProperties.Local localConfig) {
         this.basePath = localConfig.getBasePath();
+        if (this.basePath == null || this.basePath.isBlank()) {
+            throw new IllegalArgumentException("storage.local.base-path must be configured when storage.type=LOCAL");
+        }
+        this.normalizedBasePath = Paths.get(this.basePath).toAbsolutePath().normalize();
         this.defaultNamespace = localConfig.getBucket();
         this.stagingNamespace = localConfig.getStagingBucket();
         this.serverUrl = localConfig.getServerUrl() != null ? localConfig.getServerUrl().replaceAll("/+$", "") : "";
     }
 
+    /**
+     * 将存储键解析为绝对路径，并确保结果仍位于存储根目录内，防止 {@code ../} 路径穿越。
+     *
+     * <p>保留 {@code Paths.get(basePath, path)} 的字符串拼接语义：空 bucket 配置下调用方会拼出
+     * {@code /xxx} 形式的键，若改用 {@link Path#resolve(Path)} 会被当作绝对路径而误判为越界。</p>
+     */
     private Path resolve(String path) {
-        return Paths.get(basePath, path);
+        Path resolved = Paths.get(normalizedBasePath.toString(), path).normalize();
+        if (!resolved.startsWith(normalizedBasePath)) {
+            throw new IllegalArgumentException("path escapes storage root: " + path);
+        }
+        return resolved;
     }
 
     private String extractKeyPrefix(String prefix) {
@@ -84,6 +100,23 @@ public class LocalFileStoreImpl implements FileStore {
             return Files.readString(file, StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("read file failed: {}", path, e);
+            throw new RuntimeException("read file failed: " + path, e);
+        }
+    }
+
+    @Override
+    public String readOrNull(String path) {
+        // LOCAL 模式：NoSuchFileException（文件不存在=未发布）归一为 null（与 OBS readOrNull 的 404+NoSuchKey 语义对齐），
+        // 让 PublishUtils.getPublish 在 storage.type=LOCAL 下也能把"未发布"归一为 null → 导出返 400（而非 500）。
+        // 其他 IOException（真实 IO 故障，如权限/磁盘）抛出，不掩盖。
+        Path file = resolve(path);
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (NoSuchFileException e) {
+            log.warn("local file not found, treat as absent: {}", path);
+            return null;
+        } catch (IOException e) {
+            log.error("readOrNull file failed: {}", path, e);
             throw new RuntimeException("read file failed: " + path, e);
         }
     }

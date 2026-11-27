@@ -35,6 +35,26 @@ from . import authz, dispatch, env_resolver, policy, resolver
 logger = logging.getLogger(__name__)
 
 
+def _llm_call_error_kwargs(
+    *,
+    is_stream: bool,
+    model_name,
+    model_provider,
+    error,
+    api_url: str,
+    start_mono: float,
+) -> dict:
+    """组装 ``LLM_CALL_ERROR`` trigger 参数（#1642/#1711：补 url + 失败耗时）。"""
+    return {
+        "is_stream": is_stream,
+        "model_name": model_name,
+        "model_provider": model_provider,
+        "error": error,
+        "api_url": api_url or "",
+        "latency_ms": int((time.monotonic() - start_mono) * 1000),
+    }
+
+
 @dataclass
 class _ResolveInputs:
     model_service_id: str
@@ -103,6 +123,58 @@ def _build_verbatim_body(params: dict) -> dict:
     return body
 
 
+def _effective_request_user_id() -> str:
+    """当前请求登录用户 ID（经 ``model_service.ports`` 注入，不直连宿主私有 ContextVar）。
+
+    仅作画布试运行覆盖静态 ``cust-userid``（#1728/#1761）；未注入或异常返回空。
+    """
+    try:
+        from model_service import ports as _ports
+        return str(_ports.get_request_user_id() or "").strip()
+    except Exception as exc:
+        logger.debug("request user_id port unavailable: %s", exc)
+        return ""
+
+
+def _is_studio_trial_invoke() -> bool:
+    """是否画布试运行/调试（ports 注入的 ``X-Invoke-Mode=debug``，大小写不敏感）。
+
+    正式 ``PUBLISHED`` 等返回 False。不直连 ``agent_runtime`` 私有 ``_request_ctx``。
+    """
+    try:
+        from model_service import ports as _ports
+        mode = _ports.get_invoke_mode() or ""
+        return str(mode).lower() == "debug"
+    except Exception as exc:
+        logger.debug("invoke_mode port unavailable: %s", exc)
+        return False
+
+
+def _cust_userid_for_static_override() -> str:
+    """决定是否、以及用何值覆盖模型配置中的静态 ``cust-userid``。
+
+    仅画布试运行（``X-Invoke-Mode=debug``）才覆盖，且**只取已认证登录 user_id**，
+    不信任入站 ``cust-userid`` header（防公开路径伪造，#1728/#1761）。
+    Manager 试运行出站注入走 OkHttp/Feign 显式 header，不依赖本兜底信任客户端。
+    """
+    if not _is_studio_trial_invoke():
+        return ""
+    return _effective_request_user_id()
+
+
+def _override_static_cust_userid(custom_headers: dict, user_id: str) -> dict:
+    """用给定用户替换模型配置中的静态 ``cust-userid``（大小写不敏感）。
+
+    ``user_id`` 为空时不覆盖（正式运行保留静态配置）。
+    """
+    if not custom_headers or not user_id:
+        return dict(custom_headers or {})
+    out = {}
+    for key, value in custom_headers.items():
+        out[key] = user_id if key.lower() == "cust-userid" else value
+    return out
+
+
 def _build_verbatim_headers(conn, params: dict) -> dict:
     """verbatim 分支鉴权头（对齐 agent_builder facade ``_auth_headers``）。
 
@@ -114,9 +186,13 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
     if conn.custom_headers:
         cfg = get_config()
         capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        # 仅 debug 试运行用登录 user_id 覆盖静态值；正式发布保留模型配置
+        static_headers = _override_static_cust_userid(
+            conn.custom_headers, _cust_userid_for_static_override()
+        )
         to_rename = {}
         to_pass = {}
-        for k, v in conn.custom_headers.items():
+        for k, v in static_headers.items():
             if k.lower() in capture_keys:
                 to_rename[k] = v
             else:
@@ -321,13 +397,15 @@ class StudioModelClient(OpenAIModelClient):
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
-            # 页面试运行（无上游 captured）：用模型配置静态值做 rename
-            # 非 capture 键（含 CUSTOM_APIKEY 鉴权头）一律透传；功能禁用（_cap 为空）时等价于
-            # 旧的全量透传 params["extra_headers"] = conn.custom_headers，保证向后兼容。
+            # 无 rename 投影时用模型配置静态值；仅画布 debug 用登录
+            # user_id 覆盖静态 cust-userid（#1728/#1761），不信任入站 header。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
+            static_headers = _override_static_cust_userid(
+                conn.custom_headers, _cust_userid_for_static_override()
+            )
             to_rename = {}
             to_pass = {}
-            for k, v in conn.custom_headers.items():
+            for k, v in static_headers.items():
                 if k.lower() in _cap:
                     to_rename[k] = v
                 else:
@@ -382,6 +460,7 @@ class StudioModelClient(OpenAIModelClient):
         }
         _model_name = params.get("model")
         _provider = self.model_client_config.client_provider
+        _api_url = detail.model.api_url or ""
         _input_kwargs = dict(
             model_name=_model_name, model_provider=_provider,
             messages=params.get("messages"), tools=params.get("tools"),
@@ -406,6 +485,8 @@ class StudioModelClient(OpenAIModelClient):
             max_retries=0,   # 单层重试：failover 由 policy 循环负责，避免 SDK 嵌套重试
         )
 
+        # 失败耗时：从即将发出下游请求起算（#1642/#1711）。
+        call_start = time.monotonic()
         try:
             if stream:
                 # 对应父类 stream 分支，补 include_usage。
@@ -435,8 +516,17 @@ class StudioModelClient(OpenAIModelClient):
                                     final_message = parsed if final_message is None else final_message + parsed
                                     yield parsed
                     except Exception as e:
-                        await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=True,
-                                      model_name=_model_name, model_provider=_provider, error=e)
+                        await trigger(
+                            LLMCallEvents.LLM_CALL_ERROR,
+                            **_llm_call_error_kwargs(
+                                is_stream=True,
+                                model_name=_model_name,
+                                model_provider=_provider,
+                                error=e,
+                                api_url=_api_url,
+                                start_mono=call_start,
+                            ),
+                        )
                         raise
                     else:
                         if final_message is not None:
@@ -465,8 +555,17 @@ class StudioModelClient(OpenAIModelClient):
         except Exception as e:
             # 覆盖非流 create/parse 失败与流 create 失败；流中途错误已在 _parsed 内触发。
             await client.close()
-            await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
-                          model_name=_model_name, model_provider=_provider, error=e)
+            await trigger(
+                LLMCallEvents.LLM_CALL_ERROR,
+                **_llm_call_error_kwargs(
+                    is_stream=stream,
+                    model_name=_model_name,
+                    model_provider=_provider,
+                    error=e,
+                    api_url=_api_url,
+                    start_mono=call_start,
+                ),
+            )
             raise
 
     async def _invoke_verbatim(self, detail, conn, call):
@@ -493,6 +592,8 @@ class StudioModelClient(OpenAIModelClient):
         client = dispatch.build_httpx_client(
             url, conn.verify_ssl, self.model_client_config.ssl_cert)
 
+        # 失败耗时：从即将发出下游请求起算（#1642/#1711）。
+        call_start = time.monotonic()
         try:
             if stream:
                 # 对齐父类 stream 分支：补 include_usage。
@@ -545,9 +646,17 @@ class StudioModelClient(OpenAIModelClient):
                                 )
                                 yield parsed
                     except Exception as e:
-                        await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=True,
-                                      model_name=_model_name, model_provider=_provider,
-                                      error=e)
+                        await trigger(
+                            LLMCallEvents.LLM_CALL_ERROR,
+                            **_llm_call_error_kwargs(
+                                is_stream=True,
+                                model_name=_model_name,
+                                model_provider=_provider,
+                                error=e,
+                                api_url=url,
+                                start_mono=call_start,
+                            ),
+                        )
                         raise
                     else:
                         if final_message is not None:
@@ -589,8 +698,17 @@ class StudioModelClient(OpenAIModelClient):
         except Exception as e:
             # 覆盖非流 post/parse/状态码失败与流 send/状态码失败；流中途错误已在 _parsed 内触发。
             await client.aclose()
-            await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
-                          model_name=_model_name, model_provider=_provider, error=e)
+            await trigger(
+                LLMCallEvents.LLM_CALL_ERROR,
+                **_llm_call_error_kwargs(
+                    is_stream=stream,
+                    model_name=_model_name,
+                    model_provider=_provider,
+                    error=e,
+                    api_url=url,
+                    start_mono=call_start,
+                ),
+            )
             raise
 
     # 审计填充

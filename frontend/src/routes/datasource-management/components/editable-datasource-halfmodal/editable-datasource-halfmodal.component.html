@@ -1,7 +1,8 @@
-<div class="font-bold text-lg mb-4">{{ title }}</div>
+<div class="flex flex-col h-full">
+  <div class="font-bold text-lg mb-4 shrink-0">{{ title }}</div>
 
-<div class="my-6 h-full w-full">
-  <form nz-form nzLayout="vertical" [formGroup]="form">
+  <div class="flex-1 overflow-y-auto min-h-0">
+    <form nz-form nzLayout="vertical" [formGroup]="form">
 
     <nz-form-item>
       <nz-form-label [nzNoColon]="true">
@@ -141,14 +142,15 @@
       </nz-form-control>
     </nz-form-item>
 
-  </form>
-</div>
+    </form>
+  </div>
 
-<div class="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+  <div class="flex justify-end gap-2 pt-4 mt-4 border-t border-gray-100 shrink-0 bg-white">
   <button nz-button nzType="default" type="button" (click)="dismiss()">
     {{ 'cancel' | i18nextEager }}
   </button>
   <button nz-button nzType="primary" nzDanger type="button" [nzLoading]="btnLoading" (click)="createDatasource()">
     {{ 'connect_and_save'|i18nextEager }}
   </button>
+  </div>
 </div>

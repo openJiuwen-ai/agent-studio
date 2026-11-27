@@ -9,7 +9,7 @@
 
 from .resolver import (
     InterfaceProtocol, ModelServiceBase, ModelServiceDetail, ModelStrategy,
-    ProviderAuth, StrategyType, resolve_strategy,
+    ProviderAuth, StrategyType, query_model_display_name, resolve_strategy,
 )
 from .env_resolver import (
     ENV_PLACEHOLDER_PATTERN, has_env_placeholder, resolve_env_placeholders,
@@ -25,6 +25,8 @@ from .ports import (
     set_llm_settings, get_llm_settings,
     set_request_headers, get_request_headers,
     set_request_customer_headers, get_request_customer_headers,
+    set_request_user_id, get_request_user_id,
+    set_invoke_mode, get_invoke_mode,
     set_env_variables, get_env_variables,
     set_cache_queues, get_model_cache, get_auth_cache,
 )
@@ -49,6 +51,8 @@ __all__ = [
     "set_llm_settings", "get_llm_settings",
     "set_request_headers", "get_request_headers",
     "set_request_customer_headers", "get_request_customer_headers",
+    "set_request_user_id", "get_request_user_id",
+    "set_invoke_mode", "get_invoke_mode",
     "set_env_variables", "get_env_variables",
     "set_cache_queues", "get_model_cache", "get_auth_cache",
 ]

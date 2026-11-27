@@ -35,6 +35,7 @@ import com.openjiuwen.studio.agent.manager.dto.McpServerBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServerDetailReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServerRatingReq;
+import com.openjiuwen.studio.agent.manager.dto.McpServerShelfReq;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoDto;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBaseInfoListResp;
 import com.openjiuwen.studio.agent.manager.dto.McpServiceBatchDeployItem;
@@ -67,10 +68,13 @@ import com.openjiuwen.studio.agent.manager.enums.EnumOrgType;
 import com.openjiuwen.studio.agent.manager.enums.McpNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.EnvironmentManagerMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.service.AssetShelfPermissionValidator;
+import com.openjiuwen.studio.agent.manager.service.AssetCategoryValidator;
 import com.openjiuwen.studio.agent.manager.service.IMcpServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.ApiMcpService;
 import com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigRequsetDto;
 import com.openjiuwen.studio.agent.manager.service.mcp.auth.IMcpBase;
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.mcp.infrastructure.apig.CesService;
 import com.openjiuwen.studio.agent.manager.service.mcp.local.McpUpdateTask;
 import com.openjiuwen.studio.agent.manager.service.mcp.model.dao.McpServerDao;
@@ -100,6 +104,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
@@ -129,11 +134,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -147,6 +154,11 @@ import java.util.stream.Collectors;
 @Service
 public class McpServiceManager implements IMcpServiceManagerService {
     private static final String TENANT_ID = "tenantId";
+
+    /**
+     * 私有服务目录条目类型（用户上架条目保持 private，由 platform_published 控制跨租户可见性）
+     */
+    private static final String MCP_SERVER_TYPE_PRIVATE = "private";
 
     /**
      * 监控粒度
@@ -231,6 +243,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
     @Resource
     private McpServiceDao serviceDao;
 
+    @Autowired
+    private AssetShelfPermissionValidator shelfPermissionValidator;
+
+    @Autowired
+    private AssetCategoryValidator assetCategoryValidator;
+
     @Resource
     private McpUtil mcpUtil;
 
@@ -301,6 +319,7 @@ public class McpServiceManager implements IMcpServiceManagerService {
         commonService.validSearchNameStartWithChineseEnglishLettersNumber(listServersQo.getName());
 
         String tenantId = RequestContextUtils.getRequestUserDomainId();
+        String userId = RequestContextUtils.getRequestUserId();
 
 
         if (StringUtils.isNotBlank(listServersQo.getLanguage()) && !Arrays.stream(LANGUAGE.values())
@@ -338,6 +357,8 @@ public class McpServiceManager implements IMcpServiceManagerService {
         log.info("Mapping server entities to DTOs and calculating scores.");
         resp.setMcps(mcpServerEntities.stream().map(server -> {
             McpServerBaseInfoDto mcpServerBaseInfoDto = mcpUtil.serverEntity2McpBaseInfoDto(server);
+            mcpServerBaseInfoDto.setCreatedByUserId(server.getCreatedByUserId());
+            mcpServerBaseInfoDto.setIsOwner(userId.equals(server.getCreatedByUserId()));
             double avgScore = calculatedScore(mcpServerBaseInfoDto.getId(), serverScores);
             mcpServerBaseInfoDto.setScore(avgScore);
             return mcpServerBaseInfoDto;
@@ -504,12 +525,20 @@ public class McpServiceManager implements IMcpServiceManagerService {
     private McpServiceBaseInfoListResp buildMcpServiceListRep(List<McpServiceEntity> infos, long total) {
         log.info("Building MCP service list response. Total: {}", total);
 
+        // 批量查询已上架目录条目（source_instance_id → 目录条目id），用于组件库"已上架"状态标注（FRS-091 FR-06）
+        Set<String> serviceIds = infos.stream().map(McpServiceEntity::getId).collect(Collectors.toSet());
+        Map<String, String> shelfServerMap = serverDao.selectShelfServerIdsBySourceInstanceIds(new ArrayList<>(serviceIds));
+
         McpServiceBaseInfoListResp resp = new McpServiceBaseInfoListResp();
         resp.setTotal(total).setMcps(infos.stream().map(info -> {
             McpServiceBaseInfoDto mcpServiceBaseInfoDto;
             mcpServiceBaseInfoDto = mcpUtil.serviceEntity2McpBaseInfoDto(info);
             // 初始化MCP来源是自定义
             mcpServiceBaseInfoDto.setResource("custom");
+            // 组件库"已上架到资产广场"状态
+            if (shelfServerMap.containsKey(info.getId())) {
+                mcpServiceBaseInfoDto.setPlatformPublished(1);
+            }
             log.info("Querying server entity for service ID: {}", info.getServerId());
             McpServerEntity mcpServerEntity = this.serverDao.selectById(info.getServerId());
 
@@ -543,8 +572,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
         String tenantId = RequestContextUtils.getRequestUserDomainId();
 
 
-        McpServerEntity serverEntity = serverDao.selectById(serverId);
+        McpServerEntity serverEntity = serverDao.selectByIdAndDeletedFalse(serverId);
         if (serverEntity == null) {
+            // 不存在或已下架（deleted=true）统一返回不存在，下架条目不进入详情/不累加浏览计数（FR-10/AC-14）
             throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
         }
         // 白名单放行：inner 全租户可见；private 仅本租户可见；其余（脏数据孤儿）404
@@ -593,6 +623,11 @@ public class McpServiceManager implements IMcpServiceManagerService {
         serviceEntity.setAuthInfo(mcpBase.anonymizeAuthInfo(serviceEntity.getAuthInfo()));
         McpServiceDetailInfoDto mcpServiceDetailInfoDto = mcpUtil.serviceEntity2McpServiceDetailInfoDto(serviceEntity);
         log.info("Converted service entity to DTO. Service ID: {}", serviceId);
+
+        // FEAT-134: 导入待补配标记透传（前端据此展示补配提示）
+        mcpServiceDetailInfoDto.setImportConfigPending(
+            Boolean.TRUE.equals(serviceEntity.getImportConfigPending()));
+        mcpServiceDetailInfoDto.setImportConfigPaths(serviceEntity.getImportConfigPaths());
 
         mcpServiceDetailInfoDto.setServerConfig(encryptionAdapter.decrypt(mcpServiceDetailInfoDto.getServerConfig()));
 
@@ -791,6 +826,12 @@ public class McpServiceManager implements IMcpServiceManagerService {
             && !"private".equals(serverDetail.getType())) {
             throw new AgentStudioException(StudioError.MCP_SERVER_TYPE_INVALID);
         }
+        // TBD-03 收口（FRS-091）：inner（全员可见目录条目）仅平台运营租户可创建，
+        // 防止普通空间成员绕过角色配置创建"官方预置"外观条目
+        if ("inner".equals(serverDetail.getType()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("Only operation tenant can create inner type mcp server, projectId: {}", projectId);
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
 
         // 构建实体
         McpServerEntity serverEntity = mcpUtil.mcpDetailInfoDto2ServerEntity(serverDetail);
@@ -798,6 +839,173 @@ public class McpServiceManager implements IMcpServiceManagerService {
         // 插入数据库
         serverDao.insert(serverEntity);
         return serverEntity.getId();
+    }
+
+    /**
+     * 将已部署的 MCP 服务实例上架到资产广场（平台精选，跨租户可见）。
+     *
+     * <p>实现语义（FRS-091）：实例 → 服务目录条目快照转换；鉴权信息（auth/authInfo）不下发；
+     * 同一实例重复上架返回既有条目并刷新快照内容（source_instance_id 全局唯一，DEC-05）；</p>
+     *
+     * @param projectId 项目 ID
+     * @param workspaceId 空间 ID
+     * @param req 上架请求（service_id 必填）
+     * @return 服务目录条目 ID
+     */
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "McpServer",
+        description = "上架MCP服务到资产广场",
+        resourceId = "req.serviceId",
+        resourceName = ""
+    )
+    public String publishServer(String projectId, String workspaceId, McpServerShelfReq req) {
+        log.info("operation log {}:start to publish mcp server, serviceId: {}", projectId, req.getServiceId());
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        String tenantId = RequestContextUtils.getRequestUserDomainId();
+        McpServiceEntity service = serviceDao.selectById(req.getServiceId(), tenantId, CommonUtil.getDeptCode(),
+            workspaceId);
+        if (service == null) {
+            log.error("Mcp service not exists, serviceId: {}", req.getServiceId());
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
+        }
+        if (!SUCCESS.getValue().equals(service.getFcInstanceStatus()) || StringUtils.isBlank(service.getTools())) {
+            log.error("Mcp service is not publishable, serviceId: {}, fcInstanceStatus: {}, tools blank: {}",
+                req.getServiceId(), service.getFcInstanceStatus(), StringUtils.isBlank(service.getTools()));
+            throw new AgentStudioException(StudioError.ASSET_NOT_PUBLISHABLE);
+        }
+        // FR-03：行业分类须校验存在于 t_pe_industry（library_type='mcp'），非法值 fail-closed 拒绝，不留半成品；
+        // 缺省（req.category 为空）沿用既有目录值，跳过校验
+        assetCategoryValidator.validateCategoryExists(req.getCategory(), AssetCategoryValidator.LIBRARY_TYPE_MCP);
+        // 同一实例重复上架：去重并刷新快照（并发由 source_instance_id 唯一索引兜底）；
+        // readme/category 未重新填写时保留既有目录值（避免二次上架把已填内容覆盖清空）
+        McpServerEntity existing = serverDao.selectBySourceInstanceId(req.getServiceId());
+        if (existing != null) {
+            String refreshReadme = StringUtils.isBlank(req.getReadme()) ? existing.getReadme() : req.getReadme();
+            String refreshCategory = StringUtils.isBlank(req.getCategory()) ? existing.getCategory() : req.getCategory();
+            McpServerEntity refresh = buildShelfServerEntity(service, existing.getId(), refreshCategory,
+                refreshReadme, tenantId);
+            serverDao.updateContentById(refresh);
+            return existing.getId();
+        }
+        McpServerEntity server = buildShelfServerEntity(service, UUID.randomUUID().toString(), req.getCategory(),
+            req.getReadme(), tenantId);
+        try {
+            serverDao.insert(server);
+        } catch (DuplicateKeyException e) {
+            // 并发上架竞态：唯一索引（source_instance_id）兜底，返回既有条目
+            log.warn("Concurrent publish detected for mcp service {}, fallback to existing shelf entry",
+                req.getServiceId());
+            McpServerEntity concurrent = serverDao.selectBySourceInstanceId(req.getServiceId());
+            if (concurrent != null) {
+                return concurrent.getId();
+            }
+            throw e;
+        }
+        return server.getId();
+    }
+
+    /**
+     * 将 MCP 服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。
+     *
+     * @param projectId 项目 ID
+     * @param workspaceId 空间 ID
+     * @param serverId 服务目录条目 ID
+     * @return 服务目录条目 ID
+     */
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "McpServer",
+        description = "下架MCP服务目录条目",
+        resourceId = "serverId",
+        resourceName = ""
+    )
+    public String unpublishServer(String projectId, String workspaceId, String serverId) {
+        log.info("operation log {}:start to unpublish mcp server, serverId: {}", projectId, serverId);
+        shelfPermissionValidator.checkOwnerOrAdmin(projectId, workspaceId);
+        McpServerEntity server = serverDao.selectById(serverId);
+        // 兼容组件库场景：入参为目录条目标识或上架来源的实例ID（source_instance_id）
+        if (server == null) {
+            server = serverDao.selectBySourceInstanceId(serverId);
+        }
+        if (server == null || Boolean.TRUE.equals(server.getDeleted())) {
+            log.info("Mcp server already off shelf, serverId: {}", serverId);
+            return serverId;
+        }
+        // 归属校验：仅上架属主用户（创建者）或运营租户可下架（FRS-091：跨用户不可下架他人上架资产）
+        String userId = RequestContextUtils.getRequestUserId();
+        if (!userId.equals(server.getCreatedByUserId()) && !shelfPermissionValidator.isOpTenant(projectId)) {
+            log.error("No permission to unpublish mcp server, serverId: {}, createdByUserId: {}",
+                serverId, server.getCreatedByUserId());
+            throw new AgentStudioException(StudioError.USER_NO_PERMISSION_DO_THIS);
+        }
+        serverDao.updateOffShelfById(server.getId(), RequestContextUtils.getRequestUserId());
+        return server.getId();
+    }
+
+    /**
+     * 由 MCP 服务实例构建资产广场目录条目（快照语义，不含实例鉴权信息）。
+     *
+     * <p>鉴权剔除（DEC-04）：实例的 auth/authInfo/authType 不落目录；server_config 仅保留连接配置。</p>
+     */
+    private McpServerEntity buildShelfServerEntity(McpServiceEntity service, String serverId, String category,
+        String readme, String tenantId) {
+        McpServerEntity server = new McpServerEntity();
+        server.setId(serverId);
+        server.setServerCode(service.getId());
+        server.setIcon(service.getIcon());
+        server.setName(service.getName());
+        server.setNameEn(service.getNameEn());
+        server.setDescription(service.getDescription());
+        server.setDescriptionEn(service.getDescriptionEn());
+        server.setReadme(StringUtils.isBlank(readme) ? service.getReadme() : readme);
+        server.setServerConfig(buildShelfServerConfig(service));
+        server.setUrl(service.getFcInstanceUrl());
+        server.setTools(service.getTools());
+        server.setType(MCP_SERVER_TYPE_PRIVATE);
+        server.setOrgType(service.getOrgType());
+        server.setPlatformPublished(1);
+        server.setSourceInstanceId(service.getId());
+        server.setCategory(category);
+        server.setDeleted(false);
+        server.setTenantId(tenantId);
+        server.setDeptCode(CommonUtil.getDeptCode());
+        server.setViewTimes(0);
+        server.setInstallTimes(0);
+        server.setCreatedByUserId(RequestContextUtils.getRequestUserId());
+        server.setLastUpdatedByUserId(RequestContextUtils.getRequestUserId());
+        return server;
+    }
+
+    /**
+     * 构建资产广场目录条目的服务端配置：保留实例连接配置（含服务地址 URL），
+     * 并标记鉴权方式（auth_type 标识，`仅方式不含鉴权密文`，DEC-04：鉴权信息不下发）。
+     */
+    private String buildShelfServerConfig(McpServiceEntity service) {
+        JSONObject config = new JSONObject();
+        String raw = service.getServerConfig();
+        if (StringUtils.isNotBlank(raw)) {
+            try {
+                String decrypted = encryptionAdapter.decrypt(raw);
+                decrypted = mcpUtil.deleteAuthHeadersFromMcpServer(decrypted);
+                JSONObject parsed = JSONObject.parseObject(decrypted);
+                if (parsed != null) {
+                    config.putAll(parsed);
+                }
+            } catch (Exception e) {
+                log.warn("mcp server config parse failed, serviceId: {}, config: {}", service.getId(), raw);
+            }
+        }
+        // 连接地址：优先实例 serverConfig 内已有 uri/url，否则回填实例连接地址
+        String instanceUrl = service.getFcInstanceUrl();
+        if (StringUtils.isNotBlank(instanceUrl) && !config.containsKey("uri") && !config.containsKey("url")) {
+            config.put("uri", instanceUrl);
+        }
+        // 仅保留鉴权方式标识（authType，如 SERVICE/OAUTH 等），不含 auth/auth_info 密文
+        if (StringUtils.isNotBlank(service.getAuthType())) {
+            config.put("auth_type", service.getAuthType());
+        }
+        return config.toString();
     }
 
     /**
@@ -873,6 +1081,10 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         mcpBase.validAuthInfo(serviceDeployReq.getAuthInfo());
+        // FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝
+        // （固定头先注入、动态凭证头按绑定值注入，同名互相覆盖）
+        mcpBase.validDynamicAuthHeaderConflict(serviceDeployReq.getAuthInfo(),
+            serviceDeployReq.getServerConfig());
 
         // authInfo信息加密
         serviceDeployReq.setAuthInfo(mcpBase.encryptedAuthInfo(serviceDeployReq.getAuthInfo()));
@@ -1023,6 +1235,16 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         AuthInfo authInfo = null == serviceEntity.getAuth() ? new AuthInfo() : serviceEntity.getAuth();
+
+        // FEAT-093 动态鉴权：auth_keys 权威配置在 authInfo 字段（保存走 DetailInfoDto.authInfo，
+        // 值不入库），不从 serverConfig 恢复，避免 scope 被改写为 USER 导致运行期
+        // 走用户级鉴权链路（原守卫误读旧 auth 字段，对 DYNAMIC 服务永不命中）
+        if (serviceEntity.getAuthInfo() != null
+                && AuthInfo.ScopeEnum.DYNAMIC.equals(serviceEntity.getAuthInfo().getScope())) {
+            log.info("Dynamic auth scope (authInfo field), skip recovery from server config. Service ID: {}",
+                serviceEntity.getId());
+            return;
+        }
 
         if (CollectionUtils.isEmpty(headerInfo)) {
             log.warn("Header info is empty, no auth keys to recover. Service ID: {}", serviceEntity.getId());
@@ -1356,6 +1578,11 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
         // 是否共享校验
         shareInnerService.cancelMCPShared(id, projectId, workspaceId);
+        // 已上架校验（对标团队共享删除校验）：先下架才能删除
+        if (serverDao.selectBySourceInstanceId(id) != null) {
+            log.error("Mcp service published to plaza cannot be deleted, serviceId: {}", id);
+            throw new AgentStudioException(StudioError.RESOURCE_PUBLISHED_CANNOT_BE_DELETE);
+        }
         // 增加 OR STREAMABLE_HTTP 判断
         if (Strings.CI.equals(serviceEntity.getOrgType(), EnumOrgType.SSE.toString()) ||
             Strings.CI.equals(serviceEntity.getOrgType(), EnumOrgType.STREAMABLE_HTTP.toString())
@@ -1472,6 +1699,10 @@ public class McpServiceManager implements IMcpServiceManagerService {
         // 自定义 apikey 鉴权：出站前对 cust-* 做配置驱动 rename（cust-token→token, cust-userid→userId）
         McpCustomerHeaderProjection.renameOutboundCustomerHeaders(headerInfo, serviceEntity.getName());
 
+        // FEAT-093 调测期动态凭证：scope=DYNAMIC 服务凭证值不入库，
+        // 调测请求经 debug_headers 携带调试值（key 须为已登记的 auth_keys 出站头名）
+        mergeDynamicDebugHeaders(serviceEntity, testInfo.getDebugHeaders(), headerInfo);
+
         log.info("Calling MCP service tool. Service name: {}, Tool name: {}", serviceEntity.getName(), testInfo.getToolName());
         McpSchema.CallToolResult callToolResult = mcpClientService.callMcpServiceTool(
             serviceEntity.getName(), testInfo.getToolName(), mcpUrl, testInfo.getParams(), serviceEntity.getOrgType(), headerInfo);
@@ -1482,6 +1713,97 @@ public class McpServiceManager implements IMcpServiceManagerService {
 
 
         return resp;
+    }
+
+    /**
+     * FEAT-093 调测期动态凭证注入。
+     *
+     * 仅接受服务 auth_info(scope=DYNAMIC, domain=HEADERS) 已登记的出站头名；
+     * 保留关联头/非法头名/逐跳敏感头就地拒绝（调测出站是 manager 侧独立发送
+     * 边界，不经 runtime wrapper 的 strip_correlation_headers）；空白值跳过
+     * （与工作流侧"未绑定不注入"语义一致）；值须 Latin-1 可编码且不含控制字符，
+     * 避免非法头值穿透到 HTTP 客户端才在编码处失败（不可诊断）。
+     */
+    // 包级可见：供同包单测直测调测出站护栏（检视意见补直接单测）
+    void mergeDynamicDebugHeaders(McpServiceEntity serviceEntity, Map<String, String> debugHeaders,
+        Map<String, String> headerInfo) {
+        if (ObjectUtils.isEmpty(debugHeaders)) {
+            return;
+        }
+        AuthInfo authInfo = serviceEntity.getAuthInfo();
+        if (authInfo == null || authInfo.getScope() == null
+            || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())) {
+            log.warn("[testServicesTools] debug headers ignored: service {} auth scope is not DYNAMIC, service id: {}",
+                serviceEntity.getName(), serviceEntity.getId());
+            return;
+        }
+        // 与 validDynamicAuthInfo 对齐：仅 HEADERS 域允许注入（防 DYNAMIC+QUERY
+        // 存量/异常配置绕过"仅请求头层注入"约束）
+        if (!AuthInfo.DomainEnum.HEADERS.equals(authInfo.getDomain())) {
+            log.warn("[testServicesTools] debug headers ignored: service {} auth domain is not HEADERS, service id: {}",
+                serviceEntity.getName(), serviceEntity.getId());
+            return;
+        }
+        // HTTP 头名大小写不敏感：登记名按小写归一比对，接受合法大小写变体
+        Set<String> registeredNames = new HashSet<>();
+        if (ObjectUtils.isNotEmpty(authInfo.getAuthKeys())) {
+            for (AuthKeyInfo key : authInfo.getAuthKeys()) {
+                if (key != null && StringUtils.isNotBlank(key.getTargetName())) {
+                    registeredNames.add(key.getTargetName().trim().toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        for (Map.Entry<String, String> entry : debugHeaders.entrySet()) {
+            String name = entry.getKey() == null ? "" : entry.getKey().trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            // D-02/B07：调测出站是 manager 侧独立发送边界（不经 runtime wrapper 的
+            // strip_correlation_headers），保留关联头须在此就地拒绝，防伪造值直达第三方
+            if (McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                log.warn("[testServicesTools] debug header '{}' is a reserved correlation header, rejected, "
+                    + "service id: {}", name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is a reserved correlation header");
+            }
+            // 头名合法字符/逐跳敏感头校验：存量脏数据（登记早于登记侧校验）经此拦截，
+            // 防请求头注入/请求走私
+            if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(name).matches()
+                || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))) {
+                log.warn("[testServicesTools] debug header '{}' is not a valid http header name, rejected, "
+                    + "service id: {}", name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is not a valid http header name");
+            }
+            if (!registeredNames.contains(name.toLowerCase(Locale.ROOT))) {
+                log.warn("[testServicesTools] debug header '{}' is not a registered dynamic auth key, service id: {}",
+                    name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' is not a registered dynamic auth key");
+            }
+            String value = entry.getValue();
+            if (StringUtils.isBlank(value)) {
+                continue;
+            }
+            if (!isLatin1HeaderValue(value)) {
+                log.warn("[testServicesTools] debug header '{}' contains characters not allowed in an HTTP header, service id: {}",
+                    name, serviceEntity.getId());
+                throw new AgentStudioException(StudioError.MCP_CONFIG_ERROR,
+                    "debug header '" + name + "' value contains characters not allowed in an HTTP header");
+            }
+            headerInfo.put(name, value);
+            log.info("[testServicesTools] dynamic debug header applied: {}", name);
+        }
+    }
+
+    private boolean isLatin1HeaderValue(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7F || c > 0xFF) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private McpServiceDataResp transformerMcpRes(McpSchema.CallToolResult callToolResult) {
@@ -2893,6 +3215,17 @@ public class McpServiceManager implements IMcpServiceManagerService {
         }
 
         mcpBase.validAuthInfo(serviceReq.getAuthInfo());
+        // FEAT-093 动态鉴权头 vs serverConfig 固定请求头同名拒绝。生效面取
+        // 「本请求改了哪个就用哪个」：serverConfig 未传时用存量解密串，
+        // authInfo 未传时用存量解密鉴权——否则只查请求体两个都非空的组合，
+        // 会漏掉「本次只改 headers、鉴权维持 DYNAMIC」的冲突面
+        String effectiveServerConfig = StringUtils.isNotBlank(serviceReq.getServerConfig())
+            ? serviceReq.getServerConfig()
+            : encryptionAdapter.decrypt(mcpServiceFromDb.getServerConfig());
+        AuthInfo effectiveAuthInfo = Objects.nonNull(serviceReq.getAuthInfo())
+            ? serviceReq.getAuthInfo()
+            : mcpBase.decryptedAuthInfo(mcpServiceFromDb.getAuthInfo());
+        mcpBase.validDynamicAuthHeaderConflict(effectiveAuthInfo, effectiveServerConfig);
         // 判断oauth是否更新，如果更新，则需要重新部署MCP
         boolean isAUthInfoUpdated = false;
         if (serviceReq.getAuthInfo() != null) {
@@ -2952,6 +3285,14 @@ public class McpServiceManager implements IMcpServiceManagerService {
                     RequestContextUtils.remove();
                 }
             });
+        }
+
+        // ==================== FEAT-134: 导入待补配确认 ====================
+        // 用户勾选"已完成目标环境补配"并保存成功后，清除待补配标记及路径。
+        // 该字段不改变 auth scope，也不表示连接验证成功；可用性以重载结果为准。
+        if (Boolean.TRUE.equals(serviceReq.getConfirmImportConfig())) {
+            log.info("FEAT-134: clearing import_config_pending for service {}", serviceReq.getId());
+            this.serviceDao.markImportConfigured(serviceReq.getId(), tenantId, workspaceId);
         }
 
         return count > 0;
@@ -3138,5 +3479,125 @@ public class McpServiceManager implements IMcpServiceManagerService {
             // host 不是合法的IP地址，可能是域名，不进行网段判断
             log.warn("Host is not a valid IP address, skip subnet check: {}", host);
         }
+    }
+
+    // ==================== FEAT-134: MCP 服务导入导出与重载 ====================
+
+        @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationContext feApplicationContext;
+
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService getMcpTransferService() {
+        return feApplicationContext.getBean(com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpTransferService.class);
+    }
+
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService getMcpFeOperationService() {
+        return feApplicationContext.getBean(com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService.class);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationDao mcpFeOperationDao;
+
+    @Override
+    public String exportMcpServices(String projectId, String workspaceId,
+        com.openjiuwen.studio.agent.manager.dto.McpTransferExportReq req) {
+        log.info("operation log {}:export mcp services, selection={}", projectId, req.getSelection());
+        return getMcpTransferService().exportServices(projectId, workspaceId, req);
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp importMcpServices(String projectId,
+        String workspaceId, String fileContent) {
+        log.info("operation log {}:import mcp services", projectId);
+        com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp accepted =
+            getMcpTransferService().importServices(projectId, workspaceId, fileContent);
+        // 事务提交后投递异步刷新
+        getMcpTransferService().submitImportRefresh(accepted.getOperationId());
+        return accepted;
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp reloadMcpService(String projectId,
+        String workspaceId, String serviceId) {
+        log.info("operation log {}:reload mcp service {}", projectId, serviceId);
+        String tenantId = RequestContextUtils.getRequestUserDomainId();
+        McpServiceEntity entity = serviceDao.getMcpServiceById(serviceId, tenantId, CommonUtil.getDeptCode(),
+            projectId, workspaceId);
+        if (entity == null) {
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST);
+        }
+        // 可重载状态校验：creatingStack/deleting/deleted/notInstalled 拒绝
+        if (EnumMcpStatus.CREATING_STACK.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETING.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.DELETED.getValue().equals(entity.getFcInstanceStatus())
+            || EnumMcpStatus.NOT_INSTALLED.getValue().equals(entity.getFcInstanceStatus())) {
+            throw new AgentStudioException(StudioError.MCP_OPERATION_IN_PROGRESS,
+                "service status " + entity.getFcInstanceStatus() + " is not reloadable");
+        }
+        // 共享源/全局对象不能从消费空间重载
+        if (entity.getIsShare() == 1 || "global".equals(entity.getVisibility())) {
+            throw new AgentStudioException(StudioError.MCP_SERVICE_NOT_EXIST,
+                "shared source instances cannot be reloaded from consumer workspace");
+        }
+
+        com.openjiuwen.studio.agent.manager.entity.McpOperationEntity operation =
+            new com.openjiuwen.studio.agent.manager.entity.McpOperationEntity();
+        operation.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
+        operation.setOperationType(com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp.TYPE_RELOAD);
+        operation.setTenantId(tenantId);
+        operation.setProjectId(projectId);
+        operation.setWorkspaceId(workspaceId);
+        operation.setCreatorId(String.valueOf(RequestContextUtils.getRequestUserId()));
+        operation.setStatus(com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp.STATUS_RUNNING);
+        operation.setTotal(1);
+        operation.setCreatedCount(0);
+        operation.setSuccessCount(0);
+        operation.setFailedCount(0);
+        operation.setCreatedDate(new Timestamp(System.currentTimeMillis()));
+        operation.setDeadlineDate(new Timestamp(System.currentTimeMillis()
+            + com.openjiuwen.studio.agent.manager.service.mcp.transfer.McpOperationService.OPERATION_DEADLINE_MILLIS));
+        mcpFeOperationDao.insertOperation(operation);
+
+        com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity item =
+            new com.openjiuwen.studio.agent.manager.entity.McpOperationItemEntity();
+        item.setOperationId(operation.getId());
+        item.setItemIndex(0);
+        item.setServiceId(serviceId);
+        item.setOriginalName(entity.getName());
+        item.setActualName(entity.getName());
+        item.setStatus("PENDING");
+        item.setStartedDate(new Timestamp(System.currentTimeMillis()));
+        mcpFeOperationDao.insertOperationItem(item);
+
+        if (!mcpFeOperationDao.claimOperationOnService(serviceId, tenantId, projectId, workspaceId,
+            operation.getId())) {
+            // 抢锁失败：item 落终态 FAILED（否则永久 PENDING——回收只扫 RUNNING 操作，
+            // 而该操作已置 INTERRUPTED 不在回收范围）
+            item.setStatus("FAILED");
+            item.setRefreshStatus("FAILED");
+            item.setErrorCode(StudioError.MCP_OPERATION_IN_PROGRESS.getCode());
+            item.setSafeReason("another operation is active on this service");
+            item.setFinishedDate(new Timestamp(System.currentTimeMillis()));
+            mcpFeOperationDao.finishOperationItem(item);
+            mcpFeOperationDao.markOperationInterrupted(operation.getId());
+            throw new AgentStudioException(StudioError.MCP_OPERATION_IN_PROGRESS,
+                "another operation is active on this service");
+        }
+
+        getMcpFeOperationService().submitReload(operation.getId());
+
+        com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp resp =
+            new com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp();
+        resp.setOperationId(operation.getId());
+        resp.setOperationType(operation.getOperationType());
+        resp.setStatus(operation.getStatus());
+        resp.setTotal(1);
+        resp.setServiceId(serviceId);
+        return resp;
+    }
+
+    @Override
+    public com.openjiuwen.studio.agent.manager.dto.McpTransferOperationResp getMcpOperationResult(String projectId,
+        String workspaceId, String operationId) {
+        return getMcpFeOperationService().getOperationResult(projectId, workspaceId, operationId);
     }
 }

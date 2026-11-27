@@ -79,6 +79,16 @@ import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBr
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.exception.contract.DownstreamFamilyFormat;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog;
+import com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMappingCatalog;
+import com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamFailure;
+import com.openjiuwen.studio.agent.manager.exception.downstream.Transport;
+import com.openjiuwen.studio.agent.common.error.DownstreamService;
+import com.openjiuwen.studio.agent.common.error.ErrorDescriptor;
+import com.openjiuwen.studio.agent.common.utils.LanguageUtils;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
@@ -231,6 +241,17 @@ public class AgentServiceProxyService {
     @Value("${manager.http-failed-publish-await-seconds:10}")
     private long httpFailedPublishAwaitSeconds;
 
+    /**
+     * 定制:转发 runtime/builder 的出站请求时需跳过的入站 header 名单,逗号分隔。
+     * 空/缺省 = 不过滤(全量透传旧行为);非空 = 只过滤名单内的头,大小写不敏感。
+     * 域名入口按 Host 路由类部署的标准值:host,connection,keep-alive,transfer-encoding,content-length,accept-encoding。
+     */
+    @Value("${manager.skip-outbound-header-list:}")
+    private String skipOutboundHeaderListStr;
+
+    /** 启动时由 {@link #init()} 从 {@code skipOutboundHeaderListStr} 解析;空集 = 不过滤。 */
+    private Set<String> skipOutboundHeaders = Set.of();
+
     private Set<String> allowedIconType = new HashSet<>();
 
     private Set<String> allowedImgType = new HashSet<>();
@@ -244,6 +265,17 @@ public class AgentServiceProxyService {
     private I18nUtil i18nUtil;
 
     /**
+     * 统一族格式（COM-04 §5.2 修订二期，2026-11-02 用户裁定一致性）：调测链路
+     * builder 掉线与 runtime 掉线同构——走 DownstreamErrorMapper 兜底
+     * 02001131/502 + BUILDER 组件标签（"组件builder：下游服务调用返回错误或
+     * 网络不可达"）；02501037 回归其本职（上游模型探活失败的业务码，不带
+     * 下游组件标签）。
+     */
+    private DownstreamErrorMapper downstreamMapper;
+
+    private ManagerHttpErrorResponseBuilder downstreamHttpBuilder;
+
+    /**
      * 初始化
      */
     @PostConstruct
@@ -251,6 +283,27 @@ public class AgentServiceProxyService {
         allowedIconType = Arrays.stream(allowedIconTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedImgType = Arrays.stream(allowedImgTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
         allowedDefaultType = Arrays.stream(allowedDefaultTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        this.downstreamMapper = new DownstreamErrorMapper(
+            new DownstreamErrorMappingCatalog(new ManagerErrorCatalog()));
+        this.downstreamHttpBuilder = new ManagerHttpErrorResponseBuilder(
+            (key, args, locale) -> i18nUtil.getMessage(key, args, locale));
+        skipOutboundHeaders = parseSkipOutboundHeaders(skipOutboundHeaderListStr);
+    }
+
+    /**
+     * 解析定制名单:逗号分割、trim、小写归一、去空项;空输入得到空集(不过滤,旧行为)。
+     * 非空时打一行启动日志,便于部署侧核对名单是否生效(名单 typo 是静默失效的)。
+     */
+    static Set<String> parseSkipOutboundHeaders(String config) {
+        Set<String> parsed = config == null ? Set.of()
+            : Arrays.stream(config.split(","))
+                .map(name -> name.trim().toLowerCase(Locale.ROOT))
+                .filter(name -> !name.isEmpty())
+                .collect(Collectors.toSet());
+        if (!parsed.isEmpty()) {
+            log.info("skip-outbound-headers customization enabled: {}", parsed);
+        }
+        return parsed;
     }
 
     private String getToken() {
@@ -305,6 +358,8 @@ public class AgentServiceProxyService {
         String conversationId, String nodeId, WorkflowRunReq body, HttpHeaders httpHeaders) {
 
         checkWorkflowPermission(projectId, workspaceId, workflowId);
+        // 单节点试运行同样透传登录用户，保证调模型网关用户维度一致（#1728/#1761）
+        RuntimeUserIdPropagator.applyLoginUser(httpHeaders);
         String url = "%s/v1/%s/workflows/%s/conversations/%s/node_execute/%s?workspace_id=%s";
         url = String.format(Locale.ROOT, url, runtimeEndpoint, projectId, workflowId, conversationId, nodeId,
             workspaceId);
@@ -399,17 +454,20 @@ public class AgentServiceProxyService {
         } catch (Exception parseEx) {
             log.warn("Failed to parse Feign error body.", parseEx);
         }
-        // 无法从 Feign 异常解析出 builder 的 error body 时，退回通用错误码（不带构造的 details，
-        // 避免透出对用户无意义的异常堆栈信息）
-        ErrorInfo errorInfo = i18nUtil.getMessage(
-            new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
-        ErrorRsp errorRsp = new ErrorRsp()
-            .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
-            .setErrorMsg(errorInfo.getMessage())
-            .setErrorReason(errorInfo.getReason())
-            .setErrorSuggestion(errorInfo.getSuggestion());
-        int status = e.status() > 0 ? e.status() : 500;
-        return ResponseEntity.status(status).body(errorRsp);
+        // 无法从 Feign 异常解析出 builder 的 error body 时，按"下游是否已应答"分流
+        // （评审修订 2026-11-04）：
+        // - status>0：builder 已应答（HTTP 层 4xx/5xx，响应体非结构化或无 error_code）——
+        //   非 transport failure：构造 HTTP_RESPONSE 相位并携带原状态，由 mapper 保留
+        //   原状态透传（文案仍为 02001131 族），4xx 业务错误不再被统一成 502/02001131 状态；
+        // - status<=0：builder 不可达等真传输失败——与 runtime 掉线同构（用户裁定
+        //   2026-11-02）走 DownstreamErrorMapper 兜底 02001131/502 + BUILDER 组件标签。
+        DownstreamFailure failure = e.status() > 0
+            ? DownstreamFailure.httpResponse(
+                DownstreamService.BUILDER, Transport.FEIGN, e.status(), null, e)
+            : DownstreamFailure.transportFailure(
+                DownstreamService.BUILDER, Transport.FEIGN, e);
+        ErrorDescriptor descriptor = downstreamMapper.map(failure, requestIdOrUnknown());
+        return renderDownstreamErrorOrSafeFallback(descriptor);
     }
 
     /**
@@ -419,22 +477,63 @@ public class AgentServiceProxyService {
      */
     private ResponseEntity<Object> parseDownstreamFailureError(DownstreamFailureException e) {
         DownstreamFailure failure = e.getFailure();
+        if (!failure.hasTrustedErrorCode()) {
+            // 无可信原码（builder 不可达等）：走 DownstreamErrorMapper 兜底
+            // 02001131 + 组件标签（与 runtime 掉线同构，2026-11-02 用户裁定）
+            log.warn("DownstreamFailure without trusted code: {}", failure);
+            ErrorDescriptor descriptor = downstreamMapper.map(failure, requestIdOrUnknown());
+            return renderDownstreamErrorOrSafeFallback(descriptor);
+        }
+        // 可信原码：透传 builder 原码 + 调测语义文案（既有行为保持）
         String requestId = MDC.get(MdcKeys.REQUEST_ID);
         ErrorInfo errorInfo = i18nUtil.getMessage(
             new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
         ErrorRsp errorRsp = new ErrorRsp()
             .setRequestId(requestId)
+            .setErrorCode(failure.getDownstreamErrorCode())
             .setErrorMsg(errorInfo.getMessage())
             .setErrorReason(errorInfo.getReason())
             .setErrorSuggestion(errorInfo.getSuggestion());
-        if (failure.hasTrustedErrorCode()) {
-            errorRsp.setErrorCode(failure.getDownstreamErrorCode());
-        } else {
-            errorRsp.setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode());
-            log.warn("DownstreamFailure without trusted code: {}", failure);
-        }
         Integer dsStatus = failure.getDownstreamHttpStatus();
         return ResponseEntity.status(dsStatus != null && dsStatus > 0 ? dsStatus : 500).body(errorRsp);
+    }
+
+    /** MDC 中的 request-id；未写入时回退 unknown——ErrorDescriptor 要求非空，
+     * null 直传 mapper 会在 descriptor 构造阶段抛 IllegalArgumentException（评审修订 2026-11-03）。 */
+    private static String requestIdOrUnknown() {
+        String rid = MDC.get(MdcKeys.REQUEST_ID);
+        return rid != null && !rid.isBlank() ? rid : "unknown";
+    }
+
+    /**
+     * 渲染下游错误 descriptor；渲染路径自身失败（构建器 fail-closed 抛出、
+     * resolver 异常等）时回退到不依赖 i18n 的字面量 ErrorRsp（按语种取
+     * DownstreamFamilyFormat 的中英兜底——评审修订 2026-11-03 三轮：原硬编码
+     * 中文与族格式语种分档不一致，英文用户在渲染失败路径会收到中文）——
+     * COM-03 §4 调用方捕获约定：错误处理路径自身不得把原始下游错误
+     * 升级成 02001002 覆盖。
+     */
+    private ResponseEntity<Object> renderDownstreamErrorOrSafeFallback(ErrorDescriptor descriptor) {
+        try {
+            ResponseEntity<ErrorRsp> built = downstreamHttpBuilder.build(
+                descriptor, LanguageUtils.getLanguageLocale());
+            return new ResponseEntity<>(built.getBody(), built.getHeaders(), built.getStatusCode());
+        } catch (Exception renderEx) {
+            log.error("Downstream error render failed, using hardcoded fallback: {}",
+                renderEx.getMessage());
+            Locale locale = LanguageUtils.getLanguageLocale();
+            ErrorRsp rsp = new ErrorRsp()
+                .setErrorCode(descriptor.getErrorCode())
+                .setErrorMsg(DownstreamFamilyFormat.fallbackMessage(locale))
+                .setErrorReason(DownstreamFamilyFormat.fallbackReason(
+                    descriptor.getDownstreamComponentLabel(), locale))
+                .setErrorSuggestion(DownstreamFamilyFormat.fallbackSuggestion(locale))
+                .setRequestId(descriptor.getRequestId());
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Request-Id", descriptor.getRequestId());
+            return new ResponseEntity<>(rsp, headers, org.springframework.http.HttpStatus.BAD_GATEWAY);
+        }
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
@@ -1256,6 +1355,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/workflows/chat/" + shortCode + "/conversations/" + conversationId
                 + "?workspace_id=" + forwardWorkspaceId;
@@ -1267,7 +1367,7 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebWorkflow(getToken(), shortCode, conversationId, forwardWorkspaceId,
+            return runtimeClient.runWebWorkflow(getToken(), null, shortCode, conversationId, forwardWorkspaceId,
                 environmentId, body, false).getBody();
         }
     }
@@ -1354,6 +1454,7 @@ public class AgentServiceProxyService {
         if (StringUtils.hasText(environmentId)) {
             forwardWorkspaceId = channel.getWorkspaceId();
         }
+        // 网页短链无鉴权 / 非画布试运行：不注入登录 cust-userid（#1728/#1761）
         if (stream == null || stream) {
             String url = runtimeEndpoint + "/v1/agents/chat/" + shortCode + "?workspace_id=" + forwardWorkspaceId;
             if (StringUtils.hasText(environmentId)) {
@@ -1364,8 +1465,8 @@ public class AgentServiceProxyService {
             }
         }
         try (MdcScope scope = establishExecutionScope(httpHeaders)) {
-            return runtimeClient.runWebAgent(getToken(), shortCode, forwardWorkspaceId, false, environmentId,
-                body).getBody();
+            return runtimeClient.runWebAgent(getToken(), null, shortCode, forwardWorkspaceId, false, environmentId, body)
+                .getBody();
         }
     }
 
@@ -1547,16 +1648,23 @@ public class AgentServiceProxyService {
         return sseEmitter;
     }
 
+    /** 命中定制名单 manager.skip-outbound-header-list(大小写不敏感)则跳过透传;名单为空恒 false,保持旧行为。 */
+    boolean shouldSkipOutboundHeader(String name) {
+        return skipOutboundHeaders.contains(name.toLowerCase(Locale.ROOT));
+    }
+
     /**
      * COM-04 §6.2：构建出站 SSE 请求——先排除三个关联 Header（防调用方伪造重复变体），
-     * 再由 {@link OkHttpCorrelationHeaderApplier} 按策略从当前线程 MDC 读取权威值先删后写。
+     * 再由 {@link OkHttpCorrelationHeaderApplier} 按策略从当前线程 MDC 读取权威值先删后写;
+     * 定制名单 manager.skip-outbound-header-list 非空时,另跳过名单内的入站 Header(host/hop-by-hop 等)。
      */
     private okhttp3.Request buildStreamRequest(String url, HttpHeaders headers, String bodyJson,
         OutboundCorrelationPolicy policy, String allowedOrigin) {
         RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
         Request.Builder builder = new Request.Builder();
         headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty() && !OkHttpCorrelationHeaderApplier.isCorrelationHeader(key)) {
+            if (value != null && !value.isEmpty() && !OkHttpCorrelationHeaderApplier.isCorrelationHeader(key)
+                && !shouldSkipOutboundHeader(key)) {
                 builder.addHeader(key, String.join(",", value));
             }
         });
@@ -1588,7 +1696,7 @@ public class AgentServiceProxyService {
         java.util.Locale localeSnapshot = java.util.Locale.forLanguageTag(langHeader);
         ProxyEventSourceListener listener = new ProxyEventSourceListener(
             MDC.get(MdcKeys.REQUEST_ID), latch, sseEmitter,
-            (key, loc) -> i18nUtil.getMessage(key, loc), localeSnapshot);
+            (key, args, loc) -> i18nUtil.getMessage(key, args, loc), localeSnapshot);
 
         log.info("http stream request, url: {}", url);
         EventSource eventSource = factory.newEventSource(request, listener);

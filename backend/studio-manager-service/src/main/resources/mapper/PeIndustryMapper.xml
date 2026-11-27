@@ -61,4 +61,14 @@
             </if>
             ORDER BY created_on
     </select>
+
+    <select id="existsByIdAndLibraryType" resultType="java.lang.Boolean">
+            SELECT EXISTS(
+                SELECT 1 FROM t_pe_industry
+                WHERE id = #{id}
+                <if test="libraryType != null">
+                    AND library_type = #{libraryType}
+                </if>
+            )
+    </select>
 </mapper>

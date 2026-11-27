@@ -7,7 +7,7 @@ from typing import Any
 
 from openjiuwen.core.sys_operation.local.utils import OperationUtils
 
-from .base_code_runner import CodeRunner, build_wrapped_code, parse_execution_result
+from .base_code_runner import CodeRunner, CodeRunResult, build_wrapped_code, parse_execution_result
 
 
 class LocalCodeRunner(CodeRunner):
@@ -20,11 +20,12 @@ class LocalCodeRunner(CodeRunner):
         self._code_operation = code_operation
         self.function_log: str = ""
 
-    async def run(self, user_code: str, inputs: dict, timeout: int = 900) -> dict:
+    async def run(self, user_code: str, inputs: dict, timeout: int = 900) -> CodeRunResult:
         wrapped_code = build_wrapped_code(user_code, inputs)
         result = await self._execute_wrapped_code(wrapped_code, timeout)
-        result_dict, self.function_log = parse_execution_result(result, runner_name="Code")
-        return result_dict
+        result_dict, function_log = parse_execution_result(result, runner_name="Code")
+        self.function_log = function_log
+        return CodeRunResult(result=result_dict, function_log=function_log)
 
     async def _execute_wrapped_code(self, wrapped_code: str, timeout: int) -> Any:
         """通过 CodeOperation 执行包装后的代码（subprocess 方式）"""

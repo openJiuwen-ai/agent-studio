@@ -75,7 +75,8 @@ class PublishUtilsTest {
     void testGetPublish_FromObs() {
         String json = "{\"agentId\":\"agent-1\",\"domainId\":\"d\",\"projectId\":\"p\"}";
         when(redisClient.get(anyString())).thenReturn(null);
-        when(obsService.getObject(anyString())).thenReturn(json);
+        // getPublish 经 getObjectOrNull 读 OBS（404→null 收敛点）；OBS 命中返回 json。
+        when(obsService.getObjectOrNull(anyString())).thenReturn(json);
 
         AgentMetadata result = publishUtils.getPublish("agent-1", "latest", obsService);
 
@@ -85,11 +86,24 @@ class PublishUtilsTest {
     @Test
     void testGetPublish_BothEmpty() {
         when(redisClient.get(anyString())).thenReturn(null);
-        when(obsService.getObject(anyString())).thenReturn(null);
+        when(obsService.getObjectOrNull(anyString())).thenReturn(null);
 
         AgentMetadata result = publishUtils.getPublish("agent-1", "latest", obsService);
 
         assertNull(result);
+    }
+
+    @Test
+    void testGetPublish_obsNotFound404_returnsNull() {
+        // 收敛点验证：未发布资源元数据对象在 OBS 不存在（404→null 经 getObjectOrNull），
+        // getPublish 返回 null → 导出 resolvePublishVersion 据此抛 EXPORT_RESOURCE_NOT_EXISTS(400)。
+        when(redisClient.get(anyString())).thenReturn(null);
+        when(obsService.getObjectOrNull(anyString())).thenReturn(null);
+
+        AgentMetadata result = publishUtils.getPublish("unpublished-agent", "latest", obsService);
+
+        assertNull(result, "未发布资源（OBS 404→null 经 getObjectOrNull）应返回 null");
+        verify(obsService).getObjectOrNull(anyString());
     }
 
     @Test

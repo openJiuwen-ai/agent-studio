@@ -386,7 +386,7 @@ async def test_output_callback_prefers_response_over_result(caplog):
 
 @pytest.mark.asyncio
 async def test_error_callback_logs_error(caplog):
-    """验证 LLM_CALL_ERROR 回调正确打印错误"""
+    """验证 LLM_CALL_ERROR 回调正确打印错误（含 url / latency_ms，#1642/#1711）"""
     from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
 
     register_llm_call_logging_callbacks()
@@ -402,6 +402,8 @@ async def test_error_callback_logs_error(caplog):
             model_provider="openai",
             error=test_error,
             is_stream=True,
+            api_url="http://llm-stub:18080/v1/chat/completions",
+            latency_ms=42,
         )
 
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -411,6 +413,109 @@ async def test_error_callback_logs_error(caplog):
     assert "test-model" in error_msg
     assert "openai" in error_msg
     assert "connection timeout" in error_msg
+    assert "url=http://llm-stub:18080/v1/chat/completions" in error_msg
+    assert "latency_ms=42" in error_msg
+
+
+@pytest.mark.asyncio
+async def test_error_callback_strips_credentials_from_url(caplog):
+    """带 userinfo/query 的 api_url 不得原样进 ERROR 日志。"""
+    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+
+    register_llm_call_logging_callbacks()
+    fw = get_callback_framework()
+
+    dirty = "https://user:s3cret@llm.example.com:8443/v1/chat?api_key=tok#frag"
+    with caplog.at_level(logging.DEBUG, logger="workflow"):
+        await fw.trigger(
+            LLMCallEvents.LLM_CALL_ERROR,
+            model_name="m",
+            model_provider="studio",
+            error=RuntimeError("boom"),
+            api_url=dirty,
+            latency_ms=1,
+        )
+
+    error_msg = next(
+        r.message for r in caplog.records
+        if r.levelno == logging.ERROR and "model call error" in r.message
+    )
+    assert "url=https://llm.example.com:8443/v1/chat" in error_msg
+    assert "s3cret" not in error_msg
+    assert "api_key" not in error_msg
+    assert "user:" not in error_msg
+
+
+def test_sanitize_api_url_for_log_helpers():
+    from agent_runtime.common.llm_call_logging import _sanitize_api_url_for_log
+
+    assert _sanitize_api_url_for_log(None) == "unknown"
+    assert _sanitize_api_url_for_log("") == "unknown"
+    assert (
+        _sanitize_api_url_for_log("http://h/v1?x=1")
+        == "http://h/v1"
+    )
+    assert _sanitize_api_url_for_log("not-a-url") == "redacted"
+
+
+def test_sanitize_api_url_illegal_port_returns_redacted():
+    """看守：非法/越界端口不得抛错，避免 _log_error 回调失败。"""
+    from agent_runtime.common.llm_call_logging import _sanitize_api_url_for_log
+
+    assert _sanitize_api_url_for_log("http://host:bad/path") == "redacted"
+    assert _sanitize_api_url_for_log("http://host:99999/v1") == "redacted"
+
+
+@pytest.mark.asyncio
+async def test_error_callback_survives_illegal_port_url(caplog):
+    """非法端口 api_url 仍应打出 model call error，而非 Callback execution failed。"""
+    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+
+    register_llm_call_logging_callbacks()
+    fw = get_callback_framework()
+
+    with caplog.at_level(logging.DEBUG, logger="workflow"):
+        await fw.trigger(
+            LLMCallEvents.LLM_CALL_ERROR,
+            model_name="m",
+            model_provider="studio",
+            error=RuntimeError("boom"),
+            api_url="http://host:bad/v1",
+            latency_ms=3,
+        )
+
+    error_msg = next(
+        r.message for r in caplog.records
+        if r.levelno == logging.ERROR and "model call error" in r.message
+    )
+    assert "url=redacted" in error_msg
+    assert "latency_ms=3" in error_msg
+
+
+@pytest.mark.asyncio
+async def test_error_callback_logs_fallback_when_url_latency_missing(caplog):
+    """trigger 未带 url/latency 时仍可落盘（回退 unknown/N/A）。"""
+    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+
+    register_llm_call_logging_callbacks()
+    fw = get_callback_framework()
+
+    with caplog.at_level(logging.DEBUG, logger="workflow"):
+        await fw.trigger(
+            LLMCallEvents.LLM_CALL_ERROR,
+            model_name="m",
+            model_provider="studio",
+            error=RuntimeError("boom"),
+            is_stream=False,
+        )
+
+    error_logs = [
+        r.message for r in caplog.records
+        if r.levelno == logging.ERROR and "model call error" in r.message
+    ]
+    assert error_logs
+    assert "url=unknown" in error_logs[0]
+    assert "latency_ms=N/A" in error_logs[0]
 
 
 @pytest.mark.asyncio

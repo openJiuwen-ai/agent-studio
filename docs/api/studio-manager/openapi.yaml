@@ -7018,6 +7018,87 @@ paths:
             application/json:
               schema:
                 type: boolean
+  /v1/{project_id}/mcp/server/on-shelf:
+    post:
+      tags:
+      - mcp-service-manager-api-controller
+      summary: 将已部署的MCP服务实例上架到资产广场
+      description: 将已部署的MCP服务实例转换为服务目录条目并上架到资产广场（平台精选，跨租户可见）。仅OWNER/ADMIN或平台运营方可操作；实例须处于部署成功状态；鉴权信息不随目录下发；同一实例重复上架返回既有目录条目并刷新快照。
+      operationId: publishServer
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpServerShelfReq"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+  /v1/{project_id}/mcp/server/off-shelf/{id}:
+    post:
+      tags:
+      - mcp-service-manager-api-controller
+      summary: 将MCP服务目录条目从资产广场下架
+      description: 将指定的MCP服务目录条目从资产广场下架（软删目录条目，不影响已安装实例）。仅OWNER/ADMIN或平台运营方可操作；重复下架幂等返回成功。
+      operationId: unpublishServer
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      - name: id
+        in: path
+        description: 服务目录条目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
   /v1/{project_id}/mcp/server/create:
     post:
       tags:
@@ -8197,6 +8278,9 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_()-]{1,64}$"
       - name: workspace_id
         in: query
         required: true
@@ -9348,6 +9432,75 @@ paths:
               schema:
                 type: string
                 format: binary
+  /v1/{project_id}/agent-manager/skills/{skill_id}/on-shelf:
+    post:
+      tags:
+      - skill-management-api-controller
+      summary: 上架Skill到资产广场
+      description: 将指定Skill上架到资产广场（平台精选，跨租户可见）。仅OWNER/ADMIN或平台运营方可操作；Skill须处于可发布状态（非开发中且已有发布版本）。重复上架幂等返回成功。可通过请求体补充广场分类标签（tag_id，缺省沿用Skill既有分类）。
+      operationId: publishStudioSkill
+      parameters:
+      - name: skill_id
+        in: path
+        description: Skill ID。
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      - name: workspace_id
+        in: query
+        description: 空间ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
+      - name: project_id
+        in: path
+        description: 项目ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,40}$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillShelfReq"
+      responses:
+        "200":
+          description: OK
+  /v1/{project_id}/agent-manager/skills/{skill_id}/off-shelf:
+    post:
+      tags:
+      - skill-management-api-controller
+      summary: 将Skill从资产广场下架
+      description: 将指定Skill从资产广场下架，不影响已挂载引用。仅OWNER/ADMIN或平台运营方可操作；官方预置资产不允许普通租户下架。重复下架幂等返回成功。
+      operationId: unpublishStudioSkill
+      parameters:
+      - name: skill_id
+        in: path
+        description: Skill ID。
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      - name: workspace_id
+        in: query
+        description: 空间ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
+      - name: project_id
+        in: path
+        description: 项目ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,40}$"
+      responses:
+        "200":
+          description: OK
   /v1/{project_id}/agent-manager/skills/{skill_id}/export:
     post:
       tags:
@@ -9994,6 +10147,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CommonDeleteRsp"
+  /v1/{project_id}/agent-manager/plugins/{plugin_id}/on-shelf:
+    post:
+      tags:
+      - plugin-api-controller
+      summary: 上架插件到资产广场
+      description: 将指定插件（锚定一个发布版本）上架到资产广场（平台精选，跨租户可见）。仅OWNER/ADMIN或平台运营方可操作；插件须存在至少一个发布版本（version_id
+        缺省取当前最新发布版本）；官方预置插件（type=inner）本已平台精选，不允许重复上架；重复上架更新锚定版本。
+      operationId: publishPlugin
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: plugin_id
+        in: path
+        description: 插件id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginShelfReq"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+  /v1/{project_id}/agent-manager/plugins/{plugin_id}/off-shelf:
+    post:
+      tags:
+      - plugin-api-controller
+      summary: 将插件从资产广场下架
+      description: 将指定插件从资产广场下架，不影响已按版本引用的存量消费。仅OWNER/ADMIN或平台运营方可操作；官方预置插件不允许普通租户下架；重复下架幂等返回成功。
+      operationId: unpublishPlugin
+      parameters:
+      - name: project_id
+        in: path
+        description: 租户项目id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: plugin_id
+        in: path
+        description: 插件id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间id
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
   /v1/{project_id}/agent-manager/plugins/{domain_id}/freetrialincrement:
     post:
       tags:
@@ -13474,6 +13717,9 @@ paths:
         required: true
         schema:
           type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
       - name: workspace_id
         in: query
         required: true
@@ -13707,6 +13953,47 @@ paths:
             application/json:
               schema:
                 type: object
+  /v1/{project_id}/agent-manager/agents/runtime-asset/export:
+    post:
+      tags:
+      - agent-management-api-controller
+      summary: 导出运行时资产
+      description: 按应用维度（agent/controller/workflow）导出全部运行依赖资产，打包成 ZIP。复用 t_mapping
+        依赖图，输出 ZIP + manifest.json，供运行态加载。
+      operationId: exportRuntimeAsset
+      parameters:
+      - name: project_id
+        in: path
+        description: 项目ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 0
+          pattern: "^[a-zA-Z0-9_-]+$"
+      - name: workspace_id
+        in: query
+        description: 项目空间ID。
+        required: true
+        schema:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: "^[a-zA-Z0-9_()\\-]+$"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeAssetExportParams"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
   /v1/{project_id}/agent-manager/agents/resource/export:
     post:
       tags:
@@ -17868,6 +18155,42 @@ paths:
       responses:
         "200":
           description: OK
+  /v1/{project_id}/agent-manager/skills/{skill_id}/package-content:
+    get:
+      tags:
+      - skill-management-api-controller
+      summary: 下载Skill制品包内容
+      description: 流式返回指定Skill最新版本的zip制品包字节流，供前端解压展示文件目录树。该接口代理后端从OBS读取zip并转发，避免前端跨域直接请求OBS签名URL。
+      operationId: getSkillPackageContent
+      parameters:
+      - name: skill_id
+        in: path
+        description: Skill ID。
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      - name: workspace_id
+        in: query
+        description: 空间ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_()\\-]{1,40}$"
+      - name: project_id
+        in: path
+        description: 项目ID
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,40}$"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/zip:
+              schema:
+                $ref: "#/components/schemas/StreamingResponseBody"
   /v1/{project_id}/agent-manager/resource/{app_id}/versions:
     get:
       tags:
@@ -21035,6 +21358,7 @@ components:
           enum:
           - USER
           - SERVICE
+          - DYNAMIC
           - IAM
           - HIS_IAM
           - SGOV
@@ -25433,6 +25757,8 @@ components:
           $ref: "#/components/schemas/WorkflowList"
         knowledge_base:
           $ref: "#/components/schemas/KnowledgeList"
+        skills:
+          $ref: "#/components/schemas/SkillList"
     PluginInput:
       type: object
       properties:
@@ -25535,6 +25861,31 @@ components:
       - path
       - tool_display_name
       - tool_id
+    SkillList:
+      type: object
+      properties:
+        skill_list:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillResource"
+    SkillResource:
+      type: object
+      properties:
+        skill_id:
+          type: string
+          maxLength: 200
+        skill_name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1024
+        icon:
+          type: string
+          maxLength: 1024
+        last_version_id:
+          type: string
+          maxLength: 200
     WorkflowList:
       type: object
       properties:
@@ -25908,6 +26259,15 @@ components:
           additionalProperties: {}
           description: 参数
           example: 示例字符串
+        debug_headers:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 5
+          description: 调测期动态凭证调试值（key=出站请求头名，仅本次调测生效，不入库）
+          example:
+            Authorization: Bearer test-token
+          maxItems: 5
     McpServiceDataResp:
       type: object
       properties:
@@ -26101,6 +26461,11 @@ components:
           format: int32
           description: 是否共享
           example: 1
+        platform_published:
+          type: integer
+          format: int32
+          description: 是否已上架到资产广场（1=已上架，0=未上架）
+          example: 0
     McpServiceBaseInfoListResp:
       type: object
       properties:
@@ -26129,6 +26494,26 @@ components:
           description: 分数
           example: 示例字符串
           maxLength: 2
+    McpServerShelfReq:
+      type: object
+      properties:
+        service_id:
+          type: string
+          description: MCP服务实例ID（组件库已部署实例）
+          example: service-001
+          maxLength: 64
+        category:
+          type: string
+          description: 行业分类ID，关联 t_pe_industry.id
+          example: uuid
+          maxLength: 36
+        readme:
+          type: string
+          description: 服务说明（上架时补充的目录展示信息，缺省沿用实例的服务介绍）
+          example: 提供天气查询服务
+          maxLength: 4096
+      required:
+      - service_id
     McpServerDetailReq:
       type: object
       properties:
@@ -27448,6 +27833,14 @@ components:
             type: string
             maxLength: 200
           maxItems: 200
+    SkillShelfReq:
+      type: object
+      properties:
+        tag_id:
+          type: string
+          description: Skill 分类标签ID（资源分类 config 的 id，用于广场分类展示；缺省沿用 Skill 既有 tag_id）
+          example: uuid
+          maxLength: 64
     ExportStudioSkillResponseBody:
       type: object
       properties:
@@ -27581,6 +27974,19 @@ components:
       - resource_name
       - resource_type
       - version_list
+    PluginShelfReq:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: 上架锚定的发布版本ID（缺省取当前最新发布版本；t_release_version.version_id）
+          example: 1728465600000
+          maxLength: 64
+        category:
+          type: string
+          description: 行业分类ID（关联 t_pe_industry.id，用于广场展示行业标签；缺省保持插件既有分类）
+          example: uuid
+          maxLength: 64
     ParsePluginReq:
       type: object
       properties:
@@ -28343,6 +28749,8 @@ components:
     SearchCriteria:
       type: object
       properties:
+        inner:
+          type: boolean
         workspace_id:
           type: string
           description: 工作空间ID
@@ -28753,6 +29161,26 @@ components:
           type: string
         event_id:
           type: string
+    RuntimeAssetExportParams:
+      type: object
+      properties:
+        resource_type:
+          type: string
+          description: 导出类型：agent(单智能体) / controller(多智能体) / workflow(工作流)
+          example: agent
+          pattern: ^(agent|controller|workflow)$
+        resource_id:
+          type: string
+          description: 要导出的应用 ID（智能体 ID 或工作流 ID）
+          example: agent-uuid-001
+          pattern: "^[a-zA-Z0-9_-]+$"
+        version:
+          type: string
+          description: 版本号，缺省或 "latest" 导出当前发布版本
+          example: 1728465600000
+      required:
+      - resource_id
+      - resource_type
     ExportChildResource:
       type: object
       properties:
@@ -29303,6 +29731,8 @@ components:
           type: array
           items:
             type: string
+        outputFormat:
+          type: string
     DatasourceExecuteResp:
       type: object
       properties:
@@ -29314,6 +29744,8 @@ components:
         rowNum:
           type: integer
           format: int32
+        markdownTable:
+          type: string
     LicenseReport:
       type: object
       properties:
@@ -31268,6 +31700,27 @@ components:
           format: date-time
           description: 创建时间
           example: 2026-01-01T00:00:00.000+08:00
+        platform_published:
+          type: integer
+          format: int32
+          description: 用户上架到资产广场标记（1=用户上架，0/空=官方预置）
+          example: 1
+        readme:
+          type: string
+          description: 服务说明（上架时补充的目录展示信息）
+          example: 提供天气查询服务
+        url:
+          type: string
+          description: 服务连接地址
+          example: http://127.0.0.1:8999/mcp
+        created_by_user_id:
+          type: string
+          description: 上架属主用户ID（前端据此判断是否属主，决定展示下架/安装按钮）
+          example: testUser
+        is_owner:
+          type: boolean
+          description: 当前用户是否为该资产属主（true=可展示下架按钮）
+          example: true
     McpServerBaseInfoListResp:
       type: object
       properties:
@@ -32031,6 +32484,23 @@ components:
           example: 1.0.0
           maxLength: 32
           minLength: 1
+        published_asset:
+          type: integer
+          format: int32
+          description: 资产广场上架状态（1=已上架，0=未上架）
+          example: 0
+        plaza_source:
+          type: string
+          description: 资产广场上架来源（PRESET=官方预置，USER=用户上架）
+          example: USER
+        creator_id:
+          type: string
+          description: 创建人用户ID（前端据此判断是否属主，决定是否展示下架按钮）
+          example: testUser
+        is_owner:
+          type: boolean
+          description: 当前用户是否为该资产属主（true=可展示下架按钮）
+          example: true
     GetStudioSkillDetailsResponseBody:
       type: object
       properties:
@@ -32038,6 +32508,8 @@ components:
           $ref: "#/components/schemas/StudioSkillInfo"
           description: 技能
           example: {}
+    StreamingResponseBody:
+      type: object
     ResourceVersionResponseBody:
       type: object
       properties:
@@ -33988,6 +34460,10 @@ components:
           type: string
           description: 创建者
           example: user001
+        sub_type:
+          type: string
+          description: 子类型
+          example: common
         version_id:
           type: string
           description: 版本ID

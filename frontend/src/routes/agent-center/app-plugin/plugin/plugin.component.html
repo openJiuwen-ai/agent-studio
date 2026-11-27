@@ -194,6 +194,10 @@
                 <div class="text-xs text-[#595959]">
                   {{ 'auth_param_info' | i18nextEager }}
                 </div>
+                <!-- FEAT-093 动态鉴权：值列空是设计（凭证值不落库），提示凭证在编排期绑定 -->
+                <div *ngIf="authInfo.type === 'DYNAMIC'" class="text-xs text-[#999]">
+                  {{ 'mcp_dynamic_auth_tip' | i18nextEager }}
+                </div>
                 <nz-table [nzData]="authTbd.data" [nzShowPagination]="false">
                   <thead>
                     <tr>

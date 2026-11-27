@@ -27,7 +27,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -52,6 +54,10 @@ public class ControllerDebuggingMgmtService {
     private final RedisClient redisClient;
 
     private final CtrlDebuggingModelProcessService ctrlDebuggingModelProcessService;
+
+    @Autowired
+    @Qualifier("requestDerivedAsyncExecutor")
+    private ThreadPoolTaskExecutor requestDerivedAsyncExecutor;
 
     @Value("${redis.expire_time}")
     private long expireTime;
@@ -425,7 +431,7 @@ public class ControllerDebuggingMgmtService {
                 }
             }
             log.info("success clear controller agent conversation records. {}", agentId);
-        });
+        }, requestDerivedAsyncExecutor);
     }
 
     private void clearAgentExecutionRecords(String agentId, List<ControllerExecutionBriefModel> infos) {
@@ -441,6 +447,6 @@ public class ControllerDebuggingMgmtService {
     }
 
     CompletableFuture<Void> clearAgentExecutionRecordsAsync(String agentId, List<ControllerExecutionBriefModel> infos) {
-        return CompletableFuture.runAsync(() -> clearAgentExecutionRecords(agentId, infos));
+        return CompletableFuture.runAsync(() -> clearAgentExecutionRecords(agentId, infos), requestDerivedAsyncExecutor);
     }
 }

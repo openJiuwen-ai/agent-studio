@@ -23,9 +23,14 @@
       <div class="text-[20px] text-[#191919] font-[600]">
         {{ pageTitle() }}{{totalCount}}
       </div>
-      <button *ngIf="!activeTabIsOfficial && appShareTabIndex > 0" nz-button type="button" nzType="primary" (click)="creatShare()">
-        {{ 'pluginmarket_1'|i18nextEager }}
-      </button>
+      <div class="flex gap-2">
+        <button *ngIf="activeTabIsOfficial && canPublish" nz-button type="button" nzType="primary" (click)="openPublishModal()">
+          {{ 'plaza_onshelf' | i18nextEager }}
+        </button>
+        <button *ngIf="!activeTabIsOfficial && appShareTabIndex > 0" nz-button type="button" nzType="primary" (click)="creatShare()">
+          {{ 'pluginmarket_1'|i18nextEager }}
+        </button>
+      </div>
     </div>
   </div>
 
@@ -73,6 +78,8 @@
           style="position: relative"
           [ngClass]="{'cursor-not-allowed': !subscribeBtnStatus}"
           (click)="handleDetailView(plugin)"
+          (mouseenter)="pluginHovered = plugin.plugin_id"
+          (mouseleave)="pluginHovered = null"
           [style]="{width: isFromOverview ? 'calc((100% - 16px * 2) / 3)' : ''}"
         >
           <div class="com-card-header">
@@ -119,6 +126,12 @@
                 >
                   {{ plugin.shareTag }}
                 </nz-tag>
+                <nz-tag
+                  *ngIf="activeTabIsOfficial && plugin.platform_published === 1"
+                  style="background-color: #e6f7ff; color: #1890ff; border-color: #91d5ff"
+                >
+                  {{ 'plaza_user_published' | i18nextEager }}
+                </nz-tag>
               </div>
             </div>
           </div>
@@ -133,11 +146,24 @@
             *ngIf="activeTabIsOfficial"
             [ngClass]="{'bottom-area-have-menu': getBottomAreaHaveMenuWithOfficial(plugin)}"
           >
-            <span class="flex items-center text-[#808080] text-[12px]">
+            <span
+              *ngIf="pluginHovered !== plugin.plugin_id"
+              class="flex items-center text-[#808080] text-[12px]"
+            >
               <nz-icon nzType="field-time" nzTheme="outline" class="mr-[8px] !text-[16px]" />
               <span class="mr-[16px]">
                 {{ plugin.created_on | formateTime }}
               </span>
+            </span>
+            <span *ngIf="pluginHovered === plugin.plugin_id && plugin.platform_published === 1 && plugin.is_owner">
+              <button
+                nz-button
+                nzType="link"
+                nzSize="small"
+                (click)="unpublishPlugin(plugin, $event)"
+              >
+                {{ 'plaza_offshelf' | i18nextEager }}
+              </button>
             </span>
           </div>
           <div

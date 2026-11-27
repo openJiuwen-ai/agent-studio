@@ -27,4 +27,8 @@ public class NLResource {
     @JsonProperty("knowledge_base")
     @Valid
     private KnowledgeList knowledgeBase;
+
+    @JsonProperty("skills")
+    @Valid
+    private SkillList skills;
 }

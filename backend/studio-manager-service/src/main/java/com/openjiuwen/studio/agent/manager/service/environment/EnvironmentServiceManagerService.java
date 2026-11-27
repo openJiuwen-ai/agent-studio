@@ -47,11 +47,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -148,6 +150,10 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
 
     @Autowired
     private EnvironmentVariableMapper environmentVariableMapper;
+
+    @Autowired
+    @Qualifier("requestDerivedAsyncExecutor")
+    private ThreadPoolTaskExecutor requestDerivedAsyncExecutor;
 
     @Value("${env-management.limit-quota:5}")
     private int environmentQuota;
@@ -587,7 +593,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
                 environmentVariableResp.setCount(environmentVariables == null ? 0 : environmentVariables.size());
                 environmentVariableResp.setVariables(environmentVariables);
 
-                // 异步同步缓存信息
+                // 异步同步缓存信息（走请求派生池，传播 MDC 四 key）
                 CompletableFuture.runAsync(() -> {
                     boolean isExistEnvironmentVariableCache = this.environmentCacheUtil.isExistEnvironmentVariableCache(
                         env.getId(), environmentVariableFromDb.getWorkspaceId());
@@ -595,7 +601,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
                         this.environmentCacheUtil.updateEnvironmentCache(env.getId(),
                             environmentVariableFromDb.getWorkspaceId(), environmentVariableFromDb.getEnvVariable());
                     }
-                });
+                }, requestDerivedAsyncExecutor);
                 return environmentVariableResp;
             }).toList();
         }
@@ -938,8 +944,11 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
         Map<String, EnvironmentVariableValue> secretVariables) {
         List<EnvironmentVariable> envVariables = new ArrayList<>();
         variables.forEach(envVari -> {
+            if (envVari.getValue() == null) {
+                return;
+            }
             String content = envVari.getValue().getContent();
-            if (envVari.getValue() == null || StringUtils.isBlank(envVari.getValue().getContent())) {
+            if (StringUtils.isBlank(envVari.getValue().getContent())) {
                 content = "";
             } else if (envVari.getValue().isSecret() && Strings.CS.equals(envVari.getValue().getContent(),
                 PASSWORD_PLACEHOLDER)) {
@@ -950,7 +959,7 @@ public class EnvironmentServiceManagerService implements IEnvironmentServiceMana
             }
             EnvironmentVariable variable = buildEnvironmentVariable(envVari.getName(),
                 envVari.getValue().getType() == null ? EnvironmentVariableValue.TypeEnum.STRING : envVari.getValue().getType(),
-                content, envVari.getValue() != null && envVari.getValue().isSecret());
+                content, envVari.getValue().isSecret());
             envVariables.add(variable);
         });
         return JsonUtils.toJson(envVariables);

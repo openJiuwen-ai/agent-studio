@@ -18,14 +18,19 @@ import static org.mockito.Mockito.when;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateReq;
 import com.openjiuwen.studio.agent.manager.dto.PluginAuthUpdateRsp;
+import com.openjiuwen.studio.agent.manager.dto.RequestInfo;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.service.plugin.PluginService;
+
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +54,11 @@ public class PluginServiceAuthUpdateTest {
 
     @Mock
     private MgObsService obsService;
+
+    // FEAT-093 动态鉴权校验依赖（updatePluginAuthInfo 无条件调用
+    // pluginBase.validPluginDynamicAuthInfo——此前缺 mock，NPE 预存在失败）
+    @Mock
+    private IPluginBase pluginBase;
 
     // 使用 Spy 部分 Mock PluginService，以便跳过内部耗时的 OBS/加密 逻辑
     @InjectMocks
@@ -138,8 +148,53 @@ public class PluginServiceAuthUpdateTest {
         when(releaseVersionMapper.selectByAppIdAndVersionId(PLUGIN_ID, "v123456")).thenReturn(null);
         // Mock 掉内部的加密方法，直接返回 mock 对象
         doReturn(mockAuthInfo).when(pluginService).encryptedAuthInfo(any(AuthInfo.class));
-        // Act：执行核心方法
+        // Act & Assert
         assertThrows(AgentStudioException.class,
             () -> pluginService.updatePluginAuthInfo(PROJECT_ID, WORKSPACE_ID, PLUGIN_ID, req));
+    }
+
+    /**
+     * FEAT-093 回归：存量插件（实体行 requestInfo=新版 ToolRequestInfo、
+     * inputSchema=ToolInputSchema 数组）把鉴权切换为 DYNAMIC——接线验证：
+     * 新版 tool_info[*].headers 须被合并进传给校验器的 RequestInfo（按旧
+     * RequestInfo 形态解析会漏检工具头）；数组 inputSchema 原样透传由
+     * PluginDynamicAuthValidationTest 的真实现用例覆盖。
+     */
+    @Test
+    public void testUpdatePluginAuthInfo_DynamicConflictWithNewFormToolHeader() {
+        PluginEntity existPlugin = new PluginEntity();
+        existPlugin.setPluginId(PLUGIN_ID);
+        existPlugin.setPublished(1);
+        existPlugin.setLastVersionId("v123456");
+        // 新版插件行形态：requestInfo=ToolRequestInfo（工具固定头在 tool_info 里），
+        // inputSchema=ToolInputSchema 数组（元素 input_schema 为内层对象串）
+        existPlugin.setRequestInfo("{\"basic_info\":{\"protocol\":\"https\",\"host\":\"h\"},"
+            + "\"tool_info\":[{\"tool_id\":\"t1\",\"headers\":{\"X-Fixed\":\"v\"}}]}");
+        String arraySchema = "[{\"tool_id\":\"t1\",\"input_schema\":\"{\\\"type\\\":\\\"object\\\"}\"}]";
+        existPlugin.setInputSchema(arraySchema);
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspace(PLUGIN_ID, PROJECT_ID, WORKSPACE_ID)).thenReturn(existPlugin);
+        when(releaseVersionMapper.selectByAppIdAndVersionId(PLUGIN_ID, "v123456")).thenReturn(new ReleaseVersion());
+        when(obsService.uploadObsFile(any(), any(), any(), any(), any())).thenReturn("test_dsl_path");
+        doReturn(mockAuthInfo).when(pluginService).encryptedAuthInfo(any(AuthInfo.class));
+
+        AuthInfo dynamicAuth = new AuthInfo();
+        dynamicAuth.setScope(AuthInfo.ScopeEnum.DYNAMIC);
+        dynamicAuth.setDomain(AuthInfo.DomainEnum.HEADERS);
+        AuthKeyInfo keyInfo = new AuthKeyInfo();
+        keyInfo.setTargetName("X-Fixed");
+        dynamicAuth.setAuthKeys(List.of(keyInfo));
+        req.setAuthInfo(dynamicAuth);
+
+        PluginAuthUpdateRsp rsp = pluginService.updatePluginAuthInfo(PROJECT_ID, WORKSPACE_ID, PLUGIN_ID, req);
+        assertNotNull(rsp);
+
+        org.mockito.ArgumentCaptor<RequestInfo> requestInfoCaptor =
+            org.mockito.ArgumentCaptor.forClass(RequestInfo.class);
+        verify(pluginBase).validPluginDynamicAuthInfo(
+            org.mockito.ArgumentMatchers.eq(dynamicAuth), requestInfoCaptor.capture(),
+            org.mockito.ArgumentMatchers.eq(arraySchema));
+        // 新版 tool_info 的固定头已合并进校验入参（冲突校验可见）
+        assertEquals("v", requestInfoCaptor.getValue().getHeaders().get("X-Fixed"));
     }
 }

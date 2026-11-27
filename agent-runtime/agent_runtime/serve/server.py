@@ -148,7 +148,7 @@ def _load_customer_header_profile() -> None:
 
 
 def _register_customer_header_provider() -> None:
-    """注册 customer Header provider 到 model_service ports"""
+    """注册 customer Header / 试运行用户与 invoke-mode 到 model_service ports。"""
     from model_service import ports
     from agent_runtime.context.request_context import _request_ctx
 
@@ -156,7 +156,43 @@ def _register_customer_header_provider() -> None:
         ctx = _request_ctx.get()
         return ctx.customer_headers if ctx else {}
 
+    def _get_request_user_id():
+        ctx = _request_ctx.get()
+        return (ctx.user_id if ctx else "") or ""
+
+    def _get_invoke_mode():
+        ctx = _request_ctx.get()
+        if not ctx:
+            return ""
+        platform = getattr(ctx, "platform_headers", None) or {}
+        return platform.get("X-Invoke-Mode") or platform.get("x-invoke-mode") or ""
+
     ports.set_request_customer_headers(_get_customer_headers)
+    ports.set_request_user_id(_get_request_user_id)
+    ports.set_invoke_mode(_get_invoke_mode)
+
+
+def _build_log_config(
+    workflow_level: str,
+    graph_level: str,
+    llm_level: str,
+    performance_level: str,
+) -> dict:
+    """装配 runtime 各日志器级别配置（供 configure_log_config 使用）。"""
+    return {
+        "backend": "default",
+        "level": "INFO",  # 全局默认级别保持 INFO
+        "format": COMMON_LOG_FORMAT,
+        "loggers": {
+            "workflow": {"level": workflow_level},
+            "graph": {"level": graph_level},
+            "llm": {"level": llm_level},
+            "performance": {"level": performance_level},
+            "sys_operation": {
+                "level": "WARNING"
+            },  # 关闭 sys_operation 的 INFO 日志
+        },
+    }
 
 
 @asynccontextmanager
@@ -166,24 +202,15 @@ async def lifespan(_app: FastAPI):
     workflow_log_level = settings.workflow_log.level.upper()
     graph_log_level = settings.workflow_log.graph_level.upper()
     llm_log_level = settings.workflow_log.llm_level.upper()
-    
+    performance_log_level = settings.server.performance_log_level.upper()
+
     configure_log_config(
-        {
-            "backend": "default",
-            "level": "INFO",  # 全局默认级别保持 INFO
-            "format": COMMON_LOG_FORMAT,
-            "loggers": {
-                "workflow": {"level": workflow_log_level},
-                "graph": {"level": graph_log_level},
-                "llm": {"level": llm_log_level},
-                "performance": {"level": "WARNING"},
-                "sys_operation": {
-                    "level": "WARNING"
-                },  # 关闭 sys_operation 的 INFO 日志
-            },
-        }
+        _build_log_config(workflow_log_level, graph_log_level, llm_log_level, performance_log_level)
     )
-    logger.info(f"Logger level set - workflow: {workflow_log_level}, graph: {graph_log_level}, llm: {llm_log_level}")
+    logger.info(
+        f"Logger level set - workflow: {workflow_log_level}, graph: {graph_log_level}, "
+        f"llm: {llm_log_level}, performance: {performance_log_level}"
+    )
 
     # 初始化 OpenTelemetry tracer（当 OTEL_ENABLED=true 时生效）
     setup_otel_tracer()

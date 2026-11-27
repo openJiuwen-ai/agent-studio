@@ -76,8 +76,8 @@
             <td [nzChecked]="checkedList.includes(row)" [nzDisabled]="row.disabled" (nzCheckedChange)="onItemChecked(row, $event)"></td>
             <td nzEllipsis>{{ row.name }}</td>
             <td nzEllipsis>{{ row.content | json }}</td>
-            <td nzEllipsis>{{ row.category }}</td>
-            <td nzEllipsis>{{ row.visibility }}</td>
+            <td nzEllipsis>{{ displayCategory(row.category) }}</td>
+            <td nzEllipsis>{{ displayVisibility(row.visibility) }}</td>
             <td>
               <button nz-button nzType="link" [disabled]="!subscribeBtnStatus" (click)="listAction({ key: 'edit' }, row)" style="padding: 0">
                 {{ 'edit' | i18nextEager }}
@@ -115,7 +115,7 @@
           [nzPageSizeOptions]="pageSize.options"
           nzShowSizeChanger
           (nzPageIndexChange)="getStructuredMessagesListData()"
-          (nzPageSizeChange)="searchList()"
+          (nzPageSizeChange)="onMessageTemplatePageSizeChange($event)"
         >
         </nz-pagination>
       </div>
@@ -145,7 +145,7 @@
             <label
               nz-radio-button
               *ngFor="let item of messageClassItems"
-              [nzValue]="item.text"
+              [nzValue]="item.value"
               [nzDisabled]="item.disabled"
               [nz-tooltip]="item.tipContent"
               [nzTooltipPlacement]="item.tipPosition || 'top'"
@@ -153,7 +153,7 @@
               {{ item.text }}
             </label>
           </nz-radio-group>
-          <div *ngIf="messageClassSelectedText === ('exception' | i18nextEager)" class="exception-tip mt-2 text-gray-500">
+          <div *ngIf="messageClassSelectedText === exceptionCategory" class="exception-tip mt-2 text-gray-500">
             {{ 'exception_referenced_tip' | i18nextEager }}
           </div>
         </nz-form-control>
@@ -256,8 +256,8 @@
         </td>
         <td nzEllipsis>{{ row.name }}</td>
         <td nzEllipsis>{{ row.content | json }}</td>
-        <td nzEllipsis>{{ row.category }}</td>
-        <td nzEllipsis>{{ row.visibility }}</td>
+        <td nzEllipsis>{{ displayCategory(row.category) }}</td>
+        <td nzEllipsis>{{ displayVisibility(row.visibility) }}</td>
         <td nzEllipsis>{{ row.reason }}</td>
       </tr>
     </tbody>

@@ -617,9 +617,11 @@ export abstract class WorkflowChatBaseComponent {
       this.testStatusObj.text = this.i18n.transform('workflow_chat_error', {time: ''});
       this.chatLoop[curIndex].thinkLoading = false;
       this.chatLoop[curIndex].thinking = false;
+      // 业务 error 帧不等于 SSE done：若不收口，停止回答会一直转
+      this.finalizeRequestingOnStreamFail();
       const len = this.chatLoop[curIndex].showAnswer.length - 1;
       const lastChatAns = this.chatLoop[curIndex].showAnswer[len];
-      if (!lastChatAns.isException) {
+      if (!lastChatAns?.isException) {
         if (lastChatAns && !lastChatAns?.text) {
           lastChatAns.text = this.i18n.transform('run_error');
           lastChatAns.loading = false;
@@ -640,6 +642,7 @@ export abstract class WorkflowChatBaseComponent {
     if (event === 'exception') {
       this.chatLoop[curIndex].thinkLoading = false;
       this.chatLoop[curIndex].thinking = false;
+      this.finalizeRequestingOnStreamFail();
       const len = this.chatLoop[curIndex].showAnswer.length - 1;
       const lastChatAns = this.chatLoop[curIndex].showAnswer[len];
       if (lastChatAns && !lastChatAns?.text) {
@@ -839,6 +842,16 @@ export abstract class WorkflowChatBaseComponent {
   /** 判断是否需要更新发布按钮状态（在chat-flow-page组件中，需要override） */
   protected shouldUpdatePublishBtn(): boolean {
     return this.type !== 'multi';
+  }
+
+  /**
+   * 收到 SSE 业务 error/exception 时收口发送中状态。
+   * 子类若另有停止按钮标志（如 isShowStopIcon），应 override 一并清掉。
+   */
+  protected finalizeRequestingOnStreamFail(): void {
+    this.isStreamFail = true;
+    this.isRequesting = false;
+    this.cdr.markForCheck();
   }
 
   protected onError(curIndex: number, error: { data: string; status: any }) {

@@ -155,7 +155,7 @@
                   <div class="q-options">
                     <div *ngFor="let opt of q.options"
                          (click)="last && onToggleOption(q, opt)"
-                         [class.active]="q.selected === opt"
+                         [class.active]="q.selected?.includes(opt)"
                          [class.disabled]="!last"
                          class="opt-btn">
                       {{ opt }}

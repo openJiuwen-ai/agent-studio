@@ -4,8 +4,6 @@
 
 package com.openjiuwen.studio.prompt.engineering.entity;
 
-import cn.afterturn.easypoi.excel.annotation.Excel;
-import cn.afterturn.easypoi.excel.annotation.ExcelTarget;
 import lombok.Builder;
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -13,36 +11,32 @@ import lombok.experimental.Accessors;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * 提示词结果导出列表
+ * 提示词结果导出列表(瘦身修订 2026-11-04 1C:easypoi @Excel 注解移除,
+ * 导出列名由 EvaluationResultService 动态表头预解析)
  *
  */
 @Data
 @Accessors(chain = true)
 @Builder
 @Validated
-@ExcelTarget("提示词结果导出列表")
 public class PromptEvaluationResultExport {
     /**
-     * 提示词名称
+     * 提示词名称(默认列宽)
      */
-    @Excel(name = "excel.export.prompt.name")
     private String promptName;
 
     /**
-     * 提示词文本
+     * 提示词文本(导出列宽 25)
      */
-    @Excel(name = "excel.export.prompt.content", width = 25.0d)
     private String promptContent;
 
     /**
-     * 生成结果
+     * 生成结果(导出列宽 75)
      */
-    @Excel(name = "excel.export.generate.result", width = 75.0d)
     private String generateResult;
 
     /**
-     * 评分结果
+     * 评分结果(默认列宽)
      */
-    @Excel(name = "excel.export.eval.result")
     private String evalResult;
 }

@@ -309,6 +309,11 @@ export class ChatFlowPageComponent
     return false;
   }
 
+  override finalizeRequestingOnStreamFail(): void {
+    super.finalizeRequestingOnStreamFail();
+    this.isShowStopIcon = false;
+  }
+
   override onError(curIndex: number, error: any) {
     if (error.data) {
       try {

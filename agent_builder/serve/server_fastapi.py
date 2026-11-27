@@ -139,9 +139,13 @@ def _register_model_service_ports() -> None:
     ports.set_env_variables(get_env_variables)
     # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
     ports.set_request_customer_headers(get_request_customer_headers)
+    # builder 无画布试运行 IAM/user_id；空实现保持 ports 契约，避免 client 回退私有 ctx
+    ports.set_request_user_id(lambda: "")
+    ports.set_invoke_mode(lambda: "")
     ports.set_cache_queues(None, None)
     logger.info(
-        "model_service ports registered (storage/llm/request-headers/customer-headers/env-variables; cache disabled)"
+        "model_service ports registered (storage/llm/request-headers/customer-headers/"
+        "user-id/invoke-mode/env-variables; cache disabled)"
     )
 
 
@@ -197,9 +201,22 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     await _init_s3_storage()
     _load_customer_header_profile()
     _register_model_service_ports()
+    # #1655/#1724：消费 settings.otel，避免 OTEL_* 死配置
+    try:
+        from agent_builder.observability import setup_otel_tracer
+
+        setup_otel_tracer()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"OpenTelemetry setup failed (non-critical): {e}")
     try:
         yield
     finally:
+        try:
+            from agent_builder.observability.tracer_otel import force_flush
+
+            force_flush()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"OpenTelemetry flush failed (non-critical): {e}")
         # 优雅关闭 Redis：同步兼容桥（专用循环+连接池）与 Provider/legacy 客户端
         # （测试/集成环境反复启停时防泄漏；一次性进程由 daemon 线程兜底）
         try:
@@ -245,6 +262,34 @@ def instance_app() -> FastAPI:
     # 禁止在保留 establish 为 @app.middleware 后再 add_middleware(dispatcher)——
     # 那样 dispatcher 会跑到 establish 外层，与目标序相反（§6.4 第 4 点）。
     app.add_middleware(FlaskRouteDispatchMiddleware, flask_app=prompt_manage_app)
+
+    @app.middleware("http")
+    async def otel_http_span(request: Request, call_next):
+        """Server HTTP span when OTEL_ENABLED; continues upstream W3C parent if present."""
+        from agent_builder.adapter.config_bridge import settings as builder_settings
+        from agent_builder.observability.tracer_otel import extract_inbound_trace_context
+
+        if not builder_settings.otel.enabled:
+            return await call_next(request)
+        try:
+            from opentelemetry import trace
+        except ImportError:
+            return await call_next(request)
+
+        tracer = trace.get_tracer(builder_settings.otel.service_name or "agent-builder")
+        span_name = f"{request.method} {request.url.path}"
+        parent_context = extract_inbound_trace_context(request.headers)
+        with tracer.start_as_current_span(
+            span_name,
+            context=parent_context,
+            kind=trace.SpanKind.SERVER,
+        ) as span:
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.target", request.url.path)
+            span.set_attribute("http.route", request.url.path)
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
+            return response
 
     @app.middleware("http")
     async def establish_inbound_context(request: Request, call_next):

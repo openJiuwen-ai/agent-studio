@@ -20,6 +20,10 @@ import time
 from typing import AsyncIterator, List, Optional
 
 from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
+from jiuwen.extension.workflow.execution_session_ctx import (
+    get_stream_final_output,
+    set_stream_final_output,
+)
 from jiuwen.extension.workflow_node.flow_api import (
     EXCEPTIONENABLE,
     EXCEPTIONSUPPRESSION,
@@ -41,6 +45,7 @@ from jiuwen.extension.wrapper.custom_plugin_tool import (
     convert_ir_to_custom_card,
 )
 from jiuwen.plugin.models.param import Param
+from jiuwen.plugin.models.api_utils import is_loose_param_validation_enabled
 from jiuwen.plugin.models.api_utils import transform_type
 from openjiuwen.core.common.logging import LogEventType, workflow_logger
 from openjiuwen.core.context_engine import ModelContext
@@ -48,6 +53,7 @@ from openjiuwen.core.graph.executable import Input, Output
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session.node import Session
 from openjiuwen.core.session.stream.base import OutputSchema
+from openjiuwen.core.session.tracer import decorate_tool_with_trace
 from openjiuwen.core.workflow.components.component import WorkflowComponent
 
 
@@ -71,7 +77,6 @@ class FlowCustomApi(WorkflowComponent):
         self._api: Optional[CustomPluginTool] = None
         self._outputs: List[dict] = []
         self._user_fields: Optional[dict] = None
-        self._final_stream_output: Optional[dict] = None
 
         if conf:
             self.init(conf)
@@ -155,7 +160,11 @@ class FlowCustomApi(WorkflowComponent):
                 need_confirm=self._enable_confirm and not confirmed,
             )
 
-            api_outputs = await self._api.ainvoke(formatted_inputs)
+            # 工作流内自定义插件不经 ToolMgr.get_tool 装饰，主动补一层 tracer
+            # 装饰以产出 execute_tool span；CustomPluginTool.invoke 直通 ainvoke，
+            # 行为不变。未注册 agent handler 或旧版 core 时装饰原样返回
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = await api_tool.invoke(formatted_inputs)
             outputs = {"userFields": self._format_api_outputs(api_outputs)}
 
             duration = round((time.perf_counter() - start_time) * 1000)
@@ -177,6 +186,11 @@ class FlowCustomApi(WorkflowComponent):
 
         except CommonJiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise JiuWenBaseException(
                 error_code=e.error_code,
@@ -185,8 +199,12 @@ class FlowCustomApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise
         except Exception as e:
@@ -199,6 +217,10 @@ class FlowCustomApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 return {"userFields": _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise _build_flow_api_error(
                 FlowApiStatusCode.WORKFLOW_API_EXECUTE_ERROR,
@@ -221,10 +243,19 @@ class FlowCustomApi(WorkflowComponent):
         )
 
         try:
+            # 执行入口复位末帧通道：上一执行（或同一执行内前一次 stream）的末帧
+            # 不得经 get_stream_output 串入本次 io_state。末帧输出走 ContextVar
+            # 通道（实例跨执行复用，不落实例；引擎 Vertex._post_stream 在
+            # generator 耗尽后读取，故出口不 reset）。
+            set_stream_final_output(None)
+
             inputs_data = inputs.get("userFields", {}) or {}
             api_inputs = await self._format_api_inputs(inputs_data, session=session)
 
-            api_outputs = self._api.astream(api_inputs)
+            # 与 invoke 同口径：stream 路径也经 tracer 装饰（新 core 代理会包
+            # astream，首 chunk 起 execute_tool span；旧 core 代理原样透传）
+            api_tool = decorate_tool_with_trace(self._api, session)
+            api_outputs = api_tool.astream(api_inputs)
             async for schema in self._transform_async_stream_data(api_outputs, session):
                 yield schema
 
@@ -246,6 +277,11 @@ class FlowCustomApi(WorkflowComponent):
 
         except CommonJiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    # 异常抑制仅"不中断流程"，错误事实须保留在 trace 上（Jaeger 标红）
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -260,8 +296,12 @@ class FlowCustomApi(WorkflowComponent):
                 node_name=e.node_name,
                 node_type=e.node_type,
             ) from e
-        except JiuWenBaseException:
+        except JiuWenBaseException as e:
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -280,6 +320,10 @@ class FlowCustomApi(WorkflowComponent):
                 metadata={"api_id": self._api_id},
             )
             if _err_ignore(self._conf):
+                try:
+                    await session.trace_error(e)
+                except Exception as trace_exc:
+                    workflow_logger.debug("FlowCustomApi trace_error failed: %s", trace_exc)
                 yield OutputSchema(
                     type="error",
                     index=0,
@@ -319,6 +363,20 @@ class FlowCustomApi(WorkflowComponent):
                 expected_type = param.type
                 api_inputs[param.name] = transform_type(value, expected_type, name)
             else:
+                if is_loose_param_validation_enabled():
+                    # 松校验模式（PLUGIN_MCP_LOOSE_PARAM_VALIDATION=true，默认关）：
+                    # 与 FlowApi/FlowMcp 同款行为——未知参数打 WARNING（带参数名）
+                    # 后跳过，自定义插件照常被调用（评审修订 2026-11-03：
+                    # callMode=custom 的插件节点走本组件，漏掉会造成"同一个开关，
+                    # 一部分插件节点好一部分仍报错"的行为分叉）。
+                    # 评审修订（2026-11-04 PR#2577）：不带 event_type——防按
+                    # event_type 聚合时兼容性跳过被计入组件错误指标。
+                    workflow_logger.warning(
+                        "FlowCustomApi loose param validation: skip undefined param",
+                        component_type_str="FlowCustomApi",
+                        metadata={"param_name": name},
+                    )
+                    continue
                 workflow_logger.error(
                     "FlowCustomApi _format_api_inputs error: param not found",
                     event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
@@ -534,7 +592,9 @@ class FlowCustomApi(WorkflowComponent):
             output.get("id"): final_output_dict["final_output"]
             for output in output_definition_list
         }
-        self._final_stream_output = formatted_res
+        # 末帧输出写 ContextVar 通道（保持 userFields 包裹形态：io_state 引用
+        # 路径为 ${node.userFields.field}），供 get_stream_output 写入 io_state
+        set_stream_final_output({USER_FIELDS: formatted_res})
         yield {"userFields": formatted_res, "__stream_metadata__": finish_meta}
 
     def _get_outputs_list_from_conf(self) -> List[dict]:
@@ -542,10 +602,11 @@ class FlowCustomApi(WorkflowComponent):
         return self._conf.get("userFields", {}).get("outputs") or []
 
     def get_stream_output(self) -> Optional[dict]:
-        """流式结束后将最终输出写入 io_state，供非流式下游节点引用。"""
-        if self._final_stream_output is None:
-            return None
-        return {"userFields": self._final_stream_output}
+        """流式结束后将最终输出写入 io_state，供非流式下游节点引用。
+
+        末帧输出经 ContextVar 通道读取（实例跨执行复用，不落实例）。
+        """
+        return get_stream_final_output()
 
     def get_auth_token(self) -> dict | None:
         """自定义插件不支持 HTTP 认证透传"""

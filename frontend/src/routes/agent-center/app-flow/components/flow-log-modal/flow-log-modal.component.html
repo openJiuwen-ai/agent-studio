@@ -198,7 +198,7 @@
   <div class="call-item" (click)="changeCollapsedState(callItem)" [ngClass]="{ 'bg-unfolded': !callItem.collapsed }">
     <div class="call-item-left">
       <nz-icon nzType="right" class="collapse-icon" [ngClass]="{ 'unfolded-icon': !callItem.collapsed }"></nz-icon>
-      <img alt="" class="call-node-icon" [src]="callItem?.nodeIcon" />
+      <img alt="" class="call-node-icon" [src]="getNodeIcon(callItem?.node_type) || callItem?.nodeIcon" />
       <span class="text-[#191919] overflow-hidden text-ellipsis">
         {{ callItem?.node_name }}
       </span>

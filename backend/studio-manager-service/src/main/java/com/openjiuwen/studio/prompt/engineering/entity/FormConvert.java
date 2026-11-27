@@ -3,7 +3,7 @@
  */
 package com.openjiuwen.studio.prompt.engineering.entity;
 
-import cn.afterturn.easypoi.handler.inter.II18nHandler;
+import com.openjiuwen.studio.prompt.engineering.utils.II18nHandler;
 
 public interface FormConvert<S, T> {
     default T convert(S s) {

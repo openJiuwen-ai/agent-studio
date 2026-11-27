@@ -1185,9 +1185,14 @@ class Questioner(WorkflowComponent):
             provider = _get_model_config_provider()
             llm_comp_config = await provider.get_llm_config(adapted_conf)
 
-            self._model = Model(
-                model_client_config=llm_comp_config.model_client_config,
-                model_config=llm_comp_config.model_config,
+            from agent_runtime.common.request_scoped_model import bind_request_scoped_auth
+
+            self._model = bind_request_scoped_auth(
+                Model(
+                    model_client_config=llm_comp_config.model_client_config,
+                    model_config=llm_comp_config.model_config,
+                ),
+                llm_comp_config.model_client_config,
             )
             self._initialized = True
         except Exception as e:
@@ -1239,6 +1244,9 @@ class Questioner(WorkflowComponent):
         self, inputs: Input, session: Session, context: ModelContext
     ) -> Output:
         try:
+            # 先落 session 再按需初始化：模型工厂在首调建装饰器时能带上真实会话 id
+            # （_initialize_model 读 self._session，Questioner 自身与基类均不预置该属性）
+            self._session = session
             await self._initialize_model()
 
             state_from_session = self._load_state_from_session(session)

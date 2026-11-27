@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.manager.dto.GetStudioSkillDetailsResponseBody
 import com.openjiuwen.studio.agent.manager.dto.ImportStudioSkillResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListStudioSkillsResponseBody;
+import com.openjiuwen.studio.agent.manager.dto.SkillShelfReq;
 
 import java.io.InputStream;
 
@@ -27,6 +28,25 @@ public interface ISkillManagementService {
      * @param projectId projectId
      */
     Void deleteStudioSkill(String skillId, String workspaceId, String projectId);
+
+    /**
+     * 上架 Skill 到资产广场（跨租户可见，来源标记为 USER）。
+     *
+     * @param skillId skillId
+     * @param workspaceId workspaceId
+     * @param projectId projectId
+     * @param body 上架请求（tag_id 可选，补充广场分类标签）
+     */
+    Void publishStudioSkill(String skillId, String workspaceId, String projectId, SkillShelfReq body);
+
+    /**
+     * 将 Skill 从资产广场下架（不影响已挂载引用）。
+     *
+     * @param skillId skillId
+     * @param workspaceId workspaceId
+     * @param projectId projectId
+     */
+    Void unpublishStudioSkill(String skillId, String workspaceId, String projectId);
 
     /**
      * exportStudioSkill

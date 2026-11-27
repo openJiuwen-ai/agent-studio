@@ -54,7 +54,7 @@ export class SkillReferenceHalfmodalComponent extends SkillReferenceTableService
       this.total = response.const;
       this.ListData = (response.relations || []).map(item => {
         if (!item.app_version) {
-          item.app_version = '未部署';
+          item.app_version = this._i18n.transform('skill.agentVersion.notExist');
         }
         return item;
       });

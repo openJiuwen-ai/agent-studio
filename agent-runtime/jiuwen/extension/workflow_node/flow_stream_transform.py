@@ -241,17 +241,18 @@ class FlowStreamTransform(WorkflowComponent):
             return self._build_result(None)
 
         if not hasattr(origin_stream, "__aiter__"):
-            # Handle plain string input (e.g. from batch path where streaming
-            # output was concatenated into a single string)
-            if isinstance(origin_stream, str):
-                async def _string_to_async_gen(s):
+            # 处理一次性整体值输入（batch 路径聚合后的字符串、object/array 类型
+            # 参数以整体 dict/list 传入，或数字/布尔等基础标量参数），包装为单元素
+            # 异步生成器复用统一流式管线；数字/布尔作为整体帧输出
+            if isinstance(origin_stream, (str, dict, list, int, float, bool)):
+                async def _single_value_to_async_gen(s):
                     yield s
-                origin_stream = _string_to_async_gen(origin_stream)
+                origin_stream = _single_value_to_async_gen(origin_stream)
             else:
                 raise build_flow_stream_transform_error(
                     error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
                     message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
-                        error_msg=f"'{self._source_field}' must be an async iterable or string"
+                        error_msg=f"'{self._source_field}' must be an async iterable, string, dict, list or number"
                     ),
                 )
 
@@ -296,6 +297,14 @@ class FlowStreamTransform(WorkflowComponent):
                 _ans = item.payload.get("answer")
                 item = _ans if _ans is not None else item.payload
             if isinstance(item, dict):
+                yield item
+                continue
+
+            if isinstance(item, list):
+                yield item
+                continue
+
+            if isinstance(item, (int, float, bool)):
                 yield item
                 continue
 
@@ -468,15 +477,15 @@ class FlowStreamTransform(WorkflowComponent):
             return
 
         if not hasattr(origin_stream, "__aiter__"):
-            if isinstance(origin_stream, str):
-                async def _str_to_gen(s):
+            if isinstance(origin_stream, (str, dict, list, int, float, bool)):
+                async def _single_value_to_async_gen(s):
                     yield s
-                origin_stream = _str_to_gen(origin_stream)
+                origin_stream = _single_value_to_async_gen(origin_stream)
             else:
                 raise build_flow_stream_transform_error(
                     error_code=FlowStreamTransformStatusCode.INPUT_INVALID[0],
                     message=FlowStreamTransformStatusCode.INPUT_INVALID[1].format(
-                        error_msg=f"'{self._source_field}' must be an async iterable or string"
+                        error_msg=f"'{self._source_field}' must be an async iterable, string, dict, list or number"
                     ),
                 )
 

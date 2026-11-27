@@ -46,7 +46,8 @@ export interface OptimizeTaskDraft {
   promptId: string;
   name: string;
   desc: string;
-  execTime: string;
+  /** 执行时间毫秒串；任务无排程时为 null（后端创建/更新均允许 null），不再以空串冒充 */
+  execTime: string | null;
   ptType: string;
   ptText: string;
   ptVars: string;

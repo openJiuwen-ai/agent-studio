@@ -2,6 +2,7 @@
 package com.openjiuwen.studio.agent.manager.service.plugin.impl;
 
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.ToolReference;
@@ -181,5 +182,248 @@ class PluginAdapterImplTest {
     void testAnonymizeAuthInfo_NullAuthInfo() {
         var result = pluginAdapter.anonymizeAuthInfo(null);
         assertNull(result);
+    }
+
+    @Test
+    void testValidTools_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间引用应放行（FRS-091）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setType("custom");
+        plugin.setProjectId("proj-other");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(1);
+
+        when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plugin));
+        when(shareInnerService.getShareScopeByWorkspaceAndId(anyList(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        assertDoesNotThrow(() -> pluginAdapter.validTools("proj-1", "ws-1", List.of("plugin-1#t1")));
+    }
+
+    @Test
+    void testValidTools_NotPlazaPublished_CrossWorkspaceRejected() {
+        // 未上架的自定义插件跨工作空间仍应拒绝
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setType("custom");
+        plugin.setProjectId("proj-other");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByIds(anyList())).thenReturn(List.of(plugin));
+        when(shareInnerService.getShareScopeByWorkspaceAndId(anyList(), anyString()))
+            .thenReturn(Collections.emptyList());
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.validTools("proj-1", "ws-1", List.of("plugin-1#t1")));
+        assertEquals("plugin-1", ex.getMessage());
+    }
+
+    @Test
+    void testGetPlugin_PlazaPublished_CrossWorkspaceAllowed() {
+        // 资产广场已上架插件（platform_published=1）跨工作空间应被检索到（FRS-091）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(1);
+
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", "ws-1", List.of("plugin-1"), null))
+            .thenReturn(Collections.emptyList());
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", null, List.of("plugin-1"), null))
+            .thenReturn(List.of(plugin));
+        when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(Collections.emptyList());
+
+        List<PluginEntity> result = pluginAdapter.getPlugin("proj-1", "ws-1", List.of("plugin-1"));
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("plugin-1", result.get(0).getPluginId());
+    }
+
+    @Test
+    void testGetPlugin_NotPlazaPublished_NotShared_CrossWorkspaceExcluded() {
+        // 未上架且未共享的自定义插件，跨工作空间不应被检索到
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setWorkspaceId("ws-other");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", "ws-1", List.of("plugin-1"), null))
+            .thenReturn(Collections.emptyList());
+        when(pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria("proj-1", null, List.of("plugin-1"), null))
+            .thenReturn(List.of(plugin));
+        when(shareInnerService.getOriginSharedInfoByResourceId(anyList())).thenReturn(Collections.emptyList());
+
+        List<PluginEntity> result = pluginAdapter.getPlugin("proj-1", "ws-1", List.of("plugin-1"));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchoredByVersionIgnoringPassedVersionId() {
+        // 资产广场上架插件（platform_published=1 且 published=1, plaza_version_id=v2）：
+        // 即使调用方传入最新版 versionId=v3，也应锚定到 plaza_version_id=v2（#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId("v2");
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        expected.setVersionId("v2");
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v2", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).getToolEntityByVersion(eq("plugin-1#t1"), eq("v3"));
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchoredWhenVersionIdNull() {
+        // 资产广场上架插件，versionId 为空（单智能体引用路径）也应锚定 plaza_version_id（#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId("v2");
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        expected.setVersionId("v2");
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null);
+
+        assertNotNull(result);
+        assertEquals("v2", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_NotPlazaPublished_KeepsVersionIdBranch() {
+        // 非广场插件：传入 versionId 非空，走 getToolEntityByVersion（原逻辑不变）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        expected.setVersionId("v3");
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v3")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v3", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v3");
+    }
+
+    @Test
+    void testGetToolEntity_NotPlazaPublished_VersionIdNull_FallsBackToBuildToolByPlugin() {
+        // 非广场插件：versionId 空，走 buildToolByPlugin（原逻辑不变）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(0);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        when(pluginBase.buildToolByPlugin("proj-1", null, "plugin-1", "t1")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null);
+
+        assertNotNull(result);
+        verify(pluginBase).buildToolByPlugin("proj-1", null, "plugin-1", "t1");
+        verify(pluginBase, never()).getToolEntityByVersion(anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchorVersionBlank_FallsBackToVersionId() {
+        // 广场上架但锚定版本异常缺失：降级走原 versionId 分支并 warn（fail-open 降级，#1735）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId(null);
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        ToolEntity expected = new ToolEntity();
+        expected.setVersionId("v3");
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v3")).thenReturn(expected);
+
+        ToolEntity result = pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3");
+
+        assertNotNull(result);
+        assertEquals("v3", result.getVersionId());
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v3");
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_FailsClosed() {
+        // 悬空锚定 fail-closed（review #1735）：属主删除锚定发布版本后 plaza_version_id 仍指向已删版本，
+        // getToolEntityByVersion 抛 TOOL_VERSION_NOT_EXIST → 直接上抛，不降级到未审核最新版
+        // （降级最新版会复现本 PR 要修复的版本漂移与合规风险，故 fail-closed）
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId("v2"); // v2 已被删除
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2"))
+            .thenThrow(new AgentStudioException(StudioError.TOOL_VERSION_NOT_EXIST, "plugin-1", "v2"));
+
+        // 即使调用方传入 versionId=v3，悬空锚定也 fail-closed 抛异常，不降级
+        assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3"));
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).getToolEntityByVersion(eq("plugin-1#t1"), eq("v3"));
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchorVersionDeleted_VersionIdNull_FailsClosed() {
+        // 悬空锚定 fail-closed：锚定版本被删 + 传入 versionId 为空 → 仍抛异常，不降级走 buildToolByPlugin
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId("v2"); // v2 已被删除
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2"))
+            .thenThrow(new AgentStudioException(StudioError.TOOL_VERSION_NOT_EXIST, "plugin-1", "v2"));
+
+        assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", null));
+        verify(pluginBase).getToolEntityByVersion("plugin-1#t1", "v2");
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
+    }
+
+    @Test
+    void testGetToolEntity_PlazaPublished_AnchorVersionObsCorrupt_ReThrows() {
+        // 锚定版本 OBS 内容损坏/解析失败（TOOL_INFO_INCORRECT 等非 TOOL_VERSION_NOT_EXIST）：
+        // 不降级到未审核最新版，异常继续向上抛（fail-closed，避免掩盖数据损坏）— review #1735
+        PluginEntity plugin = new PluginEntity();
+        plugin.setPluginId("plugin-1");
+        plugin.setPlatformPublished(1);
+        plugin.setPublished(1);
+        plugin.setPlazaVersionId("v2");
+
+        when(pluginMapper.selectByPrimaryKey("plugin-1", null)).thenReturn(plugin);
+        when(pluginBase.getToolEntityByVersion("plugin-1#t1", "v2"))
+            .thenThrow(new AgentStudioException(StudioError.TOOL_INFO_INCORRECT));
+
+        assertThrows(AgentStudioException.class,
+            () -> pluginAdapter.getToolEntity("plugin-1#t1", "proj-1", "op-1", "v3"));
+        // 非版本不存在的异常不降级，不应走到 versionId=v3 分支
+        verify(pluginBase, never()).getToolEntityByVersion(eq("plugin-1#t1"), eq("v3"));
+        verify(pluginBase, never()).buildToolByPlugin(anyString(), any(), anyString(), anyString());
     }
 }

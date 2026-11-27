@@ -241,6 +241,10 @@
         <div class="title-box mt-1 mb-2 w-8 h-8 justify-center while-in-hover" *ngIf="isMarket">
           <nz-icon (click)="goBack()" class="!text-[24px] cursor-pointer" nzType="left" nzTheme="outline"/>
         </div>
+        <div class="title-box mt-1 mb-2 w-8 h-8 justify-center while-in-hover" *ngIf="!isMarket"
+             (click)="expandMenu()" [title]="space_name" style="cursor: pointer;">
+          <img [src]="space_icon" alt="" class="space_icon" style="width: 28px; height: 28px; border-radius: 50%;"/>
+        </div>
         <button (click)="createApp()"
                 *ngIf="!isMarket"
                 [disabled]="hasPermission() " class="left-menu-btn"

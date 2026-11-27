@@ -12,12 +12,24 @@
 
 import copy
 import os
+import re
 from builtins import ExceptionGroup
 from typing import Any, List, Optional
 from urllib.parse import urlencode
 
+from agent_runtime.context.request_context import (
+    get_request_global_variables,
+    get_request_mcp_input_parameters,
+    get_request_memory_variables,
+    strip_correlation_headers,
+)
+from jiuwen.extension.wrapper.outbound_header_guard import (
+    is_valid_outbound_header_name,
+    is_valid_outbound_header_value,
+)
 from jiuwen.common.configs.env_constants import PLUGIN_SSL_API_CERT_KEY
 from jiuwen.extension.wrapper.mcp_tool_wrapper import JIUWEN_RUNTIME_KWARGS
+from jiuwen.orchestration.flow.mcp_timeout import parse_mcp_time_out_seconds
 from jiuwen.orchestration.flow.string_utils import is_boolean_string, string_to_bool
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.models.api_utils import ApiUtils
@@ -31,9 +43,8 @@ from openjiuwen.core.foundation.tool.mcp.base import (
     McpToolCard,
 )
 from openjiuwen.core.foundation.tool.mcp.client.mcp_client import McpClient
-from agent_runtime.context.request_context import strip_correlation_headers
 
-mcp_time_out_seconds = float(os.getenv("MCP_TIME_OUT_SECONDS", 120))
+mcp_time_out_seconds = parse_mcp_time_out_seconds()
 
 
 def flatten_exception_group(eg: ExceptionGroup | BaseException) -> list[BaseException]:
@@ -54,6 +65,20 @@ def exception_group_to_str_simple(eg: ExceptionGroup) -> str:
     return "\n".join(
         f"{type(e).__name__}: {str(e)}" for e in flatten_exception_group(eg)
     )
+
+
+def _normalize_choose_tools(value):
+    """归一化 mcp_choose_tools：None 保持放行，序列转为 frozenset，
+    字符串/其他非法形态按空集处理（防子串匹配绕过白名单）。"""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return frozenset(value)
+    logger.error(
+        "invalid mcp_choose_tools type %s, treat as empty (reject all tools)",
+        type(value).__name__,
+    )
+    return frozenset()
 
 
 class SSEClientNew(McpClient):
@@ -77,7 +102,9 @@ class SSEClientNew(McpClient):
 
         self._plugin_dependency = config.params.get("plugin_dependency", {})
         self._tool_params = config.params.get("tool_params", [])
-        self._mcp_choose_tools = config.params.get("mcp_choose_tools")
+        self._mcp_choose_tools = _normalize_choose_tools(
+            config.params.get("mcp_choose_tools")
+        )
         self._auth = config.params.get("auth", {})
         self._input_parameters = config.params.get("input_parameters", {})
 
@@ -106,6 +133,105 @@ class SSEClientNew(McpClient):
         """断开连接（保持接口兼容）"""
         return True
 
+    def _get_auth_scope(self) -> str:
+        """IR auth 的 scope（大小写归一；auth 缺失或无 scope 返回空串）。"""
+        auth = self._auth
+        if isinstance(auth, dict):
+            return str(auth.get("scope") or "").strip().upper()
+        return ""
+
+    def _dynamic_auth_headers(self, kwargs) -> Optional[dict]:
+        """scope 允许且 kwargs.dynamic_auth_headers（FlowMcp 独立通道下传的
+        method=Headers 参数值）为 dict 时返回合法子集，否则 None。
+
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行；通道内容严格限于已声明
+        method=Headers 的参数值（session 级凭据走 runtime_auth，由
+        _add_auth_params 的 USER 映射消费，不经本通道）。
+        头名+头值双校验（RFC 7230 token + 逐跳敏感头 + 保留关联头 +
+        Latin-1 无控制字符），保护空 scope 服务的存量 Header 参数绕过
+        及上游校验被绕过后的注入/走私面（与 Java 侧名单同构）。
+        """
+        if self._get_auth_scope() not in ("", "DYNAMIC"):
+            return None
+        headers = kwargs.get("dynamic_auth_headers")
+        if not isinstance(headers, dict) or not headers:
+            return None
+        # G.EXP.04：三条件过滤不放推导式，显式循环表达
+        resolved = {}
+        for k, v in headers.items():
+            if not isinstance(k, str):
+                continue
+            if not is_valid_outbound_header_name(k) or not is_valid_outbound_header_value(v):
+                continue
+            resolved[k] = v
+        return resolved or None
+
+    def _resolve_dynamic_credential_headers(self) -> dict:
+        """FEAT-093 单智能体（react）链路：绑定模板解析为出站头。
+
+        值源先行：{{inputs.*}}→global_variables、{{memory.*}}→memory_variables
+        均为 react 执行器写入（工作流链路不写，互不重叠）——sources 非空
+        ⟹ react 链路，模板只认请求级映射（get_request_mcp_input_parameters，
+        react 执行器按本次运行 agent 的 IR 提供，按 server_id 键控）：
+        resource_mgr 的 MCP client 按 server_id 进程级缓存且首个注册者的
+        配置生效，跨 agent 共享的 client 其绑定模板可能来自别的 agent 的
+        IR——本 server 无条目即无模板，不回退 client 自身 input_parameters
+        （跨 agent 凭证污染面）。sources 空（工作流链路或无值可解析）时
+        整体跳过；工作流链路的模板消费走 FlowMcp 每节点自有 config。
+
+        仅 auth 无 scope 或 scope=DYNAMIC 时放行（与 kwargs 独立通道同门控）；
+        头已存在（server_config 头/已映射鉴权头）不覆盖——同名替换属
+        _replace_mcp_headers_extra 的既有职责；名+值双校验
+        （outbound_header_guard），非法条目打 WARNING（带参数名）后跳过。
+        """
+        if self._get_auth_scope() not in ("", "DYNAMIC"):
+            return {}
+        sources = {}
+        global_variables = get_request_global_variables()
+        if global_variables:
+            sources["inputs"] = global_variables
+        memory_variables = get_request_memory_variables()
+        if memory_variables:
+            sources["memory"] = memory_variables
+        if not sources:
+            return {}
+        input_parameters = get_request_mcp_input_parameters().get(self._name)
+        if not input_parameters:
+            return {}
+        resolved = {}
+        for name, template in input_parameters.items():
+            if not isinstance(name, str) or not isinstance(template, str):
+                continue
+            if not name or not template.startswith("{{") or not template.endswith("}}"):
+                continue
+            inner = template[2:-2].strip()
+            matched = False
+            for namespace, variables in sources.items():
+                prefix = namespace + "."
+                if inner.startswith(prefix) and len(inner) > len(prefix):
+                    matched = True
+                    value = variables
+                    for key in inner[len(prefix):].split("."):
+                        if isinstance(value, dict) and key in value:
+                            value = value[key]
+                        else:
+                            value = None
+                            break
+                    if value is None or (isinstance(value, str) and not value.strip()):
+                        continue
+                    value_str = str(value)
+                    if not is_valid_outbound_header_name(name) or not is_valid_outbound_header_value(value_str):
+                        logger.warning(
+                            "dynamic credential header '%s' rejected: invalid name or value "
+                            "characters, server_name is %s", name, self._name,
+                        )
+                        continue
+                    resolved[name] = value_str
+                    break
+            if not matched:
+                continue
+        return resolved
+
     def _prepare_request_params(self, inputs: dict = None, **kwargs) -> RequestParams:
         """
         准备请求参数
@@ -127,9 +253,29 @@ class SSEClientNew(McpClient):
             api_cert=self._cert,
             plugin_dependency=self._plugin_dependency,
         )
+        inputs = inputs or {}
         request_params = request_params_creator.create(inputs, **kwargs)
 
+        # FEAT-093 动态凭证：FlowMcp 把 method=Headers 参数值经独立通道
+        # kwargs["dynamic_auth_headers"] 下传（与 session 级 runtime_auth 分离）。
+        # 仅当 IR auth 无 scope 或 scope=DYNAMIC 时并入出站 headers：USER/SERVICE
+        # 作用域下 _add_auth_params 已按 auth_keys 的 source→target 映射消费
+        # session 级 runtime_auth，此处透传会外发未映射凭据并覆盖已映射头
+        dynamic_headers = self._dynamic_auth_headers(kwargs)
+        if dynamic_headers:
+            request_params.headers.update(dynamic_headers)
+
         self._replace_mcp_headers_extra(request_params, **kwargs)
+
+        # FEAT-093 单智能体（react）链路：input_parameters 的 {{inputs.*}} 绑定
+        # 注入出站头。强制覆盖（检视修复：LLM 同名参数覆盖）——IrAdapter 会把
+        # 动态头名追加为 method=Headers 工具入参下发给 LLM，LLM 可能编造同名
+        # 值经 RequestParamsCreator 先写入 headers；绑定值是权威配置，
+        # 必须胜出（与插件链路 test_bound_value_overwrites_llm_given 同语义。
+        # server_config 固定头与动态头的同名冲突在保存侧
+        # validDynamicAuthHeaderConflict 已拒绝，此处的覆盖对象实际只有 LLM 值）
+        for name, value in self._resolve_dynamic_credential_headers().items():
+            request_params.headers[name] = value
 
         self._execute_auth_hook(request_params, kwargs.get("name"))
 
@@ -305,6 +451,11 @@ class SSEClientNew(McpClient):
 
         每次调用新建 client/session，执行完毕后自动释放
         """
+        if self._mcp_choose_tools is not None and tool_name not in self._mcp_choose_tools:
+            err_msg = f"tool {tool_name} is not in the chosen mcp tools {self._mcp_choose_tools}"
+            logger.error(err_msg)
+            raise exception.PluginParamException(message=err_msg)
+
         jiuwen_kwargs = arguments.pop(JIUWEN_RUNTIME_KWARGS, {}) or {}
 
         request_params = self._prepare_request_params(
@@ -312,13 +463,18 @@ class SSEClientNew(McpClient):
         )
         tmp_url = self._build_mcp_url(request_params)
 
+        # 节点超时与 MCP_TIME_OUT_SECONDS 取小
+        effective_timeout = mcp_time_out_seconds
+        if timeout > 0:
+            effective_timeout = min(mcp_time_out_seconds, timeout)
+
         logger.info(f"Calling tool '{tool_name}' via SSE with arguments: {arguments}")
 
         async with sse_client(
             tmp_url,
             headers=request_params.headers,
-            sse_read_timeout=mcp_time_out_seconds,
-            timeout=mcp_time_out_seconds,
+            sse_read_timeout=effective_timeout,
+            timeout=effective_timeout,
         ) as streams:
             async with ClientSession(*streams) as session:
                 await session.initialize()

@@ -7,6 +7,9 @@ RUN groupadd -g 1000 service && useradd -u 1000 -g service -s /bin/bash -m servi
 ENV SERVICE_HOME=/opt/cloud/agent-runtime
 ENV PACKAGES_HOME=/usr/local/lib/python3.11/site-packages
 ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
+# jemalloc 行为参数(空=库内默认;部署时按场景覆盖,如 background_thread:true)
+# LD_PRELOAD 在 script/start_server.sh 里按库存在性自动设置
+ENV MALLOC_CONF=""
 
 WORKDIR $SERVICE_HOME
 
@@ -16,17 +19,20 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword libjemalloc2 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && ln -sf $(dpkg -L libjemalloc2 | grep 'libjemalloc\.so\.2$' | head -1) /usr/local/lib/libjemalloc.so.2
 
-# 安装 Python 依赖（临时安装编译工具链，编译完成后卸载）
+# 安装 Python 依赖（临时安装编译工具链 + git，编译完成后卸载）
+# git 仅为拉取 requirements.txt 里 git+https 形式的 openjiuwen 依赖
+# （agent-core 修复分支，见 requirements.txt 注释），装完即卸载不留在镜像里。
 COPY requirements.txt $SERVICE_HOME/app/
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev git \
     && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
-    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get remove -y gcc python3-dev git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
@@ -83,4 +89,4 @@ RUN chmod 700 /opt/cloud/logs \
 
 USER 1000:1000
 
-CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]
+CMD ["/bin/bash", "-c", "cron;cd ${SERVICE_HOME};./bin/init.sh; if [ \"${NGINX_LOAD_BALANCING,,}\" = \"true\" ]; then ./bin/start_nginx_lb.sh; else ./bin/start.sh; fi"]

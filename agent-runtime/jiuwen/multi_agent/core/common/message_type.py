@@ -119,6 +119,10 @@ class SendMessageEnvelope(MessageEnvelope):
     """A message envelope for sending a message to a specific agent."""
 
     stream_handler: StreamHandler | None = None  # 流处理函数，用于处理流式消息
+    # 发送时刻的用户 id：消息经队列与 asyncio.create_task 投递，处理任务
+    # 继承的是消费循环上下文（用户事实为空），由本字段携带过界、在
+    # _process_send_message 入口回绑 ContextVar，供遥测身份（gen_ai.user.id）读取。
+    user_id: str | None = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SendMessageEnvelope":
@@ -133,6 +137,7 @@ class SendMessageEnvelope(MessageEnvelope):
             else None,
             future=None,  # Future 不能序列化，恢复时为 None
             stream_handler=None,  # StreamHandler 不能序列化，恢复时为 None
+            user_id=data.get("user_id"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -144,6 +149,7 @@ class SendMessageEnvelope(MessageEnvelope):
             "sender": self._serialize_actor(self.sender),
             "recipient": self._serialize_actor(self.recipient),
             "metadata": self.metadata.to_dict() if self.metadata else None,
+            "user_id": self.user_id,
         }
 
 

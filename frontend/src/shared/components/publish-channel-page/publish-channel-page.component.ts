@@ -78,11 +78,11 @@ export class PublishChannelPageComponent {
     },
     {
       title: this.i18n.transform('status'),
-      width: '11%',
+      width: '10%',
     },
     {
       title: this.i18n.transform('version'),
-      width: '11%',
+      width: '10%',
     },
     {
       title: this.i18n.transform('is_update_version'),
@@ -90,11 +90,11 @@ export class PublishChannelPageComponent {
     },
     {
       title: this.i18n.transform('link_address'),
-      width: '17%',
+      width: '22%',
     },
     {
       title: this.i18n.transform('operation'),
-      width: '12%',
+      width: '20%',
     },
   ];
   public tableData: any = [];

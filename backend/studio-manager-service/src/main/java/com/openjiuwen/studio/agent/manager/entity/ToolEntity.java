@@ -157,4 +157,7 @@ public class ToolEntity {
 
     @JsonProperty("category")
     private String category;
+
+    @JsonProperty("platform_published")
+    private Integer platformPublished;
 }

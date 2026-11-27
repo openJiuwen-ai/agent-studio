@@ -124,7 +124,6 @@
   "developer_total": "Total Number of Developers",
   "active_agent_total": "Active Agents",
   "active_workflow_total": "Active Workflows",
-  "active_uesr_total": "Active Users",
   "add_developer_total": "New Developers Added",
   "tokens_consumer": "Tokens Consumed",
   "agent_tokens_consumer": "Top 10 Agents by Tokens Consumed",

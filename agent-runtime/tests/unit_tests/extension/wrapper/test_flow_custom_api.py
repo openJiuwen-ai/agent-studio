@@ -37,6 +37,11 @@ from jiuwen.extension.workflow_node.utils import JiuWenBaseException
 
 def _make_flow(api_mock, conf=None):
     """创建 FlowCustomApi 实例，跳过 __init__ 中的 init 链，手动设置字段。"""
+    # 镜像真实契约 CustomPluginTool.invoke → ainvoke：生产 invoke 经 tracer
+    # 装饰后调 .invoke，把测试里配在 ainvoke 上的 return_value/side_effect
+    # 同步暴露到 invoke，避免 AsyncMock 上两者是无关的自动 mock
+    if getattr(api_mock, "ainvoke", None) is not None:
+        api_mock.invoke = api_mock.ainvoke
     flow = FlowCustomApi(conf=None)
     flow._conf = conf or {}
     flow._api = api_mock
@@ -49,10 +54,17 @@ def _make_flow(api_mock, conf=None):
 
 
 def _make_session():
-    """创建 mock session。"""
+    """创建 mock session。
+
+    MagicMock 会伪通过 tracer 装饰门槛（hasattr 恒真），把 ``_inner.tracer()``
+    显式置 None 以建模真实运行时的「无 tracer」形态，使
+    decorate_tool_with_trace 按生产路径原样返回工具。
+    """
     session = MagicMock()
     session.trace = AsyncMock()
+    session.trace_error = AsyncMock()
     session.get_session_id = MagicMock(return_value="session-123")
+    session._inner.tracer.return_value = None
     return session
 
 

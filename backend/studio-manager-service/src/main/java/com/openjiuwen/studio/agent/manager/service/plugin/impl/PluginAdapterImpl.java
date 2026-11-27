@@ -25,6 +25,8 @@ import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
+import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
+import java.util.Objects;
 import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
@@ -89,6 +91,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import com.openjiuwen.studio.agent.manager.service.mcp.auth.McpBaseImpl;
 
 @Slf4j
 @Service
@@ -352,18 +356,64 @@ public class PluginAdapterImpl implements IPlugin {
     @Override
     public ToolEntity getToolEntity(String id, String projectId, String opProjectId, String versionId) {
         ToolEntity toolEntity;
+        // 资产广场上架插件（platform_published=1 且 published=1）版本锚定（#1735）：消费侧（引用/运行/导入/校验/搜索）
+        // 一律按上架锚定的 plaza_version_id 解析，忽略调用方传入的 versionId（可能是最新版 last_version_id，
+        // 也可能为空）。避免"上架锚定 v2、发 v3 后消费侧漂移到 v3"。
+        // 非广场插件或锚定版本缺失时保持原逻辑（versionId 非空按 versionId，空走最新版）。
+        String[] ids = id.split("#");
+        String pluginId = ids[0];
+        String plazaAnchorVersionId = resolvePlazaAnchorVersionId(pluginId);
+        if (StringUtils.isNotEmpty(plazaAnchorVersionId)) {
+            // 资产广场上架插件版本锚定（#1735）：一律按 plaza_version_id 解析，忽略调用方传入的 versionId。
+            // 悬空锚定（属主删除锚定发布版本后 plaza_version_id 仍指向已删版本）fail-closed：
+            // getToolEntityByVersion 抛 TOOL_VERSION_NOT_EXIST 直接上抛，不降级到未审核最新版（review #1735：
+            // 降级最新版会复现本 PR 要修复的版本漂移与合规风险，故 fail-closed 硬失败让消费侧显式报错）。
+            toolEntity = pluginBase.getToolEntityByVersion(id, plazaAnchorVersionId);
+            toolEntity.setVersionId(plazaAnchorVersionId);
+            return toolEntity;
+        }
         if (StringUtils.isNotEmpty(versionId)) {
             toolEntity = pluginBase.getToolEntityByVersion(id, versionId);
             toolEntity.setVersionId(versionId);
         } else {
-            String[] ids = id.split("#");
-            String pluginId = ids[0]; // 获取 pluginId
             // 确保 toolId 存在
             String toolId = ids.length > 1 ? ids[1] : "0"; // 如果存在 toolId, 否则为 null
             toolEntity = pluginBase.buildToolByPlugin(projectId, null, pluginId, toolId);
         }
 
         return toolEntity;
+    }
+
+    /**
+     * 解析资产广场上架锚定版本ID（#1735）。
+     * 仅当插件已上架到资产广场（platform_published=1 且 published=1，口径与详情/列表接口一致）且锚定版本非空时
+     * 返回 plaza_version_id；否则返回 null（调用方走原版本解析逻辑）。
+     * 锚定字段缺失（上架后 plaza_version_id 异常为空）时返回 null 并 warn 记日志，走原逻辑。
+     * fail-closed（review #1735）：不捕获 DB 查询异常——瞬时 DB 故障时异常上抛，与悬空锚定 fail-closed
+     * 策略一致；不在故障时静默降级到未审核最新版（降级会复现本 PR 要修复的版本漂移）。
+     * 插件记录不存在（selectByPrimaryKey 返回 null）属正常业务状态（非广场/未上架），返回 null 走原逻辑。
+     */
+    private String resolvePlazaAnchorVersionId(String pluginId) {
+        if (StringUtils.isEmpty(pluginId)) {
+            return null;
+        }
+        PluginEntity pluginEntity = pluginMapper.selectByPrimaryKey(pluginId, null);
+        if (pluginEntity == null) {
+            return null;
+        }
+        // 口径与 PluginService 详情/列表接口一致：platform_published=1 且 published=1 双判
+        boolean plazaPublished = pluginEntity.getPlatformPublished() != null
+            && pluginEntity.getPlatformPublished() == 1
+            && pluginEntity.getPublished() != null
+            && pluginEntity.getPublished() == 1;
+        if (!plazaPublished) {
+            return null;
+        }
+        if (StringUtils.isBlank(pluginEntity.getPlazaVersionId())) {
+            log.warn("Plaza published plugin has no anchor version, fallback to default. pluginId: {}", pluginId);
+            return null;
+        }
+        return pluginEntity.getPlazaVersionId();
     }
 
     @Override
@@ -377,9 +427,16 @@ public class PluginAdapterImpl implements IPlugin {
         // 增加共享判断，如果插件被共享到当前空间,则可以使用
         List<String> canUseIds = shareInnerService.getShareScopeByWorkspaceAndId(toolMap.keySet().stream().toList(),
             workspaceId).stream().map(ShareScopeEntity::getResourceId).toList();
+        // 资产广场已上架插件（platform_published=1）支持跨工作空间引用（FRS-091）
+        List<String> plazaPublishedIds = toolEntities.stream()
+            .filter(tool -> tool.getPlatformPublished() != null && tool.getPlatformPublished() == 1)
+            .map(PluginEntity::getPluginId)
+            .toList();
         List<String> cannotUseIds = toolEntities.stream()
-            .filter(tool -> "custom".equals(tool.getType()) && (!Strings.CS.equals(projectId, tool.getProjectId())
-                || !Strings.CS.equals(workspaceId, tool.getWorkspaceId())))
+            .filter(tool -> "custom".equals(tool.getType())
+                && (!Strings.CS.equals(projectId, tool.getProjectId())
+                    || !Strings.CS.equals(workspaceId, tool.getWorkspaceId()))
+                && !plazaPublishedIds.contains(tool.getPluginId()))
             .map(PluginEntity::getPluginId)
             .toList();
 
@@ -560,6 +617,10 @@ public class PluginAdapterImpl implements IPlugin {
         Map<String, String> pathParams = new HashMap<>();
         Map<String, String> headers = new HashMap<>();
         parseParams(operation, requestBody, urlParamsMap, headers, pathParams);
+        // FEAT-093 动态鉴权调测：插件 auth_info.scope=DYNAMIC 时，调测入参中的
+        // 动态头名值注入出站 headers（调测面板提供调试值输入；值随调测请求
+        // 即发即弃，不落库），Latin-1 校验对齐 MCP 调测侧防控制字符注入
+        injectDynamicAuthDebugHeaders(projectId, pluginId, requestBody, headers);
         log.info("[runTool] pathParams parse to {}", SensitiveLogContext.mask(String.valueOf(pathParams)));
 
         // 构造鉴权信息，用于前端展示的信息返回ENCRYPTED_VALUE
@@ -732,8 +793,15 @@ public class PluginAdapterImpl implements IPlugin {
             .map(ShareResourceEntity::getWorkspaceId)
             .toList();
         result = pluginMapper.selectByPrimaryIdAndPluginIdsWithSearchCriteria(projectId, null, pluginIds, null);
-        return result.stream().filter(plugin -> originWorkspaceId.contains(plugin.getWorkspaceId())).toList();
-
+        if (CollectionUtils.isEmpty(result)) {
+            return result;
+        }
+        List<PluginEntity> allowed = result.stream()
+            .filter(plugin -> originWorkspaceId.contains(plugin.getWorkspaceId())
+                // 资产广场已上架插件（platform_published=1）支持跨工作空间引用（FRS-091）
+                || (plugin.getPlatformPublished() != null && plugin.getPlatformPublished() == 1))
+            .toList();
+        return allowed;
     }
 
     @Override
@@ -913,6 +981,73 @@ public class PluginAdapterImpl implements IPlugin {
         }
         Schema items = (Schema) paramSchema.getItems();
         return items.getType() != null && items.getType().startsWith("file/");
+    }
+
+    /**
+     * FEAT-093 动态鉴权调测注入：插件 auth_info.scope=DYNAMIC 时，把调测入参中
+     * 与 auth_keys[].target_name 同名的值注入出站 headers（调测面板提供调试值
+     * 输入；值随调测请求即发即弃，不落库——与 parseParams 的 OpenAPI 声明头
+     * 参数从请求体取值通道同构）。
+     * Latin-1 无控制字符校验对齐 MCP 调测侧（mergeDynamicDebugHeaders），
+     * 防控制字符/中文注入出站头；同名校验在前端与保存期已拒绝。
+     *
+     * @param projectId 项目 id
+     * @param pluginId 插件 id
+     * @param requestBody 调测入参（注入后从头取走，不重复进请求体）
+     * @param headers 出站请求头
+     */
+    private void injectDynamicAuthDebugHeaders(String projectId, String pluginId, JSONObject requestBody,
+        Map<String, String> headers) {
+        try {
+            PluginEntity plugin = pluginMapper.selectByPrimaryKey(pluginId, projectId);
+            if (Objects.isNull(plugin)) {
+                return;
+            }
+            AuthInfo authInfo = plugin.getAuthInfo();
+            if (Objects.isNull(authInfo) || Objects.isNull(authInfo.getScope())
+                || !AuthInfo.ScopeEnum.DYNAMIC.equals(authInfo.getScope())
+                || CollectionUtils.isEmpty(authInfo.getAuthKeys())) {
+                return;
+            }
+            for (AuthKeyInfo authKey : authInfo.getAuthKeys()) {
+                if (Objects.isNull(authKey) || StringUtils.isBlank(authKey.getTargetName())) {
+                    continue;
+                }
+                String name = authKey.getTargetName();
+                // 头名 token 校验（RFC 7230）：导入/存量 DYNAMIC 插件可能未经过
+                // 登记侧校验（validPluginDynamicAuthInfo 只拦新增/修改），
+                // 调测路径不校验名即把非法头名直接放进站 headers。
+                // 平台保留关联头（x-request-id/x-execution-id/traceparent）统一拦截——
+                // 新增/修改入口会拦，但存量/导入数据可能绕过，调测时伪造关联头
+                if (!McpBaseImpl.VALID_HEADER_NAME_PATTERN.matcher(name).matches()
+                        || McpBaseImpl.FORBIDDEN_HEADER_NAMES.contains(name.toLowerCase(Locale.ROOT))
+                        || McpBaseImpl.RESERVED_CORRELATION_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                    log.warn("[runTool] dynamic auth debug header '{}' rejected: invalid or reserved header name, "
+                        + "pluginId {}", name, pluginId);
+                    continue;
+                }
+                String value = requestBody.getString(name);
+                if (StringUtils.isEmpty(value)) {
+                    continue;
+                }
+                for (int i = 0; i < value.length(); i++) {
+                    char c = value.charAt(i);
+                    if (c < 0x20 || c == 0x7F || c > 0xFF) {
+                        throw new AgentStudioException(StudioError.TOOL_INPUT_INVALID,
+                            "dynamic auth header '" + name + "' debug value contains characters "
+                                + "not allowed in an HTTP header");
+                    }
+                }
+                headers.put(name, value);
+                requestBody.remove(name);
+                log.info("[runTool] dynamic auth debug header applied: {}", name);
+            }
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            // 查库/解析失败不阻断调测主链（动态头注入是增强能力）
+            log.warn("[runTool] dynamic auth debug header inject failed, pluginId {}: {}", pluginId, e.getMessage());
+        }
     }
 
     private void parseParams(Operation operation, JSONObject requestBody, Map<String, String> urlParams,

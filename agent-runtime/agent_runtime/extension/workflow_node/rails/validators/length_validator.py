@@ -59,7 +59,9 @@ class LengthLimitValidateAction(ValidateAction):
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """执行长度校验"""
         args = context.get("arguments", {})
-        validated_args = {}
+        # 以原始参数为基底：只覆盖配置了校验的字段，未配置校验的字段原样保留，
+        # 避免部分字段勾选校验时其余字段被丢弃导致误触发重复追问
+        validated_args = dict(args)
 
         for field_name, max_length in self.extra_args.items():
             value = args.get(field_name)

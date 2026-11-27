@@ -1862,6 +1862,52 @@ CREATE TABLE ws_mcp_service_def
     is_share                  SMALLINT NOT NULL DEFAULT 0
 );
 
+-- FEAT-134 新列统一走 ALTER IF NOT EXISTS（新库/存量库同路径，CREATE TABLE 不内联）
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS snapshot_revision BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS active_mcp_operation_id VARCHAR(64) NULL;
+-- import_config_pending 用 BOOLEAN（实体是 Boolean，MyBatis setBoolean/getBoolean 直通；
+-- PostgreSQL 无 SMALLINT↔BOOLEAN 隐式转换）
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_pending BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE ws_mcp_service_def ADD COLUMN IF NOT EXISTS import_config_paths TEXT NULL;
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation
+(
+    id              VARCHAR(64) NOT NULL PRIMARY KEY,
+    operation_type  VARCHAR(16) NOT NULL,
+    tenant_id       VARCHAR(64) NOT NULL,
+    project_id      VARCHAR(64) NOT NULL,
+    workspace_id    VARCHAR(64) NOT NULL,
+    creator_id      VARCHAR(64) NOT NULL,
+    status          VARCHAR(32) NOT NULL,
+    total           INT NOT NULL DEFAULT 0,
+    created_count   INT NOT NULL DEFAULT 0,
+    success_count   INT NOT NULL DEFAULT 0,
+    failed_count    INT NOT NULL DEFAULT 0,
+    created_date    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    deadline_date   TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ws_mcp_operation_ws ON ws_mcp_operation (tenant_id, project_id, workspace_id, created_date);
+CREATE INDEX IF NOT EXISTS idx_ws_mcp_operation_deadline ON ws_mcp_operation (status, deadline_date);
+
+CREATE TABLE IF NOT EXISTS ws_mcp_operation_item
+(
+    operation_id    VARCHAR(64) NOT NULL,
+    item_index      INT NOT NULL,
+    service_id      VARCHAR(64) NULL,
+    original_name   VARCHAR(64) NULL,
+    actual_name     VARCHAR(64) NULL,
+    status          VARCHAR(32) NOT NULL,
+    refresh_status  VARCHAR(32) NULL,
+    source_snapshot TEXT NULL,
+    result_json     TEXT NULL,
+    error_code      VARCHAR(64) NULL,
+    safe_reason     VARCHAR(512) NULL,
+    started_date    TIMESTAMP NULL DEFAULT NULL,
+    finished_date   TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (operation_id, item_index)
+);
+
 CREATE TABLE ws_mcp_server_rating
 (
     rating_id    int primary key,
@@ -2128,3 +2174,17 @@ CREATE TABLE IF NOT EXISTS t_polling_trigger_state (
     PRIMARY KEY (trigger_id)
 );
 COMMENT ON TABLE t_polling_trigger_state IS 'Polling触发器运行状态表';
+
+-- ===================== FRS-091 资产广场上架开放接口 =====================
+-- t_skill: 上架来源标记（PRESET=官方预置 / USER=用户上架）；published_asset 仍为上架标记
+ALTER TABLE t_skill ADD COLUMN plaza_source VARCHAR(32);
+UPDATE t_skill SET plaza_source = 'PRESET' WHERE published_asset = '1' AND plaza_source IS NULL;
+
+-- ws_mcp_server_def: 用户上架标记 + 源实例关联（供同一实例重复上架去重）
+ALTER TABLE ws_mcp_server_def ADD COLUMN platform_published SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE ws_mcp_server_def ADD COLUMN source_instance_id VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ws_mcp_server_source_instance ON ws_mcp_server_def (source_instance_id);
+
+-- t_tool: 用户插件上架标记 + 锚定发布版本（t_release_version.version_id）
+ALTER TABLE t_tool ADD COLUMN platform_published SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE t_tool ADD COLUMN plaza_version_id VARCHAR(64);

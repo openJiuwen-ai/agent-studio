@@ -23,8 +23,8 @@ from jiuwen.controller.task_planner.planners.plan_execute_planner import (
     PlanExecuteState,
 )
 from jiuwen.controller.utils.utils import AgentUtils, WorkspaceUtils
-from jiuwen.insight.manager import TraceManager, get_child_manager
-from jiuwen.insight.utils import get_instance_info
+from jiuwen.insight.manager import NO_AGENT_IDENTITY, TraceManager, get_child_manager
+from jiuwen.insight.utils import get_agent_identity, get_instance_info
 from jiuwen.orchestration import Invokable
 from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import serialize_object
@@ -622,6 +622,10 @@ class Agent(BaseAgent):
                 ],
             ),
             session=kwargs.pop("session", None),
+            # 本 agent 自身身份（AgentMetaData.id + 真实名）：openjiuwen 双写
+            # 转发时注入扁平键，span 盖真实 agent 名而非组件类名；确无身份时
+            # 传哨兵（终态），防止成员根 manager 被 controller 链身份继承补齐
+            agent_identity=get_agent_identity(self) or NO_AGENT_IDENTITY,
         )
         await trace_manager.on_chain_start(kwargs.get("inputs"))  # 使用原始inputs
         return trace_manager

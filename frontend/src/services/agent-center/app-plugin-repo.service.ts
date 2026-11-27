@@ -82,6 +82,28 @@ export class AppPluginRepoService {
     });
   }
 
+  /**
+   * 将插件上架到资产广场（FRS-091，锚定发布版本，version_id 可选）
+   */
+  public publishPlugin(pluginId: string, versionId?: string, category?: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/${pluginId}/on-shelf`,
+      params: {
+        ...(versionId ? { version_id: versionId } : {}),
+        ...(category ? { category } : {}),
+      },
+    });
+  }
+
+  /**
+   * 将插件从资产广场下架（FRS-091）
+   */
+  public unpublishPlugin(pluginId: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/${pluginId}/off-shelf`,
+    });
+  }
+
   public getPluginById(id: string): Promise<any> {
     return this.http.getAsync({
       url: `${this.prefix}/${id}`,

@@ -97,7 +97,8 @@ export class SkillDetailComponent {
   }
 
   generateOperator(): Array<any> {
-    return [
+    const operators: Array<any> = [];
+    operators.push(
       {
         label: this._i18n.transform('skill.detail.export'),
         type: 'default',
@@ -128,8 +129,9 @@ export class SkillDetailComponent {
             },
           });
         },
-      },
-    ];
+      }
+    );
+    return operators;
   }
 
   ngOnDestroy(): void {

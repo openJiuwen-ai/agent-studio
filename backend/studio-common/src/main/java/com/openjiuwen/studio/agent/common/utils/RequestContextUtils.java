@@ -4,8 +4,6 @@
 
 package com.openjiuwen.studio.agent.common.utils;
 
-import static org.apache.commons.configuration2.io.FileOptionsProvider.CURRENT_USER;
-
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
 import com.openjiuwen.studio.agent.common.security.properties.AuthProperties;
@@ -30,6 +28,18 @@ import java.util.Optional;
  */
 @Slf4j
 public class RequestContextUtils {
+    /**
+     * request attribute 键:当前用户(瘦身修订 2026-11-04,评审修订 v2)。
+     *
+     * <p>原值取自 commons-configuration2 的 FileOptionsProvider.CURRENT_USER
+     * (实际值 "currentUser",小写)——系历史 IDE 误导入,与 SimpleUserContextFilter
+     * 写入的属性名 "CURRENT_USER"(大写)不一致,导致 request attribute 读取
+     * 恒为 null、靠 ThreadLocal 兜底。本常量改为 "CURRENT_USER" 对齐写入方,
+     * request attribute 路径恢复可用;行为兼容(ThreadLocal 兜底仍覆盖 filter
+     * 未设置属性的场景)。commons-configuration2 仅此处使用,替代后不再引入。
+     */
+    private static final String CURRENT_USER = "CURRENT_USER";
+
     private static final ThreadLocal<SimpleUser> THREAD_LOCAL_IAM_CTX = new ThreadLocal<>();
 
     private static final ThreadLocal<Map<String, String>> THREAD_LOCAL_HEADER = new ThreadLocal<>();
@@ -136,16 +146,20 @@ public class RequestContextUtils {
     }
 
     /**
-     * 获取当前请求的IAM上下文
+     * 获取当前请求的IAM上下文。
      *
+     * <p>优先级:ThreadLocal(显式 set 的上下文,如 TaskRuntimeService 切换
+     * 任务归属用户)优先于 request attribute(filter 写入的登录用户)——
+     * 显式 set 是意图覆盖,须被尊重;attribute 优先会静默忽略请求线程内
+     * 的显式 set(以错误身份调下游)。
      */
     public static SimpleUser getRequestIamCtx() {
-        SimpleUser simpleUser = getIamCtxFromReqAttr();
+        SimpleUser simpleUser = THREAD_LOCAL_IAM_CTX.get();
         if (simpleUser != null) {
             return simpleUser;
         }
 
-        simpleUser = THREAD_LOCAL_IAM_CTX.get();
+        simpleUser = getIamCtxFromReqAttr();
         if (simpleUser != null) {
             return simpleUser;
         }
@@ -154,17 +168,15 @@ public class RequestContextUtils {
     }
 
     /**
-     * 获取当前请求的IAM上下文
-     *
-     * @return Context信息
+     * 获取当前请求的IAM上下文(优先级同 getRequestIamCtx:ThreadLocal 优先)。
      */
     public static Optional<SimpleUser> getRequestIamCtxOptional() {
-        SimpleUser simpleUser = getIamCtxFromReqAttr();
+        SimpleUser simpleUser = THREAD_LOCAL_IAM_CTX.get();
         if (simpleUser != null) {
             return Optional.of(simpleUser);
         }
 
-        simpleUser = THREAD_LOCAL_IAM_CTX.get();
+        simpleUser = getIamCtxFromReqAttr();
         if (simpleUser != null) {
             return Optional.of(simpleUser);
         }

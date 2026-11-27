@@ -42,6 +42,8 @@ import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentCacheUtil;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
+import com.openjiuwen.studio.agent.manager.observability.MdcKeys;
+import com.openjiuwen.studio.agent.manager.observability.OutboundCorrelationPolicy;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +53,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -60,6 +63,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -149,6 +153,16 @@ class AgentServiceProxyServiceTest {
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");
+        // 生产由 @PostConstruct init() 构造(依赖 @Value 配置,单测直呼会 NPE)——
+        // 此处按本类既有反射注入模式补齐下游错误渲染两件套,兜底分支不再 NPE
+        // (评审修订 2026-11-03 三轮:修复 testTextEmbeddings/Rerank_FeignException 回归)
+        ReflectionTestUtils.setField(proxyService, "downstreamMapper",
+            new com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMapper(
+                new com.openjiuwen.studio.agent.manager.exception.downstream.DownstreamErrorMappingCatalog(
+                    new com.openjiuwen.studio.agent.manager.exception.contract.ManagerErrorCatalog())));
+        ReflectionTestUtils.setField(proxyService, "downstreamHttpBuilder",
+            new com.openjiuwen.studio.agent.manager.exception.contract.ManagerHttpErrorResponseBuilder(
+                (key, args, locale) -> key));
     }
 
     @Test
@@ -484,14 +498,8 @@ class AgentServiceProxyServiceTest {
             model.setPublic(true);
             when(modelServiceMapper.queryById("model-1")).thenReturn(model);
 
-            // 注入 i18nUtil mock（构造函数不包含，需通过反射注入）
-            com.openjiuwen.studio.agent.common.utils.I18nUtil i18nUtilMock =
-                org.mockito.Mockito.mock(com.openjiuwen.studio.agent.common.utils.I18nUtil.class);
-            com.openjiuwen.studio.agent.common.utils.ErrorInfo errorInfo =
-                new com.openjiuwen.studio.agent.common.utils.ErrorInfo("unavailable", "reason", "suggestion");
-            when(i18nUtilMock.getMessage(any(com.openjiuwen.studio.agent.common.exception.AgentStudioException.class)))
-                .thenReturn(errorInfo);
-            ReflectionTestUtils.setField(proxyService, "i18nUtil", i18nUtilMock);
+            // 新兜底路径(DownstreamErrorMapper+族字面量)不经 i18nUtil——
+            // 原注入的 i18nUtil mock 已成 UnnecessaryStubbing,删除(评审修订 2026-11-03 三轮)
 
             String badBody = "not-a-json";
             FeignException feignException = new FeignException.BadGateway(
@@ -509,10 +517,12 @@ class AgentServiceProxyServiceTest {
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
             ResponseEntity<?> responseEntity = (ResponseEntity<?>) result;
+            // 新行为(评审修订 2026-11-03 三轮):builder 掉线与 runtime 掉线同构——
+            // 走 DownstreamErrorMapper 兜底 02001131/502(原 02501037 已回归本职)
             assertEquals(502, responseEntity.getStatusCode().value());
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
-            assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode(), errorRsp.getErrorCode());
+            assertEquals("openjiuwen.02001131", errorRsp.getErrorCode());
         }
     }
 
@@ -622,14 +632,7 @@ class AgentServiceProxyServiceTest {
             model.setPublic(true);
             when(modelServiceMapper.queryById("model-1")).thenReturn(model);
 
-            // 注入 i18nUtil mock（构造函数不包含，需通过反射注入）
-            com.openjiuwen.studio.agent.common.utils.I18nUtil i18nUtilMock =
-                org.mockito.Mockito.mock(com.openjiuwen.studio.agent.common.utils.I18nUtil.class);
-            com.openjiuwen.studio.agent.common.utils.ErrorInfo errorInfo =
-                new com.openjiuwen.studio.agent.common.utils.ErrorInfo("unavailable", "reason", "suggestion");
-            when(i18nUtilMock.getMessage(any(com.openjiuwen.studio.agent.common.exception.AgentStudioException.class)))
-                .thenReturn(errorInfo);
-            ReflectionTestUtils.setField(proxyService, "i18nUtil", i18nUtilMock);
+            // 新兜底路径不经 i18nUtil——原 mock 已成 UnnecessaryStubbing,删除(评审修订 2026-11-03 三轮)
 
             String badBody = "not-a-json";
             FeignException feignException = new FeignException.ServiceUnavailable(
@@ -649,10 +652,13 @@ class AgentServiceProxyServiceTest {
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
             ResponseEntity<?> responseEntity = (ResponseEntity<?>) result;
+            // 新行为(评审修订 2026-11-04 四轮):Feign 已应答(status>0)时按
+            // HTTP_RESPONSE 相位处理——文案族仍为 02001131,但保留原状态
+            // (503 不再统一成 502;真传输失败 status<=0 才 502)
             assertEquals(503, responseEntity.getStatusCode().value());
             ErrorRsp errorRsp = (ErrorRsp) responseEntity.getBody();
             assertNotNull(errorRsp);
-            assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode(), errorRsp.getErrorCode());
+            assertEquals("openjiuwen.02001131", errorRsp.getErrorCode());
         }
     }
 
@@ -852,6 +858,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
@@ -860,7 +867,8 @@ class AgentServiceProxyServiceTest {
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-owner", false, "env-default", body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-owner"), eq(false),
+                eq("env-default"), eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -876,13 +884,15 @@ class AgentServiceProxyServiceTest {
     void testRunWebAgent_NonStreamNoDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner"));
             when(environmentManagerMapper.findByProjectIdAndIsDefaultTrue("proj-owner")).thenReturn(Collections.emptyList());
 
             AgentRunReq body = new AgentRunReq().setQuery("hello");
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebAgent("token", "code-1", "ws-1", false, null, body))
+            when(runtimeClient.runWebAgent(eq("token"), any(), eq("code-1"), eq("ws-1"), eq(false), isNull(),
+                eq(body)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebAgent("code-1", "proj-1", new HttpHeaders(), "ws-1", false, body);
@@ -1075,6 +1085,7 @@ class AgentServiceProxyServiceTest {
     void testRunWebWorkflow_NonStreamWithDefaultEnv() {
         try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestAuthToken).thenReturn("token");
+            mockedStatic.when(RequestContextUtils::getRequestIamCtxOptional).thenReturn(Optional.empty());
             when(releaseChannelMapper.selectByChannelIdOrShortCode(isNull(), isNull(), eq("code-1"),
                 eq(CommonConstant.WEB_PAGE_CHANNEL))).thenReturn(webChannel("proj-owner", CommonConstant.WORKFLOW_TYPE));
             EnvironmentManagerEntity env = new EnvironmentManagerEntity();
@@ -1083,7 +1094,8 @@ class AgentServiceProxyServiceTest {
 
             WorkflowRunReq body = new WorkflowRunReq();
             ResponseEntity<Object> expected = ResponseEntity.ok("ok");
-            when(runtimeClient.runWebWorkflow("token", "code-1", "conv-1", "ws-owner", "env-default", body, false))
+            when(runtimeClient.runWebWorkflow(eq("token"), any(), eq("code-1"), eq("conv-1"), eq("ws-owner"),
+                eq("env-default"), eq(body), eq(false)))
                 .thenReturn(expected);
 
             Object result = proxyService.runWebWorkflow("code-1", "proj-1", new HttpHeaders(), "ws-1", "conv-1", false,
@@ -1322,6 +1334,103 @@ class AgentServiceProxyServiceTest {
             array.add(item);
         }
         return array.toJSONString();
+    }
+
+    /**
+     * parseSkipOutboundHeaders — null / 空串 / 全空白项:得到空集(不过滤,旧行为)
+     */
+    @Test
+    void testParseSkipOutboundHeaders_BlankInputYieldsEmptySet() {
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders(null).isEmpty());
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders("").isEmpty());
+        assertTrue(AgentServiceProxyService.parseSkipOutboundHeaders(" , , ").isEmpty());
+    }
+
+    /**
+     * parseSkipOutboundHeaders — trim + 小写归一 + 去空项
+     */
+    @Test
+    void testParseSkipOutboundHeaders_TrimsLowercasesAndDropsBlanks() {
+        assertEquals(Set.of("host", "content-length", "accept-encoding"),
+            AgentServiceProxyService.parseSkipOutboundHeaders(" Host ,Content-Length,,accept-encoding "));
+    }
+
+    /**
+     * shouldSkipOutboundHeader — 名单为空:任何头都不跳过(全量透传旧行为)
+     */
+    @Test
+    void testShouldSkipOutboundHeader_EmptyListMatchesNothing() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders", Set.of());
+        assertFalse(proxyService.shouldSkipOutboundHeader("Host"));
+        assertFalse(proxyService.shouldSkipOutboundHeader("content-length"));
+    }
+
+    /**
+     * shouldSkipOutboundHeader — 命中判断大小写不敏感;业务头不受影响
+     */
+    @Test
+    void testShouldSkipOutboundHeader_CaseInsensitive() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders", Set.of("host", "content-length"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("Host"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("HOST"));
+        assertTrue(proxyService.shouldSkipOutboundHeader("Content-Length"));
+        assertFalse(proxyService.shouldSkipOutboundHeader("Authorization"));
+    }
+
+    /**
+     * buildStreamRequest — 名单为空(默认):Host / Content-Length / Accept-Encoding 照常透传(回归锚)
+     */
+    @Test
+    void testBuildStreamRequest_EmptyListForwardsTransportHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Host", "studio.example.com");
+        headers.add("Content-Length", "123");
+        headers.add("Accept-Encoding", "gzip");
+        headers.add("Authorization", "Bearer token");
+
+        okhttp3.Request request = invokeBuildStreamRequest(headers);
+        assertEquals("studio.example.com", request.header("Host"));
+        assertEquals("123", request.header("Content-Length"));
+        assertEquals("gzip", request.header("Accept-Encoding"));
+        assertEquals("Bearer token", request.header("Authorization"));
+    }
+
+    /**
+     * buildStreamRequest — 名单配置后:名单内的头被跳过,业务头照常透传
+     */
+    @Test
+    void testBuildStreamRequest_ConfiguredListSkipsListedHeaders() {
+        ReflectionTestUtils.setField(proxyService, "skipOutboundHeaders",
+            Set.of("host", "connection", "keep-alive", "transfer-encoding", "content-length", "accept-encoding"));
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("Host", "studio.example.com");
+        headers.add("Content-Length", "123");
+        headers.add("Accept-Encoding", "gzip");
+        headers.add("Connection", "keep-alive");
+        headers.add("Authorization", "Bearer token");
+
+        okhttp3.Request request = invokeBuildStreamRequest(headers);
+        assertNull(request.header("Host"));
+        assertNull(request.header("Content-Length"));
+        assertNull(request.header("Accept-Encoding"));
+        assertNull(request.header("Connection"));
+        assertEquals("Bearer token", request.header("Authorization"));
+    }
+
+    /**
+     * 直调私有 buildStreamRequest:MDC 补齐 RUNTIME_EXECUTION 三键,origin 与目标 URL 一致
+     */
+    private okhttp3.Request invokeBuildStreamRequest(HttpHeaders headers) {
+        MDC.put(MdcKeys.REQUEST_ID, "req-1");
+        MDC.put(MdcKeys.TRACE_ID, "trace-1");
+        MDC.put(MdcKeys.EXECUTION_ID, "exec-1");
+        try {
+            return ReflectionTestUtils.invokeMethod(proxyService, "buildStreamRequest",
+                "http://runtime:8080/v1/workflows/chat", headers, "{}",
+                OutboundCorrelationPolicy.RUNTIME_EXECUTION, "http://runtime:8080");
+        } finally {
+            MDC.clear();
+        }
     }
 
     /**
