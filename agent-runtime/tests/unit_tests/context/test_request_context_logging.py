@@ -158,6 +158,53 @@ class RequestContextLoggingTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(captured["valid_parent"])
         self.assertEqual(captured["request_id"], hex_trace_id)
 
+    async def _root_trace_id_for_request_id(self, raw_request_id):
+        """经中间件处理后，在请求内新建根 Span，返回其 trace_id（安装请求派生生成器）。"""
+        from opentelemetry.sdk.trace import TracerProvider
+        from agent_runtime.common.otel_request_trace_id import (
+            install_request_trace_id_generator,
+        )
+
+        provider = TracerProvider()
+        tracer = provider.get_tracer("request-id-contract")
+        self.assertTrue(install_request_trace_id_generator(tracer))
+        middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
+        captured = {}
+
+        async def call_next(request):
+            with tracer.start_as_current_span("root") as span:
+                captured["trace_id"] = span.get_span_context().trace_id
+                captured["parent"] = span.parent
+            return Response("ok")
+
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/orchestration/ir/execute",
+                "headers": [
+                    (b"x-request-id", raw_request_id.encode()),
+                ],
+            },
+            receive=self._body_receiver(b'{"conversationId":"conv-otel"}'),
+        )
+        await middleware.dispatch(request, call_next)
+        provider.shutdown()
+        self.assertIsNone(captured["parent"])
+        return captured["trace_id"]
+
+    async def test_otel_context_trace_id_matches_request_id_hex32(self):
+        """当 X-Request-Id 为32位16进制时，OTel 根 Span 的 trace_id 应与之完全一致（真实根节点）。"""
+        hex_trace_id = "aabbccdd11223344556677889900ff00"
+        trace_id = await self._root_trace_id_for_request_id(hex_trace_id)
+        self.assertEqual(trace_id, int(hex_trace_id, 16))
+
+    async def test_otel_context_trace_id_hashed_for_non_hex_request_id(self):
+        """当 X-Request-Id 非32位16进制时，OTel 根 Span 的 trace_id 应为其 md5（真实根节点）。"""
+        raw_request_id = "mytest-trace-123456"
+        trace_id = await self._root_trace_id_for_request_id(raw_request_id)
+        self.assertEqual(trace_id, _to_otel_trace_id(raw_request_id))
+
     async def test_non_hex_request_id_does_not_create_an_unexported_otel_parent(self):
         """非十六进制业务 ID 同样不应创建无记录父 Span。"""
         middleware = RequestContextMiddleware(app=lambda scope, receive, send: None)
