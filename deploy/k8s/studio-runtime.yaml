@@ -189,6 +189,9 @@ spec:
               value: 'false'
             - name: WORKFLOW_EXECUTE_TIMEOUT
               value: '900'
+            # 工作流常量配置文件
+            - name: WORKFLOW_CONSTANT_YAML
+              value: 'workflow_constant.yaml'
             - name: IR_LLM_API_KEY
               value: 'sk-placeholder'
             - name: JIUWEN_LOG_FILE
