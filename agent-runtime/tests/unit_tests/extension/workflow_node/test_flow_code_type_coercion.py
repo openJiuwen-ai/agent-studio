@@ -4,6 +4,8 @@
 
 import pytest
 
+from jiuwen.orchestration.flow.constant import INTEGER, TYPE_DEFAULT_VALUE_DICT
+
 from agent_runtime.extension.workflow_node.flow_code import (
     _coerce_value,
     _coerce_outputs,
@@ -402,10 +404,12 @@ class TestCoerceInputs:
 
         result = _coerce_inputs(user_fields, schema)
 
+        # integer 默认值随 workflow_constant 配置走（默认 None / 定制 0），
+        # 本用例核心断言是嵌套 array/object 保持 None 不物化
         assert result == {
             "config": {
                 "text": "",
-                "count": None,
+                "count": TYPE_DEFAULT_VALUE_DICT.get(INTEGER),
                 "items": None,
                 "nested": None,
             }
