@@ -702,6 +702,11 @@ class IntentionDetectModule:
                     f"task_id {task_id}| Coarse-grained result requires fine-grained detection"
                 )
 
+                # WORKFLOW 粗粒度结果未被最终采用（intent_function 无效），改走 LLM 细粒度回退。
+                # 清空工作流 user_fields，避免 controller_planner._build_intent_stream_data()
+                # 透传工作流原始结果，导致 SSE intent 事件与控制器实际路由（LLM 结果）不一致。
+                self._intent_workflow_user_fields = {}
+
                 # 过滤和处理候选意图
                 filtered_candidate_intents = self._filter_valid_candidate_intents(
                     candidate_intents, task_id

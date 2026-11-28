@@ -121,12 +121,15 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
 
                 // SSO 模式下 FilterConfig 不加载，不再有组件写 AGENT_SID；此处回写（userId|projectId），
                 // 供前端切分拼接 URL 的 projectId 与 runtime 解析身份，避免前端兜底到 project_mock。
-                // projectId 为空时不回写：否则会写出 "userId|"，把前端 URL 的 projectId 污染为空值。
-                if (StringUtils.isNotEmpty(userInfo.getProjectId())) {
+                // projectId 为空或为未配置占位值（DefaultsConfig.PLACEHOLDER_PROJECT_ID）时不回写：
+                // 否则会写出 "userId|0"，把前端 URL 的 projectId 污染为占位值。
+                String projectId = userInfo.getProjectId();
+                if (StringUtils.isNotEmpty(projectId)
+                        && !AuthProperties.UserInfoConfig.DefaultsConfig.PLACEHOLDER_PROJECT_ID.equals(projectId)) {
                     ServletUtils.setSidToCookie(response,
-                        userInfo.getUserId() + "|" + userInfo.getProjectId());
+                        userInfo.getUserId() + "|" + projectId);
                 } else {
-                    log.warn("Skip AGENT_SID write-back: projectId is blank, "
+                    log.warn("Skip AGENT_SID write-back: projectId is blank or placeholder, "
                         + "check user_info_defaults_project_id config");
                 }
 
