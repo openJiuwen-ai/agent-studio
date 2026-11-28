@@ -323,7 +323,7 @@ class BeamSearchOptimizer(GreedyOptimizer):
 
         if not is_contain_best_prompt:
             opt_result = super().do_optimize(
-                prompt, self._params.placeholder, train_data
+                prompt, bad_cases, train_data
             )
             optimized_full_prompt = self._get_full_prompt(
                 opt_result.prompt, opt_result.placeholder

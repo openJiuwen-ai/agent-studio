@@ -363,3 +363,9 @@ Tracing method:
 2. [Step 3] Service logs → search "JiuWen request param" to view request body forwarded to Runtime
 3. [Step 4] Set WORKFLOW_LOG_LEVEL=DEBUG → Runtime logs search "IR Execute Request - Body" to view actual request body received by Runtime
 ```
+
+## Missing failure feedback when beam search revisits the best prompt
+
+A prompt can remain the overall best while being pruned from the beam on a training subset. When beam search revisits that prompt, it must build its critique from the current failed questions, reference answers and predictions. Placeholder configuration is not failure data.
+
+If this path loses the failed examples, the critique and refinement lack the evidence needed to address those failures. The optimizer now passes the current failed cases through the same refinement path used for other beam candidates.
