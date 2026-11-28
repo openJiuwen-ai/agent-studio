@@ -541,7 +541,10 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set (no default credential)}
+      # Grafana 管理口令没有默认值。这里刻意不用 ${VAR:?}：compose 对所有服务做插值，
+      # 未启用 logging profile 的部署会因为缺这个变量连 `deploy.sh stop` 都失败。
+      # 必填校验在 deploy.sh start_logging() 中完成；直接用 compose 启 logging profile 时请自行保证已配置。
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false

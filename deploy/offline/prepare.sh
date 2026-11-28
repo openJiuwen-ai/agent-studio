@@ -367,7 +367,7 @@ main() {
     echo "       tar -xzvf AgentBuilder-offline-${VERSION}.tar.gz"
     echo "       bash AgentBuilder-offline-${VERSION}/scripts/install-docker-offline.sh <docker-tgz-path>"
     echo ""
-    echo "    3. 配置 .env（使用内置基础设施时默认值即可）："
+    echo "    3. 配置 .env（镜像相关可用默认值；SPRING_DATASOURCE_PASSWORD / OBS_AK / OBS_SK 必填，无默认弱口令）："
     echo "       cd AgentBuilder-offline-${VERSION} && cp .env.template .env && vi .env"
     echo ""
     echo "    4. 一键启动（基础设施 + 应用）："

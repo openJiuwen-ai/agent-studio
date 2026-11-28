@@ -64,6 +64,47 @@ require_env_value() {
     fi
 }
 
+# 已知弱口令检查：compose 的 ${VAR:?...} 只保证「非空」，存量 .env 里的 123456 / minioadmin / admin
+# 仍会原样通过；MySQL、MinIO 的口令无法由 compose 自动轮换（数据卷已初始化后 MYSQL_ROOT_PASSWORD 不再生效），
+# 因此这里只做显式告警并给出轮换指引，不阻断部署。
+assert_not_weak_credential() {
+    local key="$1"
+    shift
+    local value weak
+    value=$(get_env_value "$key" "")
+    if [ -z "$value" ]; then
+        return 0
+    fi
+    for weak in "$@"; do
+        if [ "$value" = "$weak" ]; then
+            log_warn "$key still uses the well-known weak credential '$weak'."
+            log_warn "  Rotate it in $ENV_FILE and in the running service, otherwise the deployment keeps"
+            log_warn "  running with a credential that appears in every public default-credential list."
+            return 0
+        fi
+    done
+}
+
+# 凭据必填校验：一次性列出全部缺失项，避免 compose 只报第一个 ${VAR:?} 插值错误、运维不知道还缺哪几项。
+check_required_credentials() {
+    local key missing=""
+    for key in SPRING_DATASOURCE_PASSWORD OBS_AK OBS_SK; do
+        if [ -z "$(get_env_value "$key" "")" ]; then
+            missing="$missing $key"
+        fi
+    done
+    if [ -n "$missing" ]; then
+        log_error "Missing required credentials in $ENV_FILE:$missing"
+        log_error "These credentials no longer have a default value (123456 / minioadmin were removed)."
+        log_error "Set SPRING_DATASOURCE_PASSWORD (MySQL root) and OBS_AK / OBS_SK (built-in MinIO or external OBS)."
+        log_error "The logging profile additionally requires GRAFANA_ADMIN_PASSWORD."
+        exit 1
+    fi
+    assert_not_weak_credential SPRING_DATASOURCE_PASSWORD 123456 password admin root
+    assert_not_weak_credential OBS_AK minioadmin
+    assert_not_weak_credential OBS_SK minioadmin
+}
+
 # ========================================
 # 镜像来源解析（在线/离线统一入口）
 # ========================================
@@ -179,7 +220,9 @@ check_docker_prerequisites() {
         if [ -f "$SCRIPT_DIR/.env.template" ]; then
             log_info ".env not found, creating from template..."
             cp "$SCRIPT_DIR/.env.template" "$ENV_FILE"
-            log_info "Created $ENV_FILE with defaults (built-in infrastructure, IMAGE_SOURCE=ghcr)"
+            log_info "Created $ENV_FILE from template (built-in infrastructure, IMAGE_SOURCE=ghcr)"
+            log_info "Database and object storage credentials have NO default: set"
+            log_info "SPRING_DATASOURCE_PASSWORD, OBS_AK and OBS_SK in $ENV_FILE before starting."
             log_warn "If using private registry or external infrastructure, edit .env first: vi $ENV_FILE"
         else
             log_error ".env not found and no .env.template available"
@@ -464,6 +507,7 @@ verify_deployment() {
 # ========================================
 init_database() {
     log_info "Initializing database and object storage..."
+    check_required_credentials
     cd "$SCRIPT_DIR"
 
     # 启动 infra 服务（如果尚未运行）
@@ -486,8 +530,10 @@ init_database() {
     log_info "Executing init.sql..."
     local db_password
     db_password=$(get_env_value SPRING_DATASOURCE_PASSWORD "")
-    compose exec -T mysql sh -c "mysql -uroot -p'${db_password}' < /docker-entrypoint-initdb.d/init.sql" 2>/dev/null || \
-        compose exec -T mysql sh -c "mysql -uroot < /docker-entrypoint-initdb.d/init.sql" 2>/dev/null || \
+    # 通过 MYSQL_PWD 传口令：拼进 sh -c 的引号串时，口令里的 ' / $ / \ 既会破坏引号也可能被 shell 解释，
+    # 同时口令会留在容器进程的命令行里（ps 可见）。
+    compose exec -T -e MYSQL_PWD="${db_password}" mysql sh -c \
+        "mysql -uroot < /docker-entrypoint-initdb.d/init.sql" 2>/dev/null || \
         log_warn "Database init failed (may already be initialized)"
 
     # MinIO 桶由 minio-init 在 compose up 时自动创建（mc mb --ignore-existing）
@@ -783,6 +829,11 @@ show_status() {
 # ========================================
 start_logging() {
     validate_logging_image_source
+    # Grafana 管理口令必填：compose 侧不能用 ${GRAFANA_ADMIN_PASSWORD:?}——插值发生在所有子命令上，
+    # 未启用 logging 的部署会因为缺这个变量连 `deploy.sh stop` 都跑不了，因此必填校验放在真正启动
+    # logging 的这里。口令不回显，运维从 .env 自行确认。
+    require_env_value GRAFANA_ADMIN_PASSWORD
+    assert_not_weak_credential GRAFANA_ADMIN_PASSWORD admin password 123456
     local max_disk_usage min_free_disk
     max_disk_usage=$(get_env_value VICTORIA_LOGS_MAX_DISK_USAGE_BYTES 10737418240)
     min_free_disk=$(get_env_value VICTORIA_LOGS_MIN_FREE_DISK_BYTES 2147483648)
@@ -799,16 +850,16 @@ start_logging() {
     compose --profile logging up -d victoria-logs vector grafana
     wait_for_services victoria-logs vector grafana
 
-    local host_ip grafana_port grafana_pw
+    local host_ip grafana_port grafana_user
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
     grafana_port=$(get_env_value GRAFANA_PORT 3000)
-    grafana_pw=$(get_env_value GRAFANA_ADMIN_PASSWORD admin)
+    grafana_user=$(get_env_value GRAFANA_ADMIN_USER admin)
     log_info "============================================"
     log_info " Logging stack started!"
     log_info "============================================"
     log_info ""
     log_info "  Grafana : http://${host_ip}:${grafana_port}/"
-    log_info "            (login: admin / ${grafana_pw})"
+    log_info "            (login: ${grafana_user} / password: see GRAFANA_ADMIN_PASSWORD in ${ENV_FILE})"
     log_info ""
     log_info "  Stop    : $0 logging stop"
     log_info "  Status  : $0 logging status"
