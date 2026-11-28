@@ -362,3 +362,9 @@ env:
 2. [第三步] Service日志 → 搜 "JiuWen request param" 查看转发给 Runtime 的请求体
 3. [第四步] 设置 WORKFLOW_LOG_LEVEL=DEBUG → Runtime日志搜 "IR Execute Request - Body" 查看 Runtime 实际收到的请求体
 ```
+
+## 反馈优化意外进入开头插入模式
+
+反馈优化接口通过可选的插入位置区分整体优化和插入优化。整体优化时应省略插入位置或传入 null；明确传入零表示在开头插入。
+
+Manager 现在将未指定的插入位置保持为 null 并转发给 Builder。此前，基本整数类型会将省略的位置转换为默认值零，导致整体反馈优化请求也进入插入模式。

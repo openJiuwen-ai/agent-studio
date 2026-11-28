@@ -27,7 +27,7 @@ public class PromptFeedbackRequest {
 
     private List<Integer> selected_content_index;
 
-    private int insert_pos_index;
+    private Integer insert_pos_index;
 
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Map<String, String> extension_info;
