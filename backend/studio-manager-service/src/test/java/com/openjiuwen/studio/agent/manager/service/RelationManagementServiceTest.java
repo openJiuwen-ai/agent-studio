@@ -1,7 +1,12 @@
 /* Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved. */
 package com.openjiuwen.studio.agent.manager.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
@@ -24,6 +29,7 @@ import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;
+import com.openjiuwen.studio.agent.manager.workflow.jiuwen.models.SchemaConfig;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,7 +43,9 @@ import com.openjiuwen.studio.agent.manager.dto.ListResourceRelationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourcesRelationsQo;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -358,5 +366,133 @@ class RelationManagementServiceTest {
         // 版本存在时不执行任何回退
         verify(mappingMapper, never()).updateResourceVersionIfMatch(anyString(), anyString(), any());
         verify(mappingMapper).updateResourceParameterByAppIDAndResourceId(any(MappingEntity.class));
+    }
+
+    @Test
+    void testParseNestedProperties_NullProperties_ReturnsEmptyList() {
+        // 回归：properties 为 JSON Schema 可选节点，null 时返回空列表而非 NPE（issue #1758）
+        List<Map<String, Object>> result =
+            assertDoesNotThrow(() -> relationManagementService.parseNestedProperties(null));
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void testParseNestedProperties_ArrayItemsObjectWithoutProperties_NoNpe() {
+        // 回归：array 字段的 items 为 {"type":"object"} 且无 properties（按 JSON Schema 规范 properties 可选），
+        // 递归解析时不得抛 NPE（issue #1758）
+        SchemaConfig arrayProp = SchemaConfig.builder()
+            .type("array")
+            .items(SchemaConfig.builder().type("object").build())
+            .build();
+        Map<String, SchemaConfig> properties = new HashMap<>();
+        properties.put("columns", arrayProp);
+
+        List<Map<String, Object>> result =
+            assertDoesNotThrow(() -> relationManagementService.parseNestedProperties(properties));
+
+        assertEquals(1, result.size());
+        Map<String, Object> parsed = result.get(0);
+        assertEquals("columns", parsed.get("name"));
+        assertEquals("array", parsed.get("type"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> schema = (Map<String, Object>) parsed.get("schema");
+        assertEquals("object", schema.get("type"));
+        // items 缺省 properties 时输出空的 schema 列表，与 IrAdapterService 路径保持一致（issue #1758）
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nestedSchema = (List<Map<String, Object>>) schema.get("schema");
+        assertNotNull(nestedSchema);
+        assertTrue(nestedSchema.isEmpty());
+    }
+
+    @Test
+    void testBuildResourceInputSchema_ArrayItemsObjectWithoutProperties_NoNpe() {
+        // 复现 issue #1758：tools 的 input_schema 中 array 字段的 items 为 {"type":"object"}（无 properties），
+        // Agent 绑定工具保存链路 buildResourceInputSchema 不得抛 NPE
+        String inputSchemaStr = "{"
+            + "\"type\":\"object\","
+            + "\"required\":[],"
+            + "\"properties\":{"
+            + "\"columns\":{"
+            + "\"type\":\"array\","
+            + "\"description\":\"table类型自定义列定义[{field,name,align,width}]\","
+            + "\"items\":{\"type\":\"object\"}"
+            + "}"
+            + "}"
+            + "}";
+
+        String result = assertDoesNotThrow(() -> (String) ReflectionTestUtils.invokeMethod(
+            relationManagementService, "buildResourceInputSchema", inputSchemaStr, "tool-1"));
+
+        assertNotNull(result);
+        JSONArray params = JSON.parseArray(result);
+        JSONObject columns = null;
+        for (int i = 0; i < params.size(); i++) {
+            JSONObject param = params.getJSONObject(i);
+            if ("columns".equals(param.getString("name"))) {
+                columns = param;
+                break;
+            }
+        }
+        assertNotNull(columns);
+        assertEquals("array", columns.getString("type"));
+        JSONObject schema = columns.getJSONObject("schema");
+        assertEquals("object", schema.getString("type"));
+        // items 缺省 properties 时输出空的 schema 列表，与 IrAdapterService 路径保持一致（issue #1758）
+        JSONArray nestedSchema = schema.getJSONArray("schema");
+        assertNotNull(nestedSchema);
+        assertTrue(nestedSchema.isEmpty());
+    }
+
+    @Test
+    void testParseNestedProperties_NullPropertyValue_Skipped() {
+        // 回归：properties 中存在值为 null 的条目（如 "properties":{"a":null}）时跳过而非 NPE（issue #1758）
+        Map<String, SchemaConfig> properties = new HashMap<>();
+        properties.put("bad", null);
+
+        List<Map<String, Object>> result =
+            assertDoesNotThrow(() -> relationManagementService.parseNestedProperties(properties));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void testBuildResourceInputSchema_TopLevelObjectWithoutRequiredProperties_NoNpe() {
+        // 回归：顶层 schema 为 {"type":"object"}（无 required/properties，JSON Schema 规范中均为可选字段），
+        // buildResourceInputSchema 不得在 required/properties 解析处 NPE（issue #1758 同类路径）
+        String inputSchemaStr = "{\"type\":\"object\"}";
+
+        String result = assertDoesNotThrow(() -> (String) ReflectionTestUtils.invokeMethod(
+            relationManagementService, "buildResourceInputSchema", inputSchemaStr, "tool-1"));
+
+        assertNotNull(result);
+        JSONArray params = JSON.parseArray(result);
+        assertTrue(params.isEmpty());
+    }
+
+    @Test
+    void testBuildResourceInputSchema_NullTopLevelPropertyValue_Skipped() {
+        // 回归：顶层 properties 中存在值为 null 的条目（如 {"properties":{"a":null}}）时跳过而非 NPE（issue #1758）
+        String inputSchemaStr = "{\"type\":\"object\",\"required\":[],\"properties\":{\"a\":null}}";
+
+        String result = assertDoesNotThrow(() -> (String) ReflectionTestUtils.invokeMethod(
+            relationManagementService, "buildResourceInputSchema", inputSchemaStr, "tool-1"));
+
+        assertNotNull(result);
+        assertTrue(JSON.parseArray(result).isEmpty());
+    }
+
+    @Test
+    void testBuildResourceInputSchema_InvalidInputSchema_ThrowsToolInputSchemaInvalid() {
+        // 回归：input_schema 为 JSON 字面量 null 或损坏 JSON（含 tool_id 数组包装格式）时，
+        // 转为业务异常 TOOL_INPUT_SCHEMA_INVALID 而非裸 NPE/JSONException 500（issue #1758）
+        AgentStudioException nullEx = assertThrows(AgentStudioException.class,
+            () -> ReflectionTestUtils.invokeMethod(
+                relationManagementService, "buildResourceInputSchema", "null", "tool-1"));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, nullEx.getErrorCode());
+
+        AgentStudioException arrayEx = assertThrows(AgentStudioException.class,
+            () -> ReflectionTestUtils.invokeMethod(
+                relationManagementService, "buildResourceInputSchema", "[{\"toolId\":\"t1\"}]", "tool-1"));
+        assertEquals(StudioError.TOOL_INPUT_SCHEMA_INVALID, arrayEx.getErrorCode());
     }
 }
