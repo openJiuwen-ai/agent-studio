@@ -5,6 +5,8 @@
 package com.openjiuwen.studio.agent.agentbase.utils;
 
 import com.openjiuwen.studio.agent.agentbase.config.SSRFStaticConfig;
+import com.openjiuwen.studio.agent.common.utils.SensitiveLogContext;
+import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.foundation.base.exception.AgentBaseException;
 import com.openjiuwen.studio.agent.foundation.base.exception.ErrorCode;
 
@@ -15,35 +17,80 @@ import org.springframework.util.CollectionUtils;
 
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Slf4j
 public class SSRFValidator {
 
+    /**
+     * knowledge.ssrf.allowed-protocols 未注入或配置为空时的兜底协议白名单，与 application-manager.yml 的默认值一致。
+     * 配置异常时不能静默 fail-closed 拒掉所有知识库连接，否则表现为「保存/测试连接全部失败」且难以定位。
+     */
+    private static final Set<String> DEFAULT_ALLOWED_PROTOCOLS = Set.of("http", "https");
+
+    /** scheme 语法（RFC3986）：ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )。 */
+    private static final Pattern SCHEME_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9+.\\-]*$");
+
+    /**
+     * URL userinfo 匹配：{@code scheme://user:pass@host} 中的 {@code user:pass@}。
+     *
+     * <p>userinfo 只允许出现在 authority 内，这里限定在「第一个 '/'、'?'、'#' 或空白之前」，并取到该范围内
+     * 最后一个 '@'（贪婪匹配后回溯），因此既能整体抹掉含 '@' 的口令，又不会误伤查询串里的
+     * {@code ?email=a@b.com}。
+     */
+    private static final Pattern URL_USER_INFO_PATTERN =
+        Pattern.compile("^([A-Za-z][A-Za-z0-9+.\\-]*://)[^/\\s?#]*@");
+
+    /**
+     * 无 scheme 地址的 userinfo 兜底匹配：这类地址会被协议白名单直接拒绝，但拒绝日志同样不能带凭据。
+     */
+    private static final Pattern LEADING_USER_INFO_PATTERN = Pattern.compile("^[^/\\s?#]*@");
+
+    /** 白名单为空只在首次命中时告警一次，避免在校验热路径上刷日志。 */
+    private static volatile boolean emptyProtocolsWarned;
+
     public static void checkSSRF(String url) {
         if (!isUrlSafe(url)) {
-            log.error("url is unsafe ,url is {}", url);
+            log.error("url is unsafe, url is {}", maskUrl(url));
             throw new AgentBaseException(ErrorCode.ADDRESS_ILLEGAL);
         }
     }
 
     private static boolean isUrlSafe(String url) {
 
+        if (StringUtils.isBlank(url)) {
+            return true;
+        }
+        String trimmed = url.trim();
+
+        // 协议白名单与 SSRF 总开关解耦：即便关闭内网地址校验，也不能放行 file://、ftp://、gopher:// 等协议。
+        // 关闭开关只应放宽「内网地址/域名」判定，不应连带取消协议限制。
+        // 这里只做宽松的 scheme 提取（第一个 ':' 之前 + RFC3986 scheme 语法），不要求整串通过 URI 严格解析：
+        // 存量 endpoint 可能含空格、非 ASCII、未编码花括号，HTTP 客户端本身容忍这些字符，
+        // 关闭 SSRF 校验不应反而新增语法拒绝；严格解析只在需要做 host/IP 判定时才要求。
+        String scheme = extractScheme(trimmed);
+        if (!isProtocolAllowed(scheme)) {
+            log.error("protocol is not allowed, scheme is {}, url is {}", scheme, maskUrl(url));
+            return false;
+        }
+
         if (!SSRFStaticConfig.isSsrfValidationEnabled()) {
             return true;
         }
 
-        if (url == null || url.trim().isEmpty()) {
-            return true;
+        URI uri;
+        try {
+            uri = new URI(trimmed);
+        } catch (URISyntaxException e) {
+            log.error("url is not a valid URI, url is {}, reason is {} at index {}", maskUrl(url), e.getReason(),
+                e.getIndex());
+            return false;
         }
 
         try {
-            URI uri = new URI(url.trim());
-            // 检查协议是否为 HTTP/HTTPS <防止 file://, ftp://, gopher:// 等>
-            String scheme = uri.getScheme();
-            if (StringUtils.isEmpty(scheme) || !SSRFStaticConfig.getAllowedProtocols().contains(scheme)) {
-                return false;
-            }
             String host = uri.getHost();
             if (host == null || host.isEmpty()) {
                 return false;
@@ -106,9 +153,70 @@ public class SSRFValidator {
             }
             return true;
         } catch (Exception e) {
-            log.error("url is invalid, url is {}, error is {}", url, e);
+            log.error("url is invalid, url is {}, error is {}", maskUrl(url), e);
             return false;
         }
+    }
+
+    /**
+     * 宽松提取 scheme：取第一个 ':' 之前的部分并校验 RFC3986 scheme 语法。
+     *
+     * @param url 已 trim 的原始 URL
+     * @return 合法 scheme（保持原始大小写），无法提取时返回 null
+     */
+    private static String extractScheme(String url) {
+        int colonIndex = url.indexOf(':');
+        if (colonIndex <= 0) {
+            return null;
+        }
+        String candidate = url.substring(0, colonIndex);
+        return SCHEME_PATTERN.matcher(candidate).matches() ? candidate : null;
+    }
+
+    /**
+     * 判断 scheme 是否命中 allowed-protocols 白名单，比较时忽略首尾空白与大小写（配置成 HTTPS,HTTP 也不会误判）。
+     *
+     * <p>白名单为空时回退到 {@link #DEFAULT_ALLOWED_PROTOCOLS} 并告警，避免配置异常导致全部连接被静默拒绝。
+     */
+    private static boolean isProtocolAllowed(String scheme) {
+        if (StringUtils.isBlank(scheme)) {
+            return false;
+        }
+        Set<String> allowedProtocols = SSRFStaticConfig.getAllowedProtocols();
+        if (CollectionUtils.isEmpty(allowedProtocols)) {
+            if (!emptyProtocolsWarned) {
+                emptyProtocolsWarned = true;
+                log.warn("knowledge.ssrf.allowed-protocols is empty, fallback to {}", DEFAULT_ALLOWED_PROTOCOLS);
+            }
+            allowedProtocols = DEFAULT_ALLOWED_PROTOCOLS;
+        }
+        String normalized = scheme.trim();
+        for (String allowed : allowedProtocols) {
+            if (allowed != null && allowed.trim().equalsIgnoreCase(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 日志脱敏：先把 userinfo 规范化为 {@code scheme://***@host}，再去掉查询串（可能含 AK/Signature），
+     * 最后遮蔽当前线程登记的敏感值。
+     *
+     * <p>三步缺一不可：{@link UrlCheckUtils#redactUrlQuery(String)} 只处理查询串，
+     * {@link SensitiveLogContext#mask(String)} 只在当前线程登记过敏感值时生效，两者都不会处理
+     * {@code https://user:password@host/path} 里的 userinfo，口令会原样进入错误日志。
+     */
+    private static String maskUrl(String url) {
+        if (StringUtils.isBlank(url)) {
+            return url;
+        }
+        String trimmed = url.trim();
+        String withoutUserInfo = URL_USER_INFO_PATTERN.matcher(trimmed).replaceFirst("$1***@");
+        if (withoutUserInfo.equals(trimmed) && !trimmed.contains("://")) {
+            withoutUserInfo = LEADING_USER_INFO_PATTERN.matcher(trimmed).replaceFirst("***@");
+        }
+        return SensitiveLogContext.mask(UrlCheckUtils.redactUrlQuery(withoutUserInfo));
     }
 
     private static boolean isBlockedInternalDomain(String host) {
