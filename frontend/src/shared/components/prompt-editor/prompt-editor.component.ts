@@ -616,16 +616,12 @@ export class PromptEditorComponent implements AfterViewInit, OnInit, OnDestroy, 
 
   public cancelTitleChange(): void {
     this.candidateformName.controls.candidateNameInput.setValue(this.nameEditorValue);
-    this.closeValidateMsgCmp();
   }
 
   public onEditTitle(event: Event): void {
     if (!TEMPLATENAME_REG.test((event.target as HTMLInputElement).value)) {
       // 如果修改的名称不符合正则，则提示
       MessageComponent.showError(this.i18n.transform('prompt_writing_verifyNameInput'), 3000);
-    } else {
-      // 通过校验，如果有校验不通过的弹窗，需要关闭
-      this.closeValidateMsgCmp();
     }
   }
 
@@ -715,14 +711,6 @@ export class PromptEditorComponent implements AfterViewInit, OnInit, OnDestroy, 
 
   private getEditorDisabledState(state: EWritingStatus): boolean {
     return state === EWritingStatus.RCANDIDATE;
-  }
-
-  private closeValidateMsgCmp(): void {
-    const errorMsgIcon = document.querySelector('.cf-message-close.hwsicon-frame-image-close');
-
-    if (errorMsgIcon) {
-      (errorMsgIcon as HTMLSpanElement).click();
-    }
   }
 
   public uploadData: FileItem[] = [];
