@@ -9,6 +9,7 @@ import com.openjiuwen.studio.agent.foundation.base.exception.AgentBaseException;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,6 +17,9 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -138,5 +142,58 @@ class SSRFValidatorTest {
 
         // 开关开启时沿用原有语义：需要严格解析出 host 才能做 IP 判定，解析失败即拒绝
         assertThrows(AgentBaseException.class, () -> SSRFValidator.checkSSRF("http://exa mple.com/path"));
+    }
+
+    @Test
+    void testMaskUrlHidesUserInfoAndQueryCredentials() {
+        String masked = maskUrl("https://kb_user:S3cretPwd@10.1.2.3:8080/v1/chat?access_key=AK123&signature=deadbeef");
+
+        // userinfo 整体替换为 ***，查询串整体替换为 ?***，口令与签名都不应出现在日志里
+        assertEquals("https://***@10.1.2.3:8080/v1/chat?***", masked);
+        assertFalse(masked.contains("S3cretPwd"));
+        assertFalse(masked.contains("kb_user"));
+        assertFalse(masked.contains("AK123"));
+    }
+
+    @Test
+    void testMaskUrlHidesUserInfoWhosePasswordContainsAtSign() {
+        // 口令里带 '@' 时，贪婪匹配会回溯到 authority 内最后一个 '@'，不会残留半截口令
+        assertEquals("https://***@kb.example.com/v1", maskUrl("https://user:p@ss@kb.example.com/v1"));
+    }
+
+    @Test
+    void testMaskUrlHidesUserInfoWithoutPassword() {
+        assertEquals("https://***@kb.example.com/v1", maskUrl("https://onlyuser@kb.example.com/v1"));
+    }
+
+    @Test
+    void testMaskUrlKeepsAtSignInsideQuery() {
+        // 查询串里的邮箱不是 userinfo，不能把 host/path 一起吃掉
+        assertEquals("https://kb.example.com/path?***", maskUrl("https://kb.example.com/path?email=a@b.com"));
+    }
+
+    @Test
+    void testMaskUrlHidesUserInfoWithoutScheme() {
+        // 无 scheme 的地址会被协议白名单直接拒绝，拒绝日志也不能带出 userinfo
+        assertEquals("***@10.1.2.3/v1", maskUrl("user:pass@10.1.2.3/v1"));
+    }
+
+    @Test
+    void testMaskUrlWithoutUserInfoOnlyRedactsQuery() {
+        assertEquals("https://kb.example.com/path?***", maskUrl("https://kb.example.com/path?token=t"));
+        assertEquals("https://kb.example.com/path", maskUrl("https://kb.example.com/path"));
+        assertNull(maskUrl((String) null));
+    }
+
+    @Test
+    void testInternalAddressRejectionCoversUserInfoUrls() {
+        configure(true, "http", "https");
+
+        // 触发拒绝即会走 maskUrl 记日志，确认带 userinfo 的地址同样被拦
+        assertThrows(AgentBaseException.class, () -> SSRFValidator.checkSSRF("http://user:pass@10.1.2.3/v1"));
+    }
+
+    private static String maskUrl(String url) {
+        return ReflectionTestUtils.invokeMethod(SSRFValidator.class, "maskUrl", url);
     }
 }

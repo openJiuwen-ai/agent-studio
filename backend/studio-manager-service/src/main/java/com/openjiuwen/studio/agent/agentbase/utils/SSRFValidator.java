@@ -34,6 +34,21 @@ public class SSRFValidator {
     /** scheme 语法（RFC3986）：ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )。 */
     private static final Pattern SCHEME_PATTERN = Pattern.compile("^[A-Za-z][A-Za-z0-9+.\\-]*$");
 
+    /**
+     * URL userinfo 匹配：{@code scheme://user:pass@host} 中的 {@code user:pass@}。
+     *
+     * <p>userinfo 只允许出现在 authority 内，这里限定在「第一个 '/'、'?'、'#' 或空白之前」，并取到该范围内
+     * 最后一个 '@'（贪婪匹配后回溯），因此既能整体抹掉含 '@' 的口令，又不会误伤查询串里的
+     * {@code ?email=a@b.com}。
+     */
+    private static final Pattern URL_USER_INFO_PATTERN =
+        Pattern.compile("^([A-Za-z][A-Za-z0-9+.\\-]*://)[^/\\s?#]*@");
+
+    /**
+     * 无 scheme 地址的 userinfo 兜底匹配：这类地址会被协议白名单直接拒绝，但拒绝日志同样不能带凭据。
+     */
+    private static final Pattern LEADING_USER_INFO_PATTERN = Pattern.compile("^[^/\\s?#]*@");
+
     /** 白名单为空只在首次命中时告警一次，避免在校验热路径上刷日志。 */
     private static volatile boolean emptyProtocolsWarned;
 
@@ -184,9 +199,24 @@ public class SSRFValidator {
         return false;
     }
 
-    /** 日志脱敏：先去掉查询串（可能含 AK/Signature 等凭据），再遮蔽当前线程登记的敏感值。 */
+    /**
+     * 日志脱敏：先把 userinfo 规范化为 {@code scheme://***@host}，再去掉查询串（可能含 AK/Signature），
+     * 最后遮蔽当前线程登记的敏感值。
+     *
+     * <p>三步缺一不可：{@link UrlCheckUtils#redactUrlQuery(String)} 只处理查询串，
+     * {@link SensitiveLogContext#mask(String)} 只在当前线程登记过敏感值时生效，两者都不会处理
+     * {@code https://user:password@host/path} 里的 userinfo，口令会原样进入错误日志。
+     */
     private static String maskUrl(String url) {
-        return SensitiveLogContext.mask(UrlCheckUtils.redactUrlQuery(url));
+        if (StringUtils.isBlank(url)) {
+            return url;
+        }
+        String trimmed = url.trim();
+        String withoutUserInfo = URL_USER_INFO_PATTERN.matcher(trimmed).replaceFirst("$1***@");
+        if (withoutUserInfo.equals(trimmed) && !trimmed.contains("://")) {
+            withoutUserInfo = LEADING_USER_INFO_PATTERN.matcher(trimmed).replaceFirst("***@");
+        }
+        return SensitiveLogContext.mask(UrlCheckUtils.redactUrlQuery(withoutUserInfo));
     }
 
     private static boolean isBlockedInternalDomain(String host) {
