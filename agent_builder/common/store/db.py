@@ -152,11 +152,17 @@ class DBUtil:
     @classmethod
     def _do_execute_mysql(cls, sql_str, fetch_all, params):
         cursor = cls._instance.cursor()
-        cursor.execute(sql_str, params)
-        cls._instance.commit()
-        data = cursor.fetchall() if fetch_all else cursor.fetchone()
-        cursor.close()
-        return data
+        try:
+            cursor.execute(sql_str, params)
+            cls._instance.commit()
+            if cursor.description is None:
+                return [] if fetch_all else None
+            return cursor.fetchall() if fetch_all else cursor.fetchone()
+        except Exception:
+            cls._instance.rollback()
+            raise
+        finally:
+            cursor.close()
 
     @classmethod
     def _do_execute_gaussdb(cls, sql_str, fetch_all, params):
