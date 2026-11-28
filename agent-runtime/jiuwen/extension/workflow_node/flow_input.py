@@ -47,6 +47,7 @@ from jiuwen.extension.workflow.execution_session_ctx import (
     set_component_state,
     set_stream_final_output,
 )
+from jiuwen.orchestration.flow.constant import TYPE_DEFAULT_VALUE_DICT as _ORCH_TYPE_DEFAULTS
 
 # =============================================================================
 # 常量定义
@@ -62,10 +63,13 @@ SUB_WORKFLOW_TYPE = "jiuwen.workflowComposite"
 USER_FIELDS = "userFields"
 FLOW_INPUT_STATE_KEY = "flow_input_state"
 
+# 类型默认值：与 orchestration 侧共享 workflow_constant.yaml 的配置，
+# array/object 的容器默认值保留本节点既有语义（[]/{} 而非 None）
 TYPE_DEFAULT_VALUE_DICT = {
-    "string": "",
-    "number": 0,
-    "boolean": False,
+    "string": _ORCH_TYPE_DEFAULTS.get("string", ""),
+    "number": _ORCH_TYPE_DEFAULTS.get("number", 0),
+    "integer": _ORCH_TYPE_DEFAULTS.get("integer", None),
+    "boolean": _ORCH_TYPE_DEFAULTS.get("boolean", False),
     "array": [],
     "object": {},
 }

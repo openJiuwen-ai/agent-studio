@@ -16,6 +16,8 @@ from agent_runtime.extension.workflow_node.code_blacklist import load_code_black
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
+from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.orchestration.flow.utils import force_convert
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
@@ -191,11 +193,34 @@ def _coerce_outputs(result_dict: dict, outputs_schema: list[dict]) -> dict:
     return coerced
 
 
+def _coerce_object_input(value: dict | None, field_def: dict) -> dict:
+    """按旧架构补齐 object 默认值；schema 校验失败时保留原 dict 或回退 {}。"""
+    field_id = field_def["id"]
+    original = {} if value is None else dict(value)
+    try:
+        converted, errors = force_convert({field_id: {}}, [field_def])
+    except JiuWenBaseException as e:
+        workflow_logger.warning(
+            f"Code input object schema conversion failed for '{field_id}': {e}, "
+            "fallback to unexpanded object"
+        )
+        return original
+    if errors:
+        workflow_logger.warning(
+            f"Code input object schema conversion failed for '{field_id}': {errors}, "
+            "fallback to unexpanded object"
+        )
+        return original
+    return {**converted[field_id], **original}
+
+
 def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     """根据 input schema 对 Code 节点的输入做类型转换（含 None 默认值填充）。
 
     当上游节点未提供值导致输入为 None 时，根据 schema 类型做合理默认值填充：
     - string 类型: None → ""
+    - array 类型: None → []
+    - object 类型: None 或 dict 按旧架构补齐缺失的直接子字段，保留已有值
     - 其他类型: 保持 None 不变
 
     Args:
@@ -209,11 +234,14 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
         return user_fields
 
     type_map: dict[str, str] = {}
+    field_map: dict[str, dict] = {}
     for field_def in inputs_schema:
         if isinstance(field_def, dict) and "id" in field_def:
             resolved = _resolve_field_type(field_def)
             if resolved:
-                type_map[field_def["id"]] = resolved
+                field_id = field_def["id"]
+                type_map[field_id] = resolved
+                field_map[field_id] = field_def
 
     if not type_map:
         return user_fields
@@ -221,7 +249,9 @@ def _coerce_inputs(user_fields: dict, inputs_schema: list[dict]) -> dict:
     coerced = {}
     for key, value in user_fields.items():
         target_type = type_map.get(key)
-        if target_type:
+        if target_type == "object" and (value is None or isinstance(value, dict)):
+            coerced[key] = _coerce_object_input(value, field_map[key])
+        elif target_type:
             coerced[key] = _coerce_value(value, target_type, input_mode=True)
         else:
             coerced[key] = value

@@ -3,6 +3,73 @@
 """
 workflow 框架中常量定义
 """
+import os
+from pathlib import Path
+
+import yaml
+
+from jiuwen.common.log.base import logger
+
+
+def resolve_config_filename(raw: str) -> str:
+    """解析环境变量指定的配置文件名：只允许 resource 目录内的纯文件名，
+    含路径分隔符/绝对路径/空值时回落默认文件，防目录外读取。"""
+    if _is_unsafe_filename(raw):
+        logger.warning(f"Invalid WORKFLOW_CONSTANT_YAML value: {raw!r}, fallback to default")
+        return "workflow_constant.yaml"
+    return raw
+
+
+def _is_unsafe_filename(name: str) -> bool:
+    # basename 一致 = 纯文件名；同时拒绝两种分隔符（Windows 反斜杠在 POSIX
+    # 下不是分隔符，Path.name 不会截断，需显式检查）；. 与 .. 同样拒绝
+    return (
+        not name
+        or "/" in name
+        or "\\" in name
+        or Path(name).name != name
+        or name in {".", ".."}
+    )
+
+
+# 支持通过环境变量切换常量配置文件（默认 workflow_constant.yaml）
+_FILENAME = resolve_config_filename(os.environ.get("WORKFLOW_CONSTANT_YAML", "workflow_constant.yaml"))
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'resource', _FILENAME)
+
+
+def _load_workflow_constant():
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as config_file:
+            data = yaml.safe_load(config_file)
+    except (OSError, UnicodeError, yaml.YAMLError) as e:
+        logger.error(f"load workflow constant config failed: {CONFIG_PATH}, error: {e}")
+        return {}
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(
+            f"workflow constant config {CONFIG_PATH} top-level is {type(data).__name__}, "
+            "expected mapping, fallback to defaults"
+        )
+        return {}
+    return data
+
+
+def _load_positive_int(key: str, default: int) -> int:
+    """读取正整数配置：容忍字符串数值，非法/非正数回落默认值并告警。"""
+    raw = workflow_constant.get(key, default)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning(f"workflow constant {key}={raw!r} is not an integer, fallback to {default}")
+        return default
+    if value <= 0:
+        logger.warning(f"workflow constant {key}={value} is not positive, fallback to {default}")
+        return default
+    return value
+
+
+workflow_constant = _load_workflow_constant()
 
 # 非流式情况下，当bpmn.is_completed()后，向异步队列里传入此信号
 BPMN_COMPLETED_MESSAGE = "BPMN EXECUTION IS COMPLETED"
@@ -109,10 +176,10 @@ ENV_PREFIX = "_env."
 # loop节点循环执行的默认次数限制
 LOOP_DEFAULT_LOOP_MAX_NUM = 1000
 # 单次任务执行最长时间
-TASK_EXECUTE_TIMEOUT = 300
+TASK_EXECUTE_TIMEOUT = _load_positive_int("task_execute_timeout", 300)
 
 # 节点超时时间设置，默认为2小时
-DEFAULT_EXECUTION_NODE_TIMEOUT = 7200
+DEFAULT_EXECUTION_NODE_TIMEOUT = _load_positive_int("default_execution_node_timeout", 7200)
 
 # MCP 超时兜底上限，与任务级超时 TASK_EXECUTE_TIMEOUT 对齐
 DEFAULT_MCP_TIME_OUT_SECONDS = float(TASK_EXECUTE_TIMEOUT)
@@ -127,7 +194,7 @@ TASK_EXECUTE_TIMEOUT_ERROR_MESSAGE = (
 )
 
 # 等待用户输入最长时间，超时则自动取消此次任务
-WAIT_FOR_USER_INPUT_TIMEOUT = 300
+WAIT_FOR_USER_INPUT_TIMEOUT = _load_positive_int("wait_for_user_input_timeout", 300)
 
 WAIT_FOR_USER_INPUT_TIMEOUT_ERROR_MESSAGE = (
     "等待输入时长达 {} 秒，对话关闭。请重新开始对话".format(WAIT_FOR_USER_INPUT_TIMEOUT)
@@ -137,7 +204,7 @@ WAIT_FOR_USER_INPUT_TIMEOUT_ERROR_MESSAGE = (
 SUB_WORKFLOW_IRS = "sub_workflow_irs"
 SUB_WORKFLOW_IR = "sub_workflow_ir"
 SUB_WORKFLOW_IDS = "sub_workflow_ids"
-WAIT_PANEL_WORKFLOW_TIMEOUT = 30000
+WAIT_PANEL_WORKFLOW_TIMEOUT = _load_positive_int("wait_panel_workflow_timeout", 30000)
 WAIT_PANEL_MSG_TIMEOUT = 60000
 WAIT_PANEL_WORKFLOW_ERROR_MESSAGE = "等待时长达 {} 秒，panel接收关闭".format(
     WAIT_PANEL_WORKFLOW_TIMEOUT
@@ -526,6 +593,16 @@ ERROR = "error"
 
 SIMPLE_TYPE_DICT = {STRING: str, INTEGER: int, NUMBER: float, BOOLEAN: bool}
 
+# 节点类型默认值：YAML 逐键覆盖，未声明的键保留内置默认，部分配置不会丢失其余默认值
+_TYPE_DEFAULT_VALUE_TYPES = {
+    STRING: str,
+    INTEGER: int,
+    NUMBER: float,
+    BOOLEAN: bool,
+    ARRAY: type(None),
+    OBJECT: type(None),
+    ERROR: type(None),
+}
 TYPE_DEFAULT_VALUE_DICT = {
     STRING: "",
     INTEGER: None,
@@ -535,6 +612,25 @@ TYPE_DEFAULT_VALUE_DICT = {
     OBJECT: None,
     ERROR: None,
 }
+_type_overrides = workflow_constant.get("type_default_value_dict")
+if isinstance(_type_overrides, dict):
+    for _key, _value in _type_overrides.items():
+        if _key not in TYPE_DEFAULT_VALUE_DICT:
+            logger.warning(f"type_default_value_dict has unknown key: {_key!r}, ignored")
+            continue
+        _expected = _TYPE_DEFAULT_VALUE_TYPES[_key]
+        # int 是 bool 的父类，需先排除 bool 再匹配 int/float，避免 boolean: 1 被放行
+        _type_ok = (
+            isinstance(_value, _expected)
+            and not (_expected in (int, float) and isinstance(_value, bool))
+        )
+        if not _type_ok:
+            logger.warning(
+                f"type_default_value_dict key {_key!r} value {_value!r} has invalid type "
+                f"{type(_value).__name__}, keep builtin default"
+            )
+            continue
+        TYPE_DEFAULT_VALUE_DICT[_key] = _value
 
 # custom component
 BUILT_IN_COMPONENT_PREFIX = "jiuwen."
