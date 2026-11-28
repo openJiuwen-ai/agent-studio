@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -421,5 +422,43 @@ public class SsoAuthenticationFilterTest {
 
         verify(filterChain).doFilter(request, response);
         verify(request, never()).setAttribute(eq(Constants.SYSTEM_USER_SKIP_ATTR), any());
+    }
+
+    // 场景：SSO 未返回 project_id 回退为默认占位值 "0" 时，不回写 AGENT_SID，
+    // 避免写出 "userId|0" 污染前端 URL 的 projectId
+    @Test
+    void doFilter_projectIdPlaceholder_shouldNotWriteSidCookie() throws Exception {
+        setExcludedPaths(Collections.emptyList());
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser")
+            .domainId("0").projectId("0").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(response, never()).addCookie(any());
+    }
+
+    // 场景：SSO 返回有效 project_id 时，回写 AGENT_SID（userId|projectId）
+    @Test
+    void doFilter_projectIdValid_shouldWriteSidCookie() throws Exception {
+        setExcludedPaths(Collections.emptyList());
+        when(request.getRequestURI()).thenReturn("/api/data");
+        when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
+
+        SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser")
+            .domainId("domain1").projectId("proj1").build();
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
+        verify(response).addCookie(cookieCaptor.capture());
+        Cookie sidCookie = cookieCaptor.getValue();
+        assert "AGENT_SID".equals(sidCookie.getName()) : "cookie name should be AGENT_SID";
+        assert "user1|proj1".equals(sidCookie.getValue()) : "cookie value should be userId|projectId";
     }
 }

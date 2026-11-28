@@ -30,24 +30,6 @@ from agent_runtime.common.logging_context import (
 install_request_id_log_record_factory()
 install_log_formatter_patch()
 
-# 在任何 jiuwen OBS 操作之前，补丁 Crypt 类使用明文解密
-# agent_runtime 本地调试环境 SK 为明文存储，而 jiuwen Crypt 默认实现抛异常
-from jiuwen.common.security.cryptor import Crypt as JiuWenCrypt
-
-
-def _plain_encrypt(origin: str):
-    """明文加密 — 直接返回原始字符串（agent_runtime 本地环境不加密）"""
-    return origin
-
-
-def _plain_decrypt(encrypt_str: str):
-    """明文解密 — 直接返回原始字符串（agent_runtime 本地环境 SK 为明文存储）"""
-    return encrypt_str
-
-
-JiuWenCrypt.encrypt = staticmethod(_plain_encrypt)
-JiuWenCrypt.decrypt = staticmethod(_plain_decrypt)
-
 from storage import S3StorageProvider
 
 from agent_runtime.common import settings

@@ -128,6 +128,12 @@ public class AuthProperties {
         @Data
         public static class DefaultsConfig {
             /**
+             * 未配置 project-id 时的默认占位值；视为无效，不回写 AGENT_SID。
+             * 真实 projectId 不会取此值，故无论是否显式配置为该值均视为无效。
+             */
+            public static final String PLACEHOLDER_PROJECT_ID = "0";
+
+            /**
              * 默认域 ID
              * 配置项: auth.user-info.defaults.domain-id
              */
@@ -143,7 +149,7 @@ public class AuthProperties {
              * 默认项目 ID
              * 配置项: auth.user-info.defaults.project-id
              */
-            private String projectId = "0";
+            private String projectId = PLACEHOLDER_PROJECT_ID;
         }
     }
 

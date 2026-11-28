@@ -22,7 +22,7 @@
     <div *ngIf="type === 'noData'" class="no-data-common-css">
       <span class="noData-new" *ngIf="!isOnlyShowBtn"></span>
       <p class="first-line-data" *ngIf="!isOnlyShowBtn">{{ firstLineData }}</p>
-      <div class="second-line-data" *ngIf="!isOnlyShowBtn">{{ secondLineData }}</div>
+      <div class="second-line-data" *ngIf="!isOnlyShowBtn && !hideSecondLineData">{{ secondLineData }}</div>
       <button class="btn-css" *ngIf="noDataBtnStr" nz-button (click)="onCreate()">
         {{ noDataBtnStr }}
       </button>
