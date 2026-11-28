@@ -41,6 +41,27 @@ function env_init(){
   fi
 }
 
+# FEAT-131: 构建 A2A 适配层启动参数
+# 当 A2A_ADAPTER_ENABLED=true 时，在 uvicorn 前启动 TCP 适配层，剥离高码网关 h2c 升级头
+# 非 LB 模式下需要启用（高码 gateway 直连 runtime）；LB 模式下 Nginx 已处理协议兼容，通常无需启用
+# 多 worker（LB 模式）时按 worker 偏移量自动计算独立 adapter 端口，避免冲突
+function build_adapter_args() {
+  local uvicorn_port=$1
+  local adapter_args=""
+  if [[ "${A2A_ADAPTER_ENABLED,,}" == "true" ]]; then
+    local base_adapter_port=${A2A_ADAPTER_PORT:-31016}
+    local server_port=${PORT:-8000}
+    local adapter_port=${base_adapter_port}
+    # LB 模式下多 worker 各需独立 adapter 端口：base + (worker_port - server_port)
+    if [[ "${uvicorn_port}" != "${server_port}" ]]; then
+      adapter_port=$((base_adapter_port + uvicorn_port - server_port))
+    fi
+    adapter_args="--with-adapter --adapter-port ${adapter_port}"
+    echo "A2A adapter enabled: uvicorn=${uvicorn_port}, adapter=${adapter_port}"
+  fi
+  echo "${adapter_args}"
+}
+
 function server_start(){
   # 先全部停掉
   ps -ef | grep EIStart |grep -v grep | awk '{print $2}' | xargs -r kill -9
@@ -50,8 +71,9 @@ function server_start(){
 
   port=${PORT:-8000}
   base_port=$((${port}))
-  echo "nohup python -u ${server_path} --host 0.0.0.0 --port ${base_port} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &"
-  nohup python -u ${server_path} --host 0.0.0.0 --port ${base_port} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &
+  adapter_args=$(build_adapter_args ${base_port})
+  echo "nohup python -u ${server_path} --host 0.0.0.0 --port ${base_port} ${adapter_args} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &"
+  nohup python -u ${server_path} --host 0.0.0.0 --port ${base_port} ${adapter_args} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &
 }
 
 function start_all(){
@@ -71,7 +93,8 @@ function start_sub_process(){
 
   env_init
 
-  nohup python -u ${server_path} --host 0.0.0.0 --port ${server_port} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &
+  adapter_args=$(build_adapter_args ${server_port})
+  nohup python -u ${server_path} --host 0.0.0.0 --port ${server_port} ${adapter_args} >> ${LOGGING_LOG_PATH}/common.log 2>&1 &
 }
 
 function main(){

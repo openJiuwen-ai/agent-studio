@@ -197,6 +197,20 @@ export class AppAgentRepoService {
     });
   }
 
+  /** 查询 A2A 注册状态 (FEAT-131) */
+  public getRegistrationStatus(agent_id: string): Promise<any> {
+    return this.http.getAsync({
+      url: `${this.prefix}/agents/${agent_id}/registration`,
+    });
+  }
+
+  /** 重试 A2A 注册 (FEAT-131) */
+  public retryRegistration(agent_id: string): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.prefix}/agents/${agent_id}/registration/retry`,
+    });
+  }
+
   /** 导入知识型Agent */
   public importAgents(formatData: FormData): Promise<any> {
     return this.http.postAsync({

@@ -2248,3 +2248,18 @@ CREATE UNIQUE INDEX uk_ws_mcp_server_source_instance ON ws_mcp_server_def (sourc
 ALTER TABLE `t_tool` ADD COLUMN `platform_published` TINYINT NOT NULL DEFAULT 0 COMMENT '用户插件上架到资产广场（1=是，0=否）';
 ALTER TABLE `t_tool` ADD COLUMN `plaza_version_id` VARCHAR(64) NULL COMMENT '上架锚定的发布版本ID（t_release_version.version_id）';
 
+-- FEAT-131: A2A RDC 注册状态表
+CREATE TABLE IF NOT EXISTS `t_agent_rdc_registration` (
+    `id` varchar(36) NOT NULL COMMENT '主键',
+    `agent_id` varchar(64) NOT NULL COMMENT '应用ID（agentId/workflowId）',
+    `service_id` varchar(128) NULL DEFAULT NULL COMMENT '服务ID（应用类型+版本标识）',
+    `instance_id` varchar(128) NULL DEFAULT NULL COMMENT 'RDC返回的实例ID',
+    `status` varchar(32) NOT NULL COMMENT '注册状态：REGISTERED/REGISTRATION_FAILED/NOT_SUPPORTED/DEREGISTERING/DEREGISTRATION_FAILED',
+    `agent_card_json` longtext NULL COMMENT 'Agent Card JSON（与注册和/.well-known/agent-card.json同源）',
+    `registration_mode` varchar(8) NULL DEFAULT NULL COMMENT '注册模式：A1=注册/A3=注销',
+    `created_on` timestamp NOT NULL COMMENT '创建时间',
+    `updated_on` timestamp NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`) USING BTREE,
+    UNIQUE INDEX `uk_agent_rdc_registration_agent_id`(`agent_id` ASC) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='A2A RDC注册状态表' ROW_FORMAT=Dynamic;
+

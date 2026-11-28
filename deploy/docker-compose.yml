@@ -357,6 +357,12 @@ services:
       # 开启后 worker 监听 SERVER_PORT+1..+N，nginx 监听 SERVER_PORT。
       NGINX_LOAD_BALANCING: ${NGINX_LOAD_BALANCING:-false}
       LB_STRATEGY: ${LB_STRATEGY:-least_conn}
+      # ======== [选填] A2A 适配层（FEAT-131） ========
+      # 启用后在 uvicorn 前启动 TCP 适配层，剥离高码网关 HTTP/2(h2c) 升级头
+      # 非 LB 模式下需启用（高码 gateway 直连 runtime）；LB 模式下 Nginx 已处理协议兼容，通常无需启用
+      A2A_ADAPTER_ENABLED: ${A2A_ADAPTER_ENABLED:-false}
+      # 适配层监听端口（RDC 注册地址应指向此端口），默认 31016
+      A2A_ADAPTER_PORT: ${A2A_ADAPTER_PORT:-31016}
       STORAGE_TYPE: ${STORAGE_TYPE:-OBS}
       STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}
       STORAGE_CUSTOM_CLASS: ${RUNTIME_STORAGE_CUSTOM_CLASS:-}

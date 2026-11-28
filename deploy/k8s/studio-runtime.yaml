@@ -248,6 +248,16 @@ spec:
             # 负载均衡策略：least_conn（默认，推荐SSE场景）/ round_robin / ip_hash
             - name: LB_STRATEGY
               value: 'least_conn'
+            # ======== [选填] A2A 适配层（FEAT-131） ========
+            # 启用后在 uvicorn 前启动 TCP 适配层，剥离高码网关 HTTP/2(h2c) 升级头
+            # 非 LB 模式（NGINX_LOAD_BALANCING=false）下需启用：高码 gateway 直连 runtime
+            # LB 模式下 Nginx 已通过 proxy_set_header Connection "" 处理协议兼容，通常无需启用
+            - name: A2A_ADAPTER_ENABLED
+              value: 'false'
+            # 适配层监听端口（RDC 注册地址应指向此端口），默认 31016
+            # LB 模式下多 Worker 自动按偏移量分配独立端口：31016+1, 31016+2, ...
+            - name: A2A_ADAPTER_PORT
+              value: '31016'
             - name: INSIGHT_EI_DEBUG_INFO_ENABLE
               value: 'true'
             - name: EXECUTION_STATE_STORAGE_MEDIUM

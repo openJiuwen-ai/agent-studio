@@ -2188,3 +2188,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_ws_mcp_server_source_instance ON ws_mcp_ser
 -- t_tool: 用户插件上架标记 + 锚定发布版本（t_release_version.version_id）
 ALTER TABLE t_tool ADD COLUMN platform_published SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE t_tool ADD COLUMN plaza_version_id VARCHAR(64);
+
+-- FEAT-131: A2A RDC 注册状态表
+CREATE TABLE IF NOT EXISTS t_agent_rdc_registration (
+    id VARCHAR(36) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    service_id VARCHAR(128),
+    instance_id VARCHAR(128),
+    status VARCHAR(32) NOT NULL,
+    agent_card_json TEXT,
+    registration_mode VARCHAR(8),
+    created_on TIMESTAMP NOT NULL,
+    updated_on TIMESTAMP NOT NULL,
+    PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_agent_rdc_registration_agent_id ON t_agent_rdc_registration (agent_id);

@@ -25,6 +25,25 @@
             {{ appType | i18nextEager }}
           </nz-tag>
         }
+
+        @if (data.registration_status === 'REGISTRATION_FAILED') {
+          <nz-tag
+            nzColor="warning"
+            class="!rounded-[4px] text-[12px] cursor-pointer"
+            (click)="retryRegistration($event)"
+          >
+            {{ 'registration_failed' | i18nextEager }}
+          </nz-tag>
+        }
+
+        @if (data.registration_status === 'DEREGISTRATION_FAILED') {
+          <nz-tag
+            nzColor="error"
+            class="!rounded-[4px] text-[12px]"
+          >
+            {{ 'deregistration_failed' | i18nextEager }}
+          </nz-tag>
+        }
       </div>
     </div>
   </div>
