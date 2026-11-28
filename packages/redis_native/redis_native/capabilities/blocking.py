@@ -27,22 +27,23 @@ class NativeBlockingCapability:
     async def blpop(
         self, keys: Sequence[Key], timeout: Duration | None = None
     ) -> tuple[Key, Value] | None:
-        # 裸 str/bytes 是"单键"惯例（redis-py 原生支持）——直接 list() 会把
-        # 字符串拆成单字符键列表，消费方将永远阻塞在错误键上
-        if isinstance(keys, (str, bytes)):
-            keys = [keys]
+        # 先按空输入 fail-fast（空串不得包成 [""] 绕过校验后阻塞在空键上），再做
+        # 单键包装：裸 str/bytes 是"单键"惯例（redis-py 原生支持）——直接 list()
+        # 会把字符串拆成单字符键列表，消费方将永远阻塞在错误键上
         if not keys:
             raise RedisCommandError("blpop 需要至少一个 key", command="blpop")
+        if isinstance(keys, (str, bytes)):
+            keys = [keys]
         return await self._redis.blpop(list(keys), blocking_timeout(timeout))
 
     @spi_command("brpop")
     async def brpop(
         self, keys: Sequence[Key], timeout: Duration | None = None
     ) -> tuple[Key, Value] | None:
-        if isinstance(keys, (str, bytes)):
-            keys = [keys]
         if not keys:
             raise RedisCommandError("brpop 需要至少一个 key", command="brpop")
+        if isinstance(keys, (str, bytes)):
+            keys = [keys]
         return await self._redis.brpop(list(keys), blocking_timeout(timeout))
 
     @spi_command("brpoplpush")
