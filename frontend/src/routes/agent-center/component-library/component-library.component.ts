@@ -855,7 +855,10 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   /** 轮询 MCP 操作结果（终态停止 + 刷新列表） */
   private mcpOperationTimers: Map<string, any> = new Map();
 
-  private pollMcpOperation(operationId: string, maxAttempts = 150) {
+  private pollMcpOperation(operationId: string, maxAttempts = 300) {
+    // 2s × 300 = 600s，与后端操作总执行期限（McpOperationService.OPERATION_DEADLINE_MILLIS = 10 分钟）对齐；
+    // 窗口短于期限会在操作仍在合法执行时静默放弃轮询
+
     if (this.mcpOperationTimers.has(operationId)) {
       return;
     }
