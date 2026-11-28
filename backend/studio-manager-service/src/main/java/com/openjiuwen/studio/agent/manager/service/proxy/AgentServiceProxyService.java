@@ -910,7 +910,13 @@ public class AgentServiceProxyService {
             }
         }
         if ("boolean".equals(schemaType)) {
-            return Boolean.parseBoolean(value);
+            // 仅字面量 true/false（忽略大小写）参与转换；其余值（如 "1"/"yes"）原样保留，
+            // 与上方 integer/number 分支解析失败保留原始字符串的容错口径一致——
+            // Boolean.parseBoolean 会把任意非 true 字符串静默反转为 false 下发
+            if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+                return Boolean.parseBoolean(value);
+            }
+            return value;
         }
         return value;
     }
