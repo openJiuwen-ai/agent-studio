@@ -307,6 +307,28 @@ class JointOptimizer:
                     raise e
         return None
 
+    @staticmethod
+    def _remaining_dataset_rows(dataset, sampled_cases):
+        """Exclude sampled rows without comparing evaluation-only metadata."""
+        remaining = list(enumerate(dataset))
+        case_keys = (
+            TuneConstant.QUESTION_KEY,
+            TuneConstant.LABEL_KEY,
+            TuneConstant.VARIABLE_KEY,
+        )
+        for sampled in sampled_cases:
+            order = sampled.get("order")
+            for position, (index, data) in enumerate(remaining):
+                same_case = (
+                    index == order
+                    if order is not None
+                    else all(data.get(key) == sampled.get(key) for key in case_keys)
+                )
+                if same_case:
+                    remaining.pop(position)
+                    break
+        return [data for _, data in remaining]
+
     def resample_examples(self, sampled_incorrect_data):
         """re-sample examples from dataset"""
         dataset = copy.deepcopy(self.dataset)
@@ -318,19 +340,7 @@ class JointOptimizer:
             return dataset
 
         num_to_add = min_len - len(sampled_incorrect_data)
-        # 错误行由 evaluator 从 dataset 按索引 deepcopy 生成，order 即原始
-        # 行在 dataset 中的下标——按索引精确排除已选错误行对应的原始行，
-        # 同 question/variable 的其他行保留；不能用整字典相等（错误行是加了
-        # order/score/predict/reason 并移除 tools 的副本，与原始行永不相等），
-        # 也不能按键去重（会一次性排除所有同键行，重复数据行被误删）
-        selected_orders = {
-            data["order"]
-            for data in sampled_incorrect_data
-            if isinstance(data, dict) and "order" in data
-        }
-        remaining_data = [
-            data for idx, data in enumerate(dataset) if idx not in selected_orders
-        ]
+        remaining_data = self._remaining_dataset_rows(dataset, sampled_incorrect_data)
 
         sampled_data = random.sample(
             remaining_data, min(num_to_add, len(remaining_data))
@@ -596,27 +606,11 @@ class JointOptimizer:
             num_error_examples = min(num_examples, len(error_cases))
             sampled_examples.extend(random.sample(error_cases, num_error_examples))
 
-            # 如果需要更多示例，从数据集中随机采样。
-            # 已选错误行由 evaluator 从 dataset 按索引 deepcopy 生成（order 即
-            # 原始行下标），按索引精确排除其原始行即可——同 question/variable
-            # 的其他行保留；不能用整字典相等（错误行与原始行永不相等，原始行会
-            # 再次进入填充池被重复抽取），也不能按键去重（会一次性排除所有同键行）
-            # 仅收集携带 order 的行（evaluator 错误行）：无 order 的普通 dataset
-            # 行不参与来源排除。生产调用链中 sampled_examples 的错误行均带
-            # order；若未来无 order 行进入错误集并再走补足路径，需另行处理
-            # 来源排除（当前无此调用路径，保持行为不变）
-            selected_orders = {
-                data["order"]
-                for data in sampled_examples
-                if isinstance(data, dict) and "order" in data
-            }
-            remaining_dataset = [
-                data
-                for idx, data in enumerate(dataset)
-                if idx not in selected_orders
-            ]
             if len(sampled_examples) < num_examples:
                 remaining_examples = num_examples - len(sampled_examples)
+                remaining_dataset = self._remaining_dataset_rows(
+                    dataset, sampled_examples
+                )
                 sampled_examples.extend(
                     random.sample(
                         remaining_dataset,
