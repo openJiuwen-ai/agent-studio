@@ -676,9 +676,11 @@ POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}
 | Parameter | Required | Type | Description |
 |------|------|------|------|
 | workspace_id | Yes | String | Workspace ID |
-| import_workflows | No | String | Whether to import workflows, set to `true` to enable |
+| import_workflows | No | String | Comma-separated list of workflow IDs to import; each ID must match the `metadata.id` of an exported workflow |
 | import_tools | No | String | Whether to import tools, set to `true` to enable |
 | mode | No | String | Import mode: `STRICT` (strict mode) / `SPACIOUS` (lenient mode), default `STRICT` |
+
+> **Note**: `import_workflows` is a comma-separated list of workflow IDs, not a boolean switch. For each entry in the uploaded `.jsonl` file, only workflows whose `metadata.id` is included in this list are imported. You can obtain the workflow IDs from the export request body (`workflow_ids`) used to create the file, or from the `metadata.id` field of each workflow entry in the exported file.
 
 **Request Header Parameters**
 
@@ -710,7 +712,7 @@ POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}
 **Request Example**
 
 ```
-POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}&import_workflows=true&import_tools=true&mode=SPACIOUS HTTP/1.1
+POST /v1/{project_id}/agent-manager/workflows/import?workspace_id={workspace_id}&import_workflows=cd7a8f33-66e3-455c-b008-a6b18dd27319&import_tools=true&mode=SPACIOUS HTTP/1.1
 Host: api.example.com
 Content-Type: multipart/form-data
 X-Auth-Token: {token}
