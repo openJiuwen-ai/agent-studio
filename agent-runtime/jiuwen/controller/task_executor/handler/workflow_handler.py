@@ -936,6 +936,13 @@ class WorkflowHandler(BaseHandler):
         # 执行工作流
         workflow_status = self.initialize_workflow_status()
         workflow_input = self.create_workflow_input(task, workflow_req_params)
+        _otel_execution_id = (getattr(task, "input_data", {}) or {}).get(
+            "execution_id", ""
+        )
+        if _otel_execution_id:
+            # Controller 内嵌 workflow 由 WorkflowWrapper 自建 session；任务数据
+            # 是跨后台任务最可靠的载体，executionId 随 params 下传给 OTel handler。
+            workflow_input.setdefault("params", {})["execution_id"] = _otel_execution_id
         # 注入中断恢复信息：构建 InteractiveInput 替代原始 query
         if workflow_context.status == WorkflowStatus.INTERRUPTED:
             user_query = workflow_input.get("inputs", query)

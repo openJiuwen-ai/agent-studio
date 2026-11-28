@@ -222,7 +222,14 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
     } | req.params.global_variables
     req.params.is_debug = req.headers.get("x-invoke-mode", "").lower() == "debug"
 
-    execution_id = req.headers.get("x-execution-id", "")
+    # 请求级 execution_id：middleware 在 header 缺失/非法时已生成替代值并写入
+    # request.state（见 RequestContextMiddleware）；优先取它，保证流式/非流式、
+    # 日志与 span 使用同一执行 ID，header/uuid 仅作兜底。
+    execution_id = (
+        getattr(request.state, "execution_id", None)
+        or req.headers.get("x-execution-id", "")
+        or str(uuid.uuid4())
+    )
 
     # 只读一次 IR（避免重复读取）
     exec_id = execution_id
@@ -298,7 +305,7 @@ async def _execute_ir(req: ExecutionRequest, request: Request, *, structured_out
             return ExecutionEventStream(prefetched)
         return StreamingResponse(content=prefetched, media_type="text/event-stream")
     else:
-        full_text = await runner.run_blocking(req)
+        full_text = await runner.run_blocking(req, execution_id)
         now_ms = int(time.time() * 1000)
         return JSONResponse(
             content={

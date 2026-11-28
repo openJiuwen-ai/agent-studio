@@ -116,6 +116,18 @@ class ControllerRunner:
                 (ir_json.get("configs") or {}).get("memory") or {}
             )
             controller_memory_repo_id = controller_memory_config.get("memory_repo_id", "")
+            # OTel workflow handler 按执行隔离状态：Controller 内嵌工作流由
+            # WorkflowWrapper 自建 session；请求上下文里的 executionId 作为
+            # 兜底（主链路经 AgentGroup 参数显式下传），不受记忆配置影响。
+            from jiuwen.serve.common.context import request_json
+            request_json.set({
+                **(request_json.get() or {}),
+                "executionId": exec_id,
+            })
+            # Controller 成员在后台任务中执行，ContextVar 不可依赖；把请求级
+            # executionId 挂在显式传递的 runtime_context 上，供成员任务下传
+            # 到内嵌 workflow session，保证 OTel handler 按执行隔离。
+            runtime_context.agent_workflow_context["execution_id"] = exec_id
             if controller_memory_repo_id:
                 from jiuwen.controller.common.constants import WorkflowConstants
                 req_params = runtime_context.agent_workflow_context.get(
@@ -146,7 +158,6 @@ class ControllerRunner:
                 # retrieval). Nothing in this runtime ever sets it, so userId
                 # resolves to "" and retrieval is silently skipped. Storage
                 # lowercases user_id (memory_extractor), so inject lowercase.
-                from jiuwen.serve.common.context import request_json
                 request_json.set({
                     **(request_json.get() or {}),
                     "userId": (req.user_id or "").lower(),
@@ -227,6 +238,8 @@ class ControllerRunner:
                 session_id=session_id,
                 card=agent_group.card,
                 source_metadata={"user_id": req.user_id} if req.user_id else None,
+                # OTel 执行级隔离：executionId 随 AgentSession 继承到内嵌工作流
+                execution_id=exec_id,
             )
             await session.pre_run(inputs=session_inputs)
 
@@ -237,6 +250,7 @@ class ControllerRunner:
                 tool_switch_dict=getattr(req.params, "tool_switch_dict", None),
                 trace_handlers=tracer,
                 session=session,
+                execution_id=exec_id,
             )
 
             async for chunk in post_process_agent_group_streaming_output(
@@ -382,7 +396,7 @@ class ControllerRunner:
                 "Failed to trigger memory extraction: %s", e, exc_info=True
             )
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, execution_id: str | None = None) -> str:
         """Execute Controller mode IR and return complete result.
 
         run_streaming 正常流产 SSE bytes、错误流产 dict;_parse_controller_stream_chunk
@@ -392,7 +406,7 @@ class ControllerRunner:
         message_parts: list[str] = []
         message_end_answer = ""
         workflow_end_answer = ""
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, execution_id):
             if chunk is None:
                 continue
             try:

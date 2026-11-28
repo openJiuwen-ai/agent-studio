@@ -660,6 +660,9 @@ class Agent(BaseAgent):
             "request_params": kwargs.get("request_params"),
             "mcps": mcps,
             "skill_context": skill_context or SkillInjectionContext.empty(),
+            # 请求级执行 ID（由 AgentGroup 入口透传），Controller 内嵌 workflow
+            # 建 session 时使用，供 OTel workflow handler 按执行隔离状态。
+            "execution_id": kwargs.get("execution_id") or "",
         }
 
     async def _execute_stream_by_mode(self, stream_params, trace_manager):
