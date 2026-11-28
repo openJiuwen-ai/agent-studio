@@ -11,9 +11,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.InetAddress;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -239,5 +241,29 @@ class UrlCheckUtilsTest {
             urlCheckUtils.validateEnvVarPlaceholders("https://example.com/${x"));
         assertThrows(AgentStudioException.class, () ->
             urlCheckUtils.validateEnvVarPlaceholders("https://example.com/foo}bar"));
+    }
+
+    @Test
+    void testDisabledCheckWarning_namesTheWiredEnvVarOnly() {
+        String warning = UrlCheckUtils.DISABLED_URL_CHECK_WARNING;
+        // 部署侧真正透传到容器的是 ENABLE_TOOL_URL_CHECK（deploy/docker-compose.yml:230），文案必须用它
+        assertTrue(warning.contains("ENABLE_TOOL_URL_CHECK"));
+        assertTrue(warning.contains("tool.url.enable-check"));
+        // 反向断言：这些名字 compose 不会透传，写进文案会让运维以为已开启
+        assertFalse(warning.contains("TOOL_URL_ENABLE_CHECK"));
+        assertFalse(warning.contains("enable_tool_url_check="));
+        assertFalse(warning.contains("tool_url_white_list"));
+    }
+
+    @Test
+    void testInit_disabledCheck_stillBuildsListsAndDoesNotThrow() {
+        ReflectionTestUtils.setField(urlCheckUtils, "enableUrlCheck", false);
+        ReflectionTestUtils.setField(urlCheckUtils, "toolUrlBlackListStr", "blocked.com");
+        ReflectionTestUtils.setField(urlCheckUtils, "toolUrlWhiteListStr", "allowed.com");
+        // 告警分支不能影响初始化：黑/白名单仍要按配置解析
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(urlCheckUtils, "init"));
+        List<?> blackList = (List<?>) ReflectionTestUtils.getField(urlCheckUtils, "toolUrlBlackList");
+        assertNotNull(blackList);
+        assertTrue(blackList.contains("blocked.com"));
     }
 }

@@ -59,6 +59,18 @@ public class UrlCheckUtils {
      */
     private static final String USER_EMPTY_PLACEHOLDER = "{}";
 
+    /**
+     * tool.url.enable-check 关闭时的启动告警文案（包内可见，便于单测锁定环境变量名）。
+     *
+     * <p>环境变量名以部署侧实际接线为准：deploy/docker-compose.yml 透传给容器的是
+     * {@code ENABLE_TOOL_URL_CHECK}（映射到 {@code enable_tool_url_check}），deploy/.env.template 里也是这个名字；
+     * 不能写成 {@code TOOL_URL_ENABLE_CHECK}——compose 不会把该名字透传到容器，运维按它配置后校验仍不生效。
+     */
+    static final String DISABLED_URL_CHECK_WARNING = "tool.url.enable-check=false "
+        + "(env ENABLE_TOOL_URL_CHECK): SSRF check is disabled for tool/MCP/model/plugin URLs, "
+        + "only the URL syntax check applies. Set ENABLE_TOOL_URL_CHECK=true in the deployment env to enable it, "
+        + "and keep endpoints that are expected to resolve to internal addresses in tool.url.white-list.";
+
     @Value("${tool.url.enable-check}")
     private boolean enableUrlCheck;
 
@@ -78,6 +90,9 @@ public class UrlCheckUtils {
                 : Arrays.asList(toolUrlBlackListStr.split(","));
         toolUrlWhiteList = StringUtils.isBlank(toolUrlWhiteListStr) ? new ArrayList<>()
                 : Arrays.asList(toolUrlWhiteListStr.split(","));
+        if (!enableUrlCheck) {
+            log.warn(DISABLED_URL_CHECK_WARNING);
+        }
     }
 
     /**
