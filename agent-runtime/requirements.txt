@@ -17,14 +17,16 @@ spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
-# openjiuwen 锁定 agent-core 0.1.17_hotfix 线已合入的 commit（!3933 merge 2b6a9e94e，
-# 与 pyproject.toml 保持一致）：含组件异常 status.description 安全摘要、
-# 执行级 execution_id、Span 环境维度（workspace/environment/project）、流式 finish_reasons 与工具 astream 装饰。
+# openjiuwen 锁定 agent-core 0.1.17_hotfix 线 tip commit（957c3e517，含 !3933 merge 2b6a9e94e，
+# 与 pyproject.toml 保持一致）：含组件异常 status.description 安全摘要、执行级 execution_id、
+# Span 环境维度（workspace/environment/project）、流式 finish_reasons 与工具 astream 装饰，
+# 以及 workflow 并发状态按 execution_id 隔离（#2430）、tracer aclose 级联、
+# retriever top_k/data_source_id 透传、空 LLM end payload 跳过 output-messages。
 # 待该线进入 openJiuwen/agent-core@develop 后
 # 改回 PyPI 版本 pin。
 # 注意：git+https 依赖要求构建镜像时装 git（见 studio-runtime 各 Dockerfile，
 # 随编译工具链临时安装、装完卸载）。
-openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@2b6a9e94e958ef86b97a94a4869684e36609b1eb
+openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@957c3e5172f6831f293886e94e06749c370d969a
 milvus-lite==3.1.1
 agent-sandbox==0.0.30
 opensearch-py==2.8.0
