@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 租户知识库表清理子任务
@@ -38,9 +39,12 @@ public class TenantCleanKnowledgeTableSubtask {
 
     /**
      * 执行知识库表清理
+     * <p>
+     * 多张表的 DELETE 在同一事务内执行：任一张表失败则整体回滚，避免租户数据半清理。
      *
      * @param domainId 租户ID
      */
+    @Transactional(rollbackFor = Exception.class)
     public void executeCleanup(String domainId) {
         try {
             log.info("Starting knowledge tables cleanup for domainId: {}", domainId);
