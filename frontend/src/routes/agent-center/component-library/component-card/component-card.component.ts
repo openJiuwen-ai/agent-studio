@@ -379,7 +379,9 @@ export class ComponentCardComponent implements OnInit {
   }
 
   /** 轮询重载操作结果（终态 → 展示增删 + 重新发布提示 + 刷新列表） */
-  private pollMcpReloadResult(operationId: string, maxAttempts = 150) {
+  private pollMcpReloadResult(operationId: string, maxAttempts = 300) {
+    // 2s × 300 = 600s，与后端操作总执行期限（OPERATION_DEADLINE_MILLIS = 10 分钟）对齐
+
     let attempts = 0;
     this.mcpReloadTimer = setInterval(async () => {
       attempts++;
