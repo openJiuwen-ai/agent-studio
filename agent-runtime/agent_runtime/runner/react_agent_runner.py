@@ -926,6 +926,8 @@ class ReActAgentRunner:
                 session_id=session_id,
                 card=agent.card,
                 source_metadata={"user_id": req.user_id} if req.user_id else None,
+                # OTel 执行级隔离：executionId 随 AgentSession 继承到内嵌工作流
+                execution_id=exec_id,
             )
             await session.pre_run(inputs=inputs)
             if req.resume_input is None:
@@ -1023,10 +1025,10 @@ class ReActAgentRunner:
                         track_key=req.conversation_id,
                     )
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, execution_id: str | None = None) -> str:
         """运行 ReActAgent 并返回完整的 LLM 响应字符串"""
         result_parts = []
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, execution_id):
             if chunk is None:
                 continue
             try:

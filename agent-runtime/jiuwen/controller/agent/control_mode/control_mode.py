@@ -140,6 +140,22 @@ class ControllerMode(BaseMode):
             request = StreamRequest(**kwargs)
 
             # 创建初始用户输入消息
+            _otel_exec_session = request.session
+            _otel_exec_getter = getattr(_otel_exec_session, "get_execution_id", None)
+            try:
+                _otel_execution_id = (
+                    (_otel_exec_getter() or "") if callable(_otel_exec_getter) else ""
+                )
+            except Exception:  # noqa: BLE001 - 遥测隔离失败不阻断执行
+                _otel_execution_id = ""
+            if not _otel_execution_id:
+                _otel_execution_id = str(request.execution_id or "")
+            if not _otel_execution_id:
+                _otel_runtime_ctx = getattr(request, "runtime_context", None)
+                _otel_wf_ctx = getattr(
+                    _otel_runtime_ctx, "agent_workflow_context", None
+                ) or {}
+                _otel_execution_id = str(_otel_wf_ctx.get("execution_id", "") or "")
             runtime_data = {
                 "task_id": self.task_id,
                 "prompt_info": request.prompt_info,
@@ -150,6 +166,9 @@ class ControllerMode(BaseMode):
                 "multimodal_image": request.multimodal_image,
                 "trace_handlers": request.trace_handlers,
                 "session": request.session,
+                # 请求级执行 ID：随任务数据显式下传（ContextVar 不跨执行任务），
+                # Controller 内嵌工作流据此隔离 OTel workflow handler 状态。
+                "execution_id": _otel_execution_id,
             }
 
             message = MessageConverter.create_user_input_message(
@@ -498,6 +517,10 @@ class ControllerMode(BaseMode):
                         )
             task_execution.task.input_data["conversation_id"] = (
                 initial_message.runtime_data.get("runtime_context").conversation_id
+            )
+            # 显式携带请求级 execution_id（task.input_data 是跨任务可靠载体）
+            task_execution.task.input_data["execution_id"] = (
+                initial_message.runtime_data.get("execution_id", "")
             )
             # 3. 使用流式方法执行任务并处理结果
             async for message in self.process_task_execution_streaming_message(

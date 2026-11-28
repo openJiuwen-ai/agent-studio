@@ -17,13 +17,13 @@ spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
-# openjiuwen 指向 agent-core 官方 v0.1.17.post3 tag（0.1.17_hotfix 分支
-# 的发布版：compile 可重入 + 执行期状态 ContextVar 化 + 结构解析跨编译缓存
-# + 执行路径反射特征预解析——静态图实例复用的引擎前置；与 pyproject 的
-# @0.1.17_hotfix 指向同一 commit 5550e1cd4）。
+# openjiuwen 锁定 agent-core 官方 0.1.17_hotfix 分支最新 commit 957c3e517
+# （v0.1.17.post3 之后的修复：retriever 参数透传、空 llm end 载荷跳过、
+# tracer aclose 级联、按 execution_id 隔离 workflow 并发状态 #2430）。
+# 运行时镜像构建只消费本文件；pyproject.toml 维持 @0.1.17_hotfix 分支引用。
 # 注意：git+https 依赖要求构建镜像时装 git（见 studio-runtime 各 Dockerfile，
 # 随编译工具链临时安装、装完卸载）。
-openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@v0.1.17.post3
+openjiuwen @ git+https://gitcode.com/openJiuwen/agent-core.git@957c3e5172f6831f293886e94e06749c370d969a
 milvus-lite==3.1.1
 agent-sandbox==0.0.30
 opensearch-py==2.8.0

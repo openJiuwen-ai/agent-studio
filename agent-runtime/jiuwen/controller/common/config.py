@@ -337,6 +337,8 @@ class StreamRequest:
     request_params: Any = None
     mcps: list = None
     skill_context: SkillInjectionContext = field(default_factory=SkillInjectionContext)
+    # 请求级执行 ID：Controller 内嵌 workflow 的 OTel handler 按它隔离状态
+    execution_id: str = ""
 
 
 @dataclass

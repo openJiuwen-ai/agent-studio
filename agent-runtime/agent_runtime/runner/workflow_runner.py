@@ -479,10 +479,18 @@ class WorkflowRunner:
         # even if client disconnects at early yield points (start/workflow_start).
         try:
             otel_token = None
+            # 恢复段 exec_id：建 session 前读取一次，inputs 构建时复用
+            saved_exec_id = None
             if is_interrupted:
                 # QA resume: reuse the trace_id from the first execution of this
                 # round so the OTel handler keeps the cached root context.
                 saved_trace_id = await TraceIdStore.get(workflow_id, session_id)
+                # 恢复段复用首段的 exec_id，保证同一次执行的 execution_id 一致
+                t_redis_get = time.perf_counter()
+                saved_exec_id = await ExecutionIdStore.get(workflow_id, session_id)
+                performance_logger.info(
+                    f"redis_get_exec_id|{round((time.perf_counter() - t_redis_get) * 1000)}"
+                )
                 if saved_trace_id:
                     # Update current OTel context to use saved_trace_id
                     if _HAS_OTEL:
@@ -498,11 +506,16 @@ class WorkflowRunner:
                         )
                         _otel_span = NonRecordingSpan(_otel_span_ctx)
                         otel_token = otel_context.attach(otel_trace.set_span_in_context(_otel_span))
-                    session = create_workflow_session_with_trace(session_id=session_id, trace_id=saved_trace_id)
+                    session = create_workflow_session_with_trace(
+                        session_id=session_id, trace_id=saved_trace_id,
+                        execution_id=saved_exec_id or exec_id,
+                    )
                 else:
-                    session = create_workflow_session_with_trace(session_id=session_id)
+                    session = create_workflow_session_with_trace(
+                        session_id=session_id, execution_id=saved_exec_id or exec_id)
             else:
-                session = create_workflow_session_with_trace(session_id=session_id)
+                session = create_workflow_session_with_trace(
+                    session_id=session_id, execution_id=exec_id)
             performance_logger.info(
                 f"session_creation|{round((time.perf_counter() - t_session) * 1000)}"
             )
@@ -510,12 +523,7 @@ class WorkflowRunner:
             t_inputs_build = time.perf_counter()
             if is_interrupted:
                 # 恢复执行：使用 InteractiveInput(raw_inputs) 恢复 checkpoint
-                # 从 Redis 中恢复上一次保存的 exec_id
-                t_redis_get = time.perf_counter()
-                saved_exec_id = await ExecutionIdStore.get(workflow_id, session_id)
-                performance_logger.info(
-                    f"redis_get_exec_id|{round((time.perf_counter() - t_redis_get) * 1000)}"
-                )
+                # exec_id 已在上方建 session 前读取一次，这里直接复用
                 if saved_exec_id:
                     exec_id = saved_exec_id
                 # resume_input 为本次恢复的用户输入
@@ -801,10 +809,10 @@ class WorkflowRunner:
             if otel_token is not None:
                 otel_context.detach(otel_token)
 
-    async def run_blocking(self, req: ExecutionRequest) -> str:
+    async def run_blocking(self, req: ExecutionRequest, execution_id: str | None = None) -> str:
         """执行 IR 工作流并返回完整结果"""
         result_parts = []
-        async for chunk in self.run_streaming(req):
+        async for chunk in self.run_streaming(req, execution_id):
             event = chunk.get("event", "")
             data = chunk.get("data", {})
             if event in ("message", "done"):

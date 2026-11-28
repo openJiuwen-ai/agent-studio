@@ -102,17 +102,28 @@ _agent_accepts_trace_id = _accepts_trace_id(_agent_params)
 _wf_accepts_trace_id = _accepts_trace_id(_wf_params)
 
 
+# OTel 执行级隔离：新 core 的会话创建支持 execution_id（= SSE executionId /
+# X-Execution-Id），旧 core 不透传（能力探测，签名不可得时保守为 False）。
+_agent_accepts_execution_id = callable_accepts_kwarg(_create_agent_session, "execution_id")
+_wf_accepts_execution_id = callable_accepts_kwarg(_create_workflow_session, "execution_id")
+
+
 # 定义级会话"显式不绑请求 trace"的哨兵：定义级产物跨执行复用，绑定任一
 # 请求的 trace 都会把后续执行的 span 错归到该请求（区别于缺省 None =
 # 沿用请求上下文）。
 _DEFINITION_NO_TRACE = object()
 
 
-def create_agent_session_with_trace(session_id: str = None, trace_id=None, **kwargs):
-    """创建 agent session，底层支持时透传 trace_id。
+def create_agent_session_with_trace(session_id: str = None, trace_id=None,
+                                    execution_id: str = None, **kwargs):
+    """创建 agent session，底层支持时透传 trace_id / execution_id。
 
     trace_id 缺省（None）沿用请求上下文；显式传 ``_DEFINITION_NO_TRACE``
     表示不绑任何请求 trace（定义级会话专用）。
+
+    execution_id 是“一次执行”的标识（= SSE executionId / X-Execution-Id），
+    会随 AgentSession.create_workflow_session() 继承到 agent 内嵌工作流，
+    供 OTel workflow handler 按执行隔离状态；旧 core 不支持时不透传。
 
     ``source_metadata``（core 基线参数，2026-03 起）原样透传；携带
     ``user_id`` 时同步记录到 ``_CURRENT_USER_ID``（runner 建会话处播种，
@@ -126,17 +137,30 @@ def create_agent_session_with_trace(session_id: str = None, trace_id=None, **kwa
         trace_id = get_x_request_id()
     if trace_id is not _DEFINITION_NO_TRACE and _agent_accepts_trace_id and trace_id:
         kwargs["trace_id"] = trace_id
+    if execution_id and _agent_accepts_execution_id:
+        kwargs["execution_id"] = execution_id
+    else:
+        kwargs.pop("execution_id", None)
     return _create_agent_session(session_id=session_id, **kwargs)
 
 
-def create_workflow_session_with_trace(session_id: str = None, trace_id: str = None, **kwargs):
-    """创建 workflow session，底层支持时透传 trace_id。"""
+def create_workflow_session_with_trace(session_id: str = None, trace_id: str = None,
+                                       execution_id: str = None, **kwargs):
+    """创建 workflow session，底层支持时透传 trace_id / execution_id。
+
+    execution_id 是“一次执行”的标识（= SSE executionId / X-Execution-Id），
+    供 OTel workflow handler 按执行隔离状态；旧 core 不支持时不透传。
+    """
     # 优先使用显式传入的 trace_id（如 QA 恢复时从 Redis 读取的）
     if trace_id is None:
         trace_id = get_x_request_id()
 
     if _wf_accepts_trace_id and trace_id:
         kwargs["trace_id"] = trace_id
+    if execution_id and _wf_accepts_execution_id:
+        kwargs["execution_id"] = execution_id
+    else:
+        kwargs.pop("execution_id", None)
     return _create_workflow_session(session_id=session_id, **kwargs)
 
 

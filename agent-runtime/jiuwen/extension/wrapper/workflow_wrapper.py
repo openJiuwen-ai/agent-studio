@@ -155,7 +155,20 @@ class WorkflowWrapper:
         envs = self._build_envs(params)
         if agent_id:
             envs["_AGENT_ID"] = agent_id
-        session = create_workflow_session_with_trace(session_id=session_id, envs=envs)
+        # Controller 内嵌工作流由本 wrapper 自建 session；executionId 由任务
+        # 参数显式下传（ContextVar 不跨执行任务），供 OTel workflow handler
+        # 按执行隔离状态（同会话并发必需）。
+        execution_id = str(params.get("execution_id") or "")
+        if not execution_id:
+            try:
+                from jiuwen.serve.common.context import request_json
+
+                execution_id = (request_json.get() or {}).get("executionId", "")
+            except Exception:  # noqa: BLE001 - 遥测隔离失败不阻断工作流执行
+                execution_id = ""
+        session = create_workflow_session_with_trace(
+            session_id=session_id, execution_id=execution_id or None, envs=envs
+        )
         self._prepare_runtime_context(params)
 
         # 构建对话历史（每次调用都从 params 重建，因为 _chat_history 是本地字段，不存储在 checkpointer 中）
