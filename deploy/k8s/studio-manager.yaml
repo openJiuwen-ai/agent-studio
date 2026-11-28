@@ -39,10 +39,13 @@ spec:
             # - name: spring_datasource_driver_class_name
             #   value: 'org.postgresql.Driver'
             # ======== [必填] Redis ========
-            # 单机模式：配置 redis_host、redis_port、redis_password
-            # 集群模式：配置 cluster_node_list、redis_password
-            # 哨兵模式：配置 redis_host、redis_master_name、redis_sentinel_ports、redis_password
+            # 单机模式：配置 redis_host、redis_port、redis_password（redis_mode 留空或=single）
+            # 集群模式：配置 cluster_node_list、redis_password、redis_mode=cluster
+            # 哨兵模式：配置 redis_host、redis_master_name、redis_sentinel_ports、redis_password、redis_mode=sentinel
+            # redis_mode 显式声明 cluster/sentinel 时覆盖列表探测；留空时由 cluster_node_list / node_addr_list 是否非空自动判断
             # Redis服务地址，单机模式为Redis节点IP，哨兵模式为哨兵节点IP
+            - name: redis_mode
+              value: ''
             - name: redis_host
               value: ''
             - name: redis_password
@@ -155,6 +158,12 @@ spec:
             # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
             - name: auth_sso_validate_url
               value: ''
+            # SSO 响应未携带 project_id 时，IAM 认证上下文使用的默认项目 ID
+            # （对应 application-manager.yml 中 auth.user-info.defaults.project-id 的占位符 ${user_info_defaults_project_id:0}）
+            # 默认 0 表示未配置：导出、知识库等依赖 IAM 上下文 projectId 的功能会因 project_id=0 查不到数据（表现为导出为空）
+            # SSO 接入场景请填写业务数据实际归属的 project_id，可参考 SELECT DISTINCT project_id FROM t_workspace
+            - name: user_info_defaults_project_id
+              value: '0'
             # 系统用户 ID（逗号分隔），SSO 返回的 userId 匹配后跳过空间成员校验和权限校验
             - name: auth_system_user_ids
               value: ''

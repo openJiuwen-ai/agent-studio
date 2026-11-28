@@ -435,6 +435,34 @@ class TestSubscriber:
         await asyncio.sleep(0)  # 让 task.cancel() 信号得到调度
         assert task.cancelled() or task.done()  # 重连后的广播仍完成了本地取消
 
+    @pytest.mark.asyncio
+    async def test_subscriber_uses_pubsub_client_not_redis(self):
+        """订阅通过 as_capability(PubSubCapability) 获取 pubsub 句柄,
+        而非直接在 Redis 客户端上调用 pubsub()（集群模式下 RedisCluster 无 pubsub()）。
+        """
+        client = _make_redis()
+        pubsub = self._make_pubsub(
+            [
+                PubSubMessage(type="subscribe", channel=CANCEL_CHANNEL.encode(), data=1),
+                PubSubMessage(
+                    type="message", channel=CANCEL_CHANNEL.encode(), data=b"conv-1"
+                ),
+            ]
+        )
+        client.pubsub_cap.pubsub = MagicMock(return_value=pubsub)
+        registry = ExecutionRegistry()
+        task = asyncio.create_task(asyncio.sleep(10))
+
+        with _patch_redis(client), \
+             patch("agent_runtime.serve.execution_registry.SUBSCRIBER_RETRY_SECONDS", 0):
+            await registry.register("conv-1", task)
+            with pytest.raises(asyncio.CancelledError):
+                await registry.subscribe_runtime_cancel()
+
+        # 验证通过 as_capability 获取 pubsub 能力视图,而非直接调 client.pubsub()
+        client.as_capability.assert_called()
+        assert task.cancelled() or task.done()
+
 
 class TestSingleton:
     def test_get_execution_registry_returns_same_instance(self):

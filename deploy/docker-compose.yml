@@ -164,6 +164,7 @@ services:
       redis_host: ${REDIS_HOST:-}
       redis_password: ${REDIS_PASSWORD:-}
       redis_port: ${REDIS_PORT:-6379}
+      redis_mode: ${REDIS_MODE:-}
       cluster_node_list: ${REDIS_CLUSTER_NODES:-}
       redis_master_name: ${REDIS_SENTINEL_MASTER:-}
       redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
@@ -215,6 +216,11 @@ services:
       KNOWLEDGE_RECALL_THRESHOLD_MAX: ${KNOWLEDGE_RECALL_THRESHOLD_MAX:-1}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
+      # SSO 响应未携带 project_id 时，IAM 认证上下文使用的默认项目 ID
+      # （对应 application-manager.yml 中 auth.user-info.defaults.project-id 的占位符 ${user_info_defaults_project_id:0}）
+      # 默认 0 表示未配置：导出、知识库等依赖 IAM 上下文 projectId 的功能会因 project_id=0 查不到数据（表现为导出为空）
+      # SSO 接入场景请在 .env 中设置 USER_INFO_DEFAULTS_PROJECT_ID 为业务数据实际归属的 project_id
+      user_info_defaults_project_id: ${USER_INFO_DEFAULTS_PROJECT_ID:-0}
       # 系统用户 ID（逗号分隔），SSO 返回的 userId 匹配后跳过空间成员校验和权限校验
       auth_system_user_ids: ${AUTH_SYSTEM_USER_IDS:-}
       # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
@@ -337,6 +343,7 @@ services:
       TGF_LOG_DIR: /opt/cloud/logs/
       PORT: ${SERVER_PORT:-31014}
       PLUGIN_SSL_API_CERT: ${PLUGIN_SSL_API_CERT:-false}
+      PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION: ${PLUGIN_SSL_ALLOW_LEGACY_RENEGOTIATION:-false}
       WORKFLOW_EXECUTE_TIMEOUT: ${WORKFLOW_EXECUTE_TIMEOUT:-900}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
