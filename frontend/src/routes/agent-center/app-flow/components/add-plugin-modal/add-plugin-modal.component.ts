@@ -320,10 +320,12 @@ export class AddPluginModalComponent implements OnInit {
     ++this.addedCnt;
     this.addedNumMap[plugin.tool_id] = this.addedNumMap[plugin.tool_id] ? ++this.addedNumMap[plugin.tool_id] : 1;
 
+    // 广场已上架插件锚定 plaza_version_id（FRS-091/#1735），否则用最新发布版本
     const { tool_id, last_version_id } = plugin;
-    if (last_version_id) {
-      this.appFlowRepoServe.getPluginVersionInfo(tool_id, last_version_id).then((pluginVersion: IPlugin) => {
-        const result = { ...pluginVersion, last_version_id, request_info: pluginVersion.request_info };
+    const anchorVersionId = plugin.plaza_version_id || last_version_id;
+    if (anchorVersionId) {
+      this.appFlowRepoServe.getPluginVersionInfo(tool_id, anchorVersionId).then((pluginVersion: IPlugin) => {
+        const result = { ...pluginVersion, last_version_id: anchorVersionId, request_info: pluginVersion.request_info };
         this.pluginChange.emit(result);
         this.outputs?.pluginChange?.(result);
       });
@@ -344,12 +346,14 @@ export class AddPluginModalComponent implements OnInit {
     }
     this.isAddingTool = true;
     const { plugin_id, last_version_id } = plugin;
+    // 广场已上架插件锚定 plaza_version_id（FRS-091/#1735），否则用最新发布版本
+    const anchorVersionId = plugin.plaza_version_id || last_version_id;
 
     const key = `${plugin.plugin_id}#${tool.tool_id}`;
     this.refMap.set(key, (this.refMap.get(key) ?? 0) + 1);
-    if (last_version_id) {
+    if (anchorVersionId) {
       this.appFlowRepoServe
-        .getPluginVersionInfo(plugin_id, last_version_id)
+        .getPluginVersionInfo(plugin_id, anchorVersionId)
         .then(res => {
           const pluginVersion = res.data;
           let toolList = pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id);
@@ -368,7 +372,7 @@ export class AddPluginModalComponent implements OnInit {
             output_schema: pluginVersion.output_schema.find(toolOutputSchema => toolOutputSchema.tool_id === tool.tool_id).output_schema,
             type: pluginVersion.type,
           };
-          const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
+          const result = { ...toolInfo, last_version_id: anchorVersionId, request_info: plugin.request_info };
           this.pluginChange.emit(result);
           this.outputs?.pluginChange?.(result);
           this.drawerRef.close();

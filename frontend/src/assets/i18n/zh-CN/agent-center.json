@@ -3171,5 +3171,7 @@
   "skill_delete_input_oneClick": "一键输入",
   "skill_delete_input_incomplete": "请完整输入“DELETE”",
   "skill_delete_will_delete": "即将删除以下Skill",
-  "skill_reference_undeployed": "未部署"
+  "skill_reference_undeployed": "未部署",
+  "plaza_offshelf_referenced_alert": "该资产已被以下应用跨空间引用，下架后存量引用可能无法运行，且该操作不可撤回。",
+  "plaza_offshelf_references_query_failed": "引用列表查询失败，请稍后重试"
 }

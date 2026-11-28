@@ -92,6 +92,9 @@ export class AgentNodeComponent extends NodeBaseComponent {
         list.push({
           ...item,
           last_version_id: match.last_version_id,
+          // 版本名用于弹窗展示（当前版本/最新版本列），避免直接展示版本系统号
+          last_version_name: match.last_version_name,
+          resource_version_name: match.resource_version_name,
         });
       }
     });

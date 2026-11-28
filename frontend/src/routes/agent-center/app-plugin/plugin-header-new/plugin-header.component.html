@@ -51,7 +51,7 @@
       </div>
       <div class="header-right" *ngIf="subscribeBtnStatus">
         <span *ngIf="!isShare && pluginInfo?.platform_published === 1" class="mr-[16px] text-[13px] text-[#8c8c8c]">
-          {{ 'version_number' | i18nextEager }}：{{ pluginInfo?.plaza_version_name || '--' }}
+          {{ 'version_number' | i18nextEager }}{{ pluginInfo?.plaza_version_name || '--' }}
         </span>
         <div
           *ngIf="!isShare"

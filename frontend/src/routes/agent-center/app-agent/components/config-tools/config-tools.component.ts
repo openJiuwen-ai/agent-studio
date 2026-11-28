@@ -1961,7 +1961,9 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
       tool_details: tools.map((item: any) => {
         return {
           tool_id: item.id || item.tool_id,
-          tool_version: item.resource_version,
+          // 新添加的插件没有 resource_version，取 last_version_id（添加弹窗已锚定广场 plaza_version_id，#1735）；
+          // 已有引用保留 resource_version 不变
+          tool_version: item.resource_version || item.last_version_id,
           tool_param: item.tool_parameter
         };
       })

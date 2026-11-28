@@ -15,17 +15,27 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.openjiuwen.studio.agent.common.enums.NodeType;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVOErrors;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowFieldVOValue;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowNodeVO;
+import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * WorkflowValidationService 默认值类型校验相关纯函数单元测试。
@@ -36,6 +46,8 @@ import static org.mockito.ArgumentMatchers.any;
 class WorkflowValidationServiceTest {
 
     private final WorkflowValidationService service = new WorkflowValidationService();
+
+    private IrAdapterService irAdapterService;
 
     @BeforeEach
     void setUp() {
@@ -48,6 +60,10 @@ class WorkflowValidationServiceTest {
         when(i18nUtil.getMessage(anyString())).thenReturn("mocked message {0} {1}");
         when(i18nUtil.getMessage(anyString(), any(Object[].class))).thenReturn("mocked message {0} {1}");
         ReflectionTestUtils.setField(service, "i18nUtil", i18nUtil);
+
+        // 注入 irAdapterService mock：AGENT 节点工具存在性校验（issue-1729 回归链）走该依赖。
+        irAdapterService = mock(IrAdapterService.class);
+        ReflectionTestUtils.setField(service, "irAdapterService", irAdapterService);
     }
 
     // ===== parseJsonValue（高风险：默认值 JSON 字符串解析）=====
@@ -688,5 +704,90 @@ class WorkflowValidationServiceTest {
         ReflectionTestUtils.invokeMethod(service, "validateRefTypeMatch", nodeMap, refMap, pluginNode, pluginInput,
             errors);
         assertFalse(errors.isEmpty(), "插件 integer 引用嵌套 object sys.sub 应报类型不一致");
+    }
+
+    // ===== issue-1729 回归：AGENT 节点引用广场插件的工具存在性校验链 =====
+    // 广场选择插件后写入 configs.plugins 的形态为 {"id": pluginId, "tool_id": toolId}（无 #），
+    // AGENT 分支不做预拼接，原始配置须直达 IrAdapterService.getPluginToolEntity
+    // （id 归一化兜底在 IrAdapter 侧，契约见 IrAdapterServiceTest）。
+
+    @Test
+    void validateNodeExtraConfig_agentNode_dispatchesToAgentToolValidation() {
+        // AGENT 分支须派发到 validateAgentTools（校验链入口接线）
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-1#tool-9");
+        when(irAdapterService.getPluginToolEntity(any(), any())).thenReturn(new ToolEntity());
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        // validateToolExist 取 RequestContextUtils.getRequestProjectId()，单测无请求上下文须打桩
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestProjectId).thenReturn("proj-1");
+            ReflectionTestUtils.invokeMethod(service, "validateNodeExtraConfig", NodeType.AGENT,
+                agentNodeWithPlugins(pluginConfig), errors);
+        }
+
+        assertTrue(errors.isEmpty(), "工具存在时不应产生校验错误");
+        verify(irAdapterService).getPluginToolEntity(any(), eq(pluginConfig));
+    }
+
+    @Test
+    void validateAgentTools_plazaStylePluginConfig_passesRawConfigToIrAdapter() {
+        // 广场形态配置（id 无 #）原样传给 IrAdapter，归一化不在校验层做
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-1");
+        pluginConfig.put("tool_id", "tool-9");
+        when(irAdapterService.getPluginToolEntity(any(), any())).thenReturn(new ToolEntity());
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestProjectId).thenReturn("proj-1");
+            ReflectionTestUtils.invokeMethod(service, "validateAgentTools", agentNodeWithPlugins(pluginConfig), errors);
+        }
+
+        assertTrue(errors.isEmpty(), "工具存在时不应产生校验错误");
+        verify(irAdapterService).getPluginToolEntity(any(), eq(pluginConfig));
+    }
+
+    @Test
+    void validateAgentTools_toolNotExist_recordsError() {
+        // 工具不存在（TOOL_NOT_EXIST）须转为节点校验错误而非抛出
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-1");
+        pluginConfig.put("tool_id", "tool-9");
+        when(irAdapterService.getPluginToolEntity(any(), any()))
+            .thenThrow(new AgentStudioException(StudioError.TOOL_NOT_EXIST));
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        try (MockedStatic<RequestContextUtils> ctx = mockStatic(RequestContextUtils.class)) {
+            ctx.when(RequestContextUtils::getRequestProjectId).thenReturn("proj-1");
+            ReflectionTestUtils.invokeMethod(service, "validateAgentTools", agentNodeWithPlugins(pluginConfig), errors);
+        }
+
+        assertEquals(1, errors.size(), "工具不存在须产生一条校验错误");
+        assertEquals("node_agent", errors.get(0).getId());
+    }
+
+    @Test
+    void validateAgentTools_missingPluginId_recordsError() {
+        // 插件配置缺 id 须报错，且不触发工具查询
+        Map<String, Object> pluginConfig = new HashMap<>();
+        pluginConfig.put("tool_id", "tool-9");
+
+        List<WorkflowValidationVOErrors> errors = new java.util.ArrayList<>();
+        ReflectionTestUtils.invokeMethod(service, "validateAgentTools", agentNodeWithPlugins(pluginConfig), errors);
+
+        assertEquals(1, errors.size(), "缺插件 id 须报错");
+        verify(irAdapterService, never()).getPluginToolEntity(any(), any());
+    }
+
+    /** 构造带 plugins 配置的 AGENT 节点（广场形态：{"id": pluginId, "tool_id": toolId}）。 */
+    private WorkflowValidationService.Node agentNodeWithPlugins(Map<String, Object> pluginConfig) {
+        WorkflowNodeVO nodeInfo = new WorkflowNodeVO();
+        nodeInfo.setId("node_agent");
+        nodeInfo.setType("Agent");
+        Map<String, Object> configs = new HashMap<>();
+        configs.put("plugins", List.of(pluginConfig));
+        nodeInfo.setConfigs(configs);
+        return new WorkflowValidationService.Node(nodeInfo);
     }
 }

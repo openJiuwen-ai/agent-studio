@@ -41,6 +41,8 @@ import { ShareService } from '@routes/app-center/components/edit-share-modal/sha
 import { ShareDeleteModalComponent } from '@routes/app-center/components/share-delete-modal/share-delete-modal.component';
 import { AppLibraryRepoService } from '@services/app-library/app-library-repo.service';
 import { CardService } from '@routes/agent-center/my-card/card.service';
+import { DeleteRefsModalComponent } from '@routes/datasource-management/components/delete-refs-modal/delete-refs-modal.component';
+import { IPage } from '@routes/agent-center/types/common.types';
 import { PromptService } from '@services/prompt.service';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { getQuotaTag } from '../../agent-center/utils';
@@ -557,10 +559,13 @@ export class PluginMarketComponent implements OnInit {
     // 按 plugin_id 查引用：后端 selectByResourceIdAndVersionId 用 `resource_id=#{pluginId}
     //   OR resource_id like concat(pluginId,'#%')` 匹配，插件引用记录 resource_id 为
     //   pluginId#toolId，故按 plugin_id 一次查询即可覆盖该插件所有工具引用，无需遍历 tool_id。
+    // 统计口径（评审反馈）：cross_space_only=true 仅统计"跨空间直接引用"——同空间组件库
+    //   直引下架后仍可按 workspace 解析、团队共享引用走 share 快照链路，均不受平台精选下架影响。
     const param = {
       offset: 0,
-      limit: 100,
+      limit: 10,
       resource_type: 'tool',
+      cross_space_only: true,
     };
     this.cardService
       .selectQuoteList(plugin.plugin_id, param, true)
@@ -576,49 +581,66 @@ export class PluginMarketComponent implements OnInit {
   }
 
   private confirmUnpublishPlugin(plugin: any, relations: any[], count: number): void {
-    const confirmTitle =
-      count > 0
-        ? this.buildPluginReferenceWarningTitle(relations, count)
-        : this.i18n.transform('plaza_offshelf_confirm');
+    if (count > 0) {
+      // 有受影响引用：复用删除引用的确认弹窗（引用列表 + DELETE 二次确认），统一交互风格（评审反馈）
+      const modal = this.nzModalService.create({
+        nzContent: DeleteRefsModalComponent,
+        nzWidth: '800px',
+      });
+      const instance = modal.getContentComponent();
+      instance.title = this.i18n.transform('plaza_offshelf');
+      instance.alertText = this.i18n.transform('plaza_offshelf_referenced_alert');
+      instance.srcData = { data: relations, state: undefined };
+      instance.totalNumber = count;
+      instance.secondConfirmConfig = { supportQuickInput: true, label: this.i18n.transform('plaza_offshelf') };
+      instance.confirm.subscribe(() => {
+        // 与无引用分支一致兜底：弹窗已先关闭，下架失败不能形成未处理的 rejection
+        this.doUnpublishPlugin(plugin).catch(() => null);
+      });
+      instance.pageInfo.subscribe((info: IPage) => {
+        this.cardService
+          .selectQuoteList(
+            plugin.plugin_id,
+            {
+              offset: (info.offset - 1) * info.limit,
+              limit: info.limit,
+              resource_type: 'tool',
+              cross_space_only: true,
+            },
+            true
+          )
+          .then(res1 => {
+            instance.srcData = {
+              data: (res1 && res1.relations) || [],
+              state: { searched: false, sorted: false, paginated: true },
+            };
+            instance.totalNumber = (res1 && res1.count) || 0;
+          })
+          .catch(() => {
+            MessageComponent.showError(this.i18n.transform('plaza_offshelf_references_query_failed'));
+          });
+      });
+      return;
+    }
     this.nzModalService.confirm({
-      nzTitle: confirmTitle,
+      nzTitle: this.i18n.transform('plaza_offshelf_confirm'),
       nzOkText: this.i18n.transform('plaza_offshelf'),
       nzCancelText: this.i18n.transform('cancel'),
       nzOkDanger: true,
       nzOnOk: () => {
-        return this.appPluginRepoServ
-          .unpublishPlugin(plugin.plugin_id)
-          .then(() => {
-            MessageComponent.showSuccess(this.i18n.transform('plaza_offshelf_success'));
-            this.onSearch();
-            return null;
-          })
-          .catch(() => null);
+        return this.doUnpublishPlugin(plugin).catch(() => null);
       },
     });
   }
 
-  private buildPluginReferenceWarningTitle(relations: any[], count: number): string {
-    const workflowCount = relations.filter(r => r?.app_type === 'workflow').length;
-    const agentCount = relations.filter(r => r?.app_type === 'agent').length;
-    const separator = this.i18n.transform('plaza_offshelf_referenced_name_separator');
-    const names = relations
-      .map(r => r?.app_name)
-      .filter((n): n is string => !!n)
-      .slice(0, 3)
-      .join(separator);
-    const summary = this.i18n.transform('plaza_offshelf_referenced_summary', {
-      workflow: workflowCount,
-      agent: agentCount,
-    });
-    // count>relations.length 说明 relations 被 limit 截断，分类计数不全，补总数兜底
-    const total = count > relations.length
-      ? this.i18n.transform('plaza_offshelf_referenced_total', { count })
-      : '';
-    const tail = names
-      ? this.i18n.transform('plaza_offshelf_referenced_names', { names })
-      : this.i18n.transform('plaza_offshelf_referenced_no_names');
-    return `${this.i18n.transform('plaza_offshelf_referenced_prefix')}${summary}${total}${tail}`;
+  private doUnpublishPlugin(plugin: any): Promise<any> {
+    return this.appPluginRepoServ
+      .unpublishPlugin(plugin.plugin_id)
+      .then(() => {
+        MessageComponent.showSuccess(this.i18n.transform('plaza_offshelf_success'));
+        this.onSearch();
+        return null;
+      });
   }
 
   public creatShare() {

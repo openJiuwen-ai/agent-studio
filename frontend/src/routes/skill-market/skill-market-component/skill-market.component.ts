@@ -113,7 +113,7 @@ export class SkillMarketComponent {
     // 下架前查引用：存量引用会因下架失效，引用确认让用户知情（方案 B，#1733）
     // queryReference 默认 catchError 吞错返空，故查询失败时 count=0 走无引用通用确认，不阻塞下架
     this._skillApi
-      .queryReference(card.skillId, 0, 100, { showFailMessage: false })
+      .queryReference(card.skillId, 0, 100, { showFailMessage: false }, true)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((res: any) => this.confirmUnpublish(card, res?.relations || [], res?.count || 0));
   }

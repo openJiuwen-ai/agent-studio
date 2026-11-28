@@ -4,7 +4,10 @@ package com.openjiuwen.studio.agent.manager.service;
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthKeyInfo;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
+import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.SkillMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper;
@@ -164,5 +167,91 @@ class IrAdapterServiceTest {
         AuthInfo noAuth = new AuthInfo();
         assertNull(IrAdapterService.appendDynamicAuthParamsToSchema(noAuth, null),
             "非 DYNAMIC 时原样返回入参（null 透传）");
+    }
+
+    // ===== issue-1729 回归：getPluginToolEntity 的工具 ID 归一化契约 =====
+    // 广场选择插件后写入 configs.plugins 的形态为 {"id": pluginId, "tool_id": toolId}（无 #），
+    // AGENT 节点分支校验/保存时不做预拼接，原始配置直达本方法，归一化兜底必须在此完成。
+
+    @Test
+    void getPluginToolEntity_idWithoutHashWithToolId_normalizesWithToolId() {
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-1");
+        pluginConfig.put("tool_id", "tool-9");
+        ToolEntity tool = new ToolEntity();
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(tool);
+
+        ToolEntity result = irAdapterService.getPluginToolEntity("proj-1", pluginConfig);
+
+        assertSame(tool, result);
+        assertEquals("plaza-plugin-1#tool-9", pluginConfig.get("id"), "无 # 的 id 须用 tool_id 补全");
+        verify(pluginService).getToolEntity(eq("plaza-plugin-1#tool-9"), eq("proj-1"), isNull(), isNull());
+        verify(pluginService, never()).getToolIdFromPlugin(anyString());
+    }
+
+    @Test
+    void getPluginToolEntity_idWithoutHashNoToolId_usesPluginToolMapping() {
+        // 无 tool_id 时回退查询插件下的工具映射
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-2");
+        when(pluginService.getToolIdFromPlugin("plaza-plugin-2")).thenReturn("tool-3");
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(new ToolEntity());
+
+        irAdapterService.getPluginToolEntity("proj-1", pluginConfig);
+
+        assertEquals("plaza-plugin-2#tool-3", pluginConfig.get("id"));
+        verify(pluginService).getToolEntity(eq("plaza-plugin-2#tool-3"), any(), any(), any());
+    }
+
+    @Test
+    void getPluginToolEntity_idWithoutHashNoMapping_fallsBackToZero() {
+        // 插件下查不到工具映射时兜底为 #0
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-3");
+        when(pluginService.getToolIdFromPlugin("plaza-plugin-3")).thenReturn(null);
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(new ToolEntity());
+
+        irAdapterService.getPluginToolEntity("proj-1", pluginConfig);
+
+        assertEquals("plaza-plugin-3#0", pluginConfig.get("id"), "查不到工具映射时须兜底 #0");
+        verify(pluginService).getToolEntity(eq("plaza-plugin-3#0"), any(), any(), any());
+    }
+
+    @Test
+    void getPluginToolEntity_idWithHash_passesThrough() {
+        // 已带 # 的 id 原样透传，不再触发归一化
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-4#tool-1");
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(new ToolEntity());
+
+        irAdapterService.getPluginToolEntity("proj-1", pluginConfig);
+
+        assertEquals("plaza-plugin-4#tool-1", pluginConfig.get("id"));
+        verify(pluginService, never()).getToolIdFromPlugin(anyString());
+        verify(pluginService).getToolEntity(eq("plaza-plugin-4#tool-1"), any(), any(), any());
+    }
+
+    @Test
+    void getPluginToolEntity_versionId_passedThrough() {
+        // version_id 须透传给插件服务（issue-1735 的锚定解析在 PluginAdapterImpl 侧完成）
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "plaza-plugin-5#tool-1");
+        pluginConfig.put("version_id", "v-123");
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(new ToolEntity());
+
+        irAdapterService.getPluginToolEntity("proj-1", pluginConfig);
+
+        verify(pluginService).getToolEntity(eq("plaza-plugin-5#tool-1"), eq("proj-1"), isNull(), eq("v-123"));
+    }
+
+    @Test
+    void getPluginToolEntity_toolNotFound_throwsToolNotExist() {
+        java.util.Map<String, Object> pluginConfig = new java.util.HashMap<>();
+        pluginConfig.put("id", "ghost-plugin#tool-0");
+        when(pluginService.getToolEntity(anyString(), any(), any(), any())).thenReturn(null);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class,
+            () -> irAdapterService.getPluginToolEntity("proj-1", pluginConfig));
+        assertEquals(StudioError.TOOL_NOT_EXIST, ex.getErrorCode());
     }
 }
