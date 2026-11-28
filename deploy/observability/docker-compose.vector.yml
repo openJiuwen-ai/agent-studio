@@ -25,8 +25,8 @@ services:
       LOGS_WRITE_PASSWORD: ${LOGS_WRITE_PASSWORD}
       VECTOR_BUFFER_MAX_SIZE: ${VECTOR_BUFFER_MAX_SIZE:-1073741824}
     volumes:
-      - ./config/vector.yaml:/etc/vector/vector.yaml:ro
-      - ./config/gateway-ca.crt:/etc/vector/tls/gateway-ca.crt:ro
+      - ./config/vector.yaml:/etc/vector/vector.yaml:ro,z
+      - ./config/gateway-ca.crt:/etc/vector/tls/gateway-ca.crt:ro,z
       - vector_data:/var/lib/vector
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - manager_logs:/logs/manager:ro
