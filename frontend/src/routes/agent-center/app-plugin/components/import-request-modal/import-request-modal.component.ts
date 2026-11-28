@@ -25,6 +25,7 @@ import { ArrTypeValidatorDirective } from '@shared/directives/array-type-validat
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { parseCurl } from './curl';
+import { parseOpenApiDoc } from './openapi-request-parse';
 import { CommonUtils } from 'src/utils/common.util';
 import { NzModalRef } from 'ng-zorro-antd/modal';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -100,38 +101,37 @@ export class ImportRequestModalComponent implements OnInit {
       this.jsonData.startsWith('swagger') ||
       this.jsonData.startsWith('openapi')
     ) {
-      this.parseYaml();
-    } else {
-      this.parsecurl();
+      if (this.parseYaml()) {
+        this.modalRef.destroy();
+      }
+      return;
     }
-    this.modalRef.destroy();
+    if (this.parsecurl()) {
+      this.modalRef.destroy();
+    }
   }
 
-  parseYaml() {
-    let json = YAML.parse(this.jsonData);
-    let url = json.servers?.[0]?.url || '';
-    let path = Object.keys(json.paths)[0];
-    let method = Object.keys(json.paths[path])[0];
-    let data = json.paths[path][method];
-    let headers = data.headers || [];
-    if (headers) {
-      headers = Object.keys(headers).map((key) => ({
-        key: key,
-        value: headers[key].schema.default || headers[key].schema.example,
-      }));
+  /** @returns true when parse succeeded and emit ran */
+  parseYaml(): boolean {
+    try {
+      const json = YAML.parse(this.jsonData);
+      const result = parseOpenApiDoc(json);
+      if (!result.ok) {
+        MessageComponent.showError(result.error);
+        return false;
+      }
+      this.confirm.emit(result.apiInfo);
+      return true;
+    } catch {
+      MessageComponent.showError(
+        'Unsupported or invalid OpenAPI / Swagger document.',
+      );
+      return false;
     }
-    let parameters = this.getYamlParameters(data.parameters);
-    let requestBody = this.getYamlRequestBody(data.requestBody);
-    let apiInfo = {
-      method: method.toUpperCase(),
-      url: url + path,
-      headers: headers,
-      params: [...parameters, ...requestBody],
-    };
-    this.confirm.emit(apiInfo);
   }
 
-  parsecurl() {
+  /** @returns true when parse succeeded and emit ran */
+  parsecurl(): boolean {
     let data = parseCurl(this.jsonData);
     if (!data.error) {
       let parameters = this.getcurlParameters(data.node.params);
@@ -143,9 +143,10 @@ export class ImportRequestModalComponent implements OnInit {
         params: [...parameters, ...requestBody],
       };
       this.confirm.emit(apiInfo);
-    } else {
-      MessageComponent.showError(data.error);
+      return true;
     }
+    MessageComponent.showError(data.error);
+    return false;
   }
 
   getHeaders(str) {
@@ -205,44 +206,6 @@ export class ImportRequestModalComponent implements OnInit {
     } catch (error) {
       return [];
     }
-  }
-
-  getYamlParameters(parameters) {
-    if (!parameters) {
-      return [];
-    }
-
-    return parameters.map((item) => ({
-      name: item.name,
-      default: item.schema.default,
-      type: item.schema.type,
-      schema: item.schema,
-      location: this.capitalizeFirstLetter(item.in),
-    }));
-  }
-
-  getYamlRequestBody(requestBody) {
-    if (!requestBody) {
-      return [];
-    }
-
-    const properties =
-      requestBody.content['application/json'].schema.properties;
-
-    if (!properties) {
-      return [];
-    }
-
-    return Object.keys(properties).map((key) => ({
-      name: key,
-      default: properties[key].example,
-      type: properties[key].type,
-      location: 'Body',
-    }));
-  }
-
-  capitalizeFirstLetter(string) {
-    return string.slice(0, 1).toUpperCase() + string.slice(1);
   }
 
   public onInputJSONChange() {
